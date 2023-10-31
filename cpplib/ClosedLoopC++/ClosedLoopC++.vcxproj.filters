@@ -18,6 +18,9 @@
     <ClCompile Include="Source.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Test\TestRoutines.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="cbhwlib.h">
@@ -26,11 +29,15 @@
     <ClInclude Include="cbsdk.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Test\TestRoutines.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="cbsdkx64.dll" />
     <None Include="QtCorex644.dll" />
     <None Include="QtXmlx644.dll" />
+    <None Include=".gitignore" />
   </ItemGroup>
   <ItemGroup>
     <Library Include="cbsdkx64.lib" />

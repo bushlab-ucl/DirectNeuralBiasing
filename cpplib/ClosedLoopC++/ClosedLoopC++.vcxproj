@@ -128,12 +128,15 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Source.cpp" />
+    <ClCompile Include="Test\TestRoutines.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="cbhwlib.h" />
     <ClInclude Include="cbsdk.h" />
+    <ClInclude Include="Test\TestRoutines.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include=".gitignore" />
     <None Include="cbsdkx64.dll" />
     <None Include="QtCorex644.dll" />
     <None Include="QtXmlx644.dll" />
