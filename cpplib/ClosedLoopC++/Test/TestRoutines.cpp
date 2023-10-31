@@ -19,7 +19,7 @@ void TestRoutines::RunTestRoutines(TestRoutines &testRoutines, INT16 *data, size
   start = std::chrono::high_resolution_clock::now();
   TestRoutines::process_data_complex_cpp(data, length);
   end = std::chrono::high_resolution_clock::now();
-  std::cout << "Time elapsed in C++ complex process_data() function: "
+  std::cout << "Time elapsed in C++ complex_process_data() function: "
             << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()
             << " microseconds" << std::endl;
 
@@ -34,7 +34,7 @@ void TestRoutines::RunTestRoutines(TestRoutines &testRoutines, INT16 *data, size
   start = std::chrono::high_resolution_clock::now();
   testRoutines.process_data_complex_rust(data, length);
   end = std::chrono::high_resolution_clock::now();
-  std::cout << "Time elapsed in Rust complex process_data() function: "
+  std::cout << "Time elapsed in Rust complex_process_data() function: "
             << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()
             << " microseconds" << std::endl;
 }
