@@ -8,17 +8,29 @@
 using namespace std;
 
 /*
-Author: Joshua Robinson
+Blackrock Author: Joshua Robinson
 Company: Blackrock Microsystems
 Contact: support@blackrockmicro.com
 
-Function Description: Gets values from continuous trial data and prints them to the command prompt
+UCL Author: Dan Humphries
+Lab: Human Electrophysiology, UCL NPP
+Contact: d.humphries@ucl.ac.uk
+
+Blackrock Function Description: Gets values from continuous trial data and prints them to the command prompt
+UCL Research Function Description: On each cycle, runs a rust function to perform real-time analysis of the data.
 */
 
 #define RUN_TEST_ROUTINES true
 
 int main(int argc, char* argv[])
 {
+	// Load the test routines
+	TestRoutines testRoutines;
+	if (!testRoutines.loadRustLibrary())
+	{
+		std::cerr << "Failed to load Rust library" << std::endl;
+		return 1;
+	}
 
 	// // Load the Rust library
 	// HINSTANCE hinstLib = LoadLibrary(TEXT("..\\..\\rustlib\\target\\release\\rustlib.dll"));
@@ -108,13 +120,6 @@ int main(int argc, char* argv[])
 				INT16 *myIntPtr = (INT16 *)trial.samples[0]; // Look at only Channel 1 (index 0)
 
 				if (RUN_TEST_ROUTINES) {
-					TestRoutines testRoutines;
-					if (!testRoutines.loadRustLibrary())
-					{
-						std::cerr << "Failed to load Rust library" << std::endl;
-						return 1;
-					}
-
 					TestRoutines::RunTestRoutines(testRoutines, myIntPtr, trial.num_samples[0]);
 				}
 
