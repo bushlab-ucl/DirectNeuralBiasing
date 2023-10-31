@@ -1,4 +1,4 @@
-se std::slice;
+use std::slice;
 
 #[no_mangle]
 pub extern "C" fn process_data(data: *mut i16, length: usize) {
