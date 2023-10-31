@@ -1,5 +1,3 @@
-use std::slice;
-
 #[no_mangle]
 pub extern "C" fn process_data(data: *mut i16, length: usize) {
     let slice = unsafe { std::slice::from_raw_parts_mut(data, length) };
