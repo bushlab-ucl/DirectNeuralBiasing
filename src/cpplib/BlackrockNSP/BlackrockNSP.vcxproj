@@ -21,7 +21,7 @@
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{662f42b8-5b7b-4ce5-b495-79f4502f57f2}</ProjectGuid>
+    <ProjectGuid>{cd46e530-6df0-494e-a2cd-635b32e80934}</ProjectGuid>
     <RootNamespace>BlackrockNSP</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
@@ -127,7 +127,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="Source.cpp" />
+    <ClCompile Include="main.cpp" />
     <ClCompile Include="Test\TestRoutines.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -136,7 +136,6 @@
     <ClInclude Include="Test\TestRoutines.h" />
   </ItemGroup>
   <ItemGroup>
-    <None Include=".gitignore" />
     <None Include="cbsdkx64.dll" />
     <None Include="QtCorex644.dll" />
     <None Include="QtXmlx644.dll" />

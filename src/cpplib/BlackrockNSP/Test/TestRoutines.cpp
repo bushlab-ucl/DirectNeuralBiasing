@@ -50,10 +50,10 @@ TestRoutines::~TestRoutines()
 
 bool TestRoutines::loadRustLibrary()
 {
-  hinstLib = LoadLibrary(TEXT("..\\..\\..\\rustlib\\target\\release\\rustlib.dll"));
+  hinstLib = LoadLibrary(TEXT("..\\..\\rustlib\\target\\release\\dnb.dll"));
   if (!hinstLib)
   {
-    std::cerr << "DLL failed to load!" << std::endl;
+    std::cerr << "DLL failed to load! - from test routines" << std::endl;
     return false;
   }
 
