@@ -1,14 +1,14 @@
 # Direct Neural Biasing
  
-WIP - Rust/C++/Python code for Closed Loop Stimulation project in HEL
+### WIP - Rust/C++/Python code for Closed Loop Stimulation project in HEL
 
-Curent State of Project:
+#### Curent State of Project:
 
 src/Rustlib - Rust code for functions. This is where the business logic lives and will live.
 src/Pythonlib - Python code for importing rust dnb module functions for python work. Pulls exposed functions from src/Rustlib 
 src/Cpplib - C++ code for interfacing with Blackrock NSP system and NPlay. Pulls 'extern c' functions from src/Rustlib 
 
-Some Other Bits:
+#### Some Other Bits:
 
 Rust DNB Server: Generates a sample LFP signal and occasional Interictal spikes and SWRs. Streams to :8080.
 Rust DNB Client: Listens to port 8080 and outputs signal to terminal.
