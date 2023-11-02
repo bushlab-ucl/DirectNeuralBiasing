@@ -32,4 +32,10 @@ pub extern "C" fn process_filter_data(filter_ptr: *mut c_void, data: *mut i16, l
         let output = filter.filter(input);
         *val = output as i16;
     }
+
+    // threshold (doing something like a z score, but keeping track of sum and amount to do it without storing all values)
+
+    // track iterations above threshold (allow some leeway (X) for noise until threshold (Y) where we think it's an SWR)
+
+    // if spike. Output time to file and maybe dump data
 }
