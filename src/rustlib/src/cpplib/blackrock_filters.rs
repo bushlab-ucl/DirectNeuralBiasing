@@ -3,8 +3,8 @@ use crate::filters::bandpass::BandPassFilter;
 use std::os::raw::c_void;
 
 #[no_mangle]
-pub extern "C" fn create_filter(f0: f64, fs: f64, q: f64) -> *mut c_void {
-    let filter = BandPassFilter::biquad(f0, fs, q);
+pub extern "C" fn create_filter(f0: f64, fs: f64) -> *mut c_void {
+    let filter = BandPassFilter::butterworth(f0, fs);
     let boxed_filter = Box::new(filter);
     Box::into_raw(boxed_filter) as *mut c_void
 }

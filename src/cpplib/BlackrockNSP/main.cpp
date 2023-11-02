@@ -23,7 +23,7 @@ UCL Research Function Description: On each cycle, runs a rust function to perfor
 #define RUN_TEST_ROUTINES true
 
 // Define function pointers for the filter
-typedef void *(__cdecl *CreateFilterFunc)(double, double, double);
+typedef void *(__cdecl *CreateFilterFunc)(double, double);
 typedef void(__cdecl *DeleteFilterFunc)(void *);
 typedef void(__cdecl *ProcessFilterDataFunc)(void *, double *, size_t);
 
@@ -129,8 +129,7 @@ int main(int argc, char *argv[])
 	 // Create filter
 	 double f0 = 50.0; // Example values
 	 double fs = 30000.0;
-	 double q = 35.0;
-	 void *filter = create_filter(f0, fs, q);
+	 void *filter = create_filter(f0, fs);
 	 if (filter == NULL)
 	 {
 	 	std::cerr << "Failed to create filter!" << std::endl;
