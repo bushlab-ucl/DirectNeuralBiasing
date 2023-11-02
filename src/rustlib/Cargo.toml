@@ -1,11 +1,24 @@
 [package]
-name = "rustlib"
-version = "0.1.0"
+name = "dnb"
+version = "0.2.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
+pyo3 = { version = "0.19.2", features = ["extension-module"] }
+rand = "0.8.4"
+colored = "2.0.4"
+
+[build-dependencies]
+maturin = "1.2.3"
+
+[[bin]]
+name = "main"
+path = "src/main.rs"
 
 [lib]
+name = "dnb"
 crate-type = ["cdylib"]
+
+[package.metadata.maturin]
+name = "dnb"
+rustc-extra-args = ["--cfg", "feature=\"python-extension\""]

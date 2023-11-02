@@ -1,2 +1,14 @@
+# build
 /target
+/.venv
+
+# data
+/data
+
+# utils
+*.ipynb
+
+# etc.
+.ipynb_checkpoints
+/docs
 /Cargo.lock
