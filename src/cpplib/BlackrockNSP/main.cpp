@@ -27,6 +27,10 @@ typedef void *(__cdecl *CreateFilterFunc)(double, double);
 typedef void(__cdecl *DeleteFilterFunc)(void *);
 typedef void(__cdecl *ProcessFilterDataFunc)(void *, INT16 *, size_t);
 
+// Define function pointers for the test routines
+// typedef void(__cdecl* ProcessDataFunc)(const INT16*, size_t);
+// typedef void(__cdecl* ProcessDataComplexFunc)(INT16*, size_t);
+
 int main(int argc, char *argv[])
 {
 
@@ -46,26 +50,6 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	// Get the process_data function
-	typedef void(__cdecl * ProcessDataFunc)(const INT16 *, size_t);
-	ProcessDataFunc process_data_rust = (ProcessDataFunc)GetProcAddress(hinstLib, "process_data");
-	if (process_data_rust == NULL)
-	{
-		std::cerr << "Function not found!" << std::endl;
-		FreeLibrary(hinstLib);
-		return 1;
-	}
-
-	// Load the complex Rust function
-	typedef void(__cdecl * ProcessDataComplexFunc)(INT16 *, size_t);
-	ProcessDataComplexFunc process_data_complex_rust = (ProcessDataComplexFunc)GetProcAddress(hinstLib, "process_data_complex");
-	if (process_data_complex_rust == NULL)
-	{
-		std::cerr << "Complex Rust function not found!" << std::endl;
-		FreeLibrary(hinstLib);
-		return 1;
-	}
-
 	// Load filter functions
 	CreateFilterFunc create_filter = (CreateFilterFunc)GetProcAddress(hinstLib, "create_filter");
 	DeleteFilterFunc delete_filter = (DeleteFilterFunc)GetProcAddress(hinstLib, "delete_filter");
@@ -77,6 +61,17 @@ int main(int argc, char *argv[])
 		FreeLibrary(hinstLib);
 		return 1;
 	}
+
+	//// Load Rust Test functions
+	// ProcessDataFunc process_data = (ProcessDataFunc)GetProcAddress(hinstLib, "process_data");
+	// ProcessDataComplexFunc process_data_complex = (ProcessDataComplexFunc)GetProcAddress(hinstLib, "process_data_complex");
+
+	//if (process_data == NULL || process_data_complex == NULL)
+	//{
+	//	std::cerr << "Rust Test functions not found!" << std::endl;
+	//	FreeLibrary(hinstLib);
+	//	return 1;
+	//}
 
 	// open system
 	cbSdkResult res = cbSdkOpen(0, CBSDKCONNECTION_DEFAULT);
