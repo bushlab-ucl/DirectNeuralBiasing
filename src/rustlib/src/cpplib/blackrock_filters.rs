@@ -20,7 +20,7 @@ pub extern "C" fn delete_filter(filter_ptr: *mut c_void) {
 }
 
 #[no_mangle]
-pub extern "C" fn process_filter_data(filter_ptr: *mut c_void, data: *mut f64, length: usize) {
+pub extern "C" fn process_filter_data(filter_ptr: *mut c_void, data: *mut i16, length: usize) {
     if filter_ptr.is_null() || data.is_null() {
         return;
     }
@@ -28,6 +28,8 @@ pub extern "C" fn process_filter_data(filter_ptr: *mut c_void, data: *mut f64, l
     let data_slice = unsafe { std::slice::from_raw_parts_mut(data, length) };
 
     for val in data_slice {
-        *val = filter.filter(*val);
+        let input = *val as f64;
+        let output = filter.filter(input);
+        *val = output as i16;
     }
 }

@@ -25,7 +25,7 @@ UCL Research Function Description: On each cycle, runs a rust function to perfor
 // Define function pointers for the filter
 typedef void *(__cdecl *CreateFilterFunc)(double, double);
 typedef void(__cdecl *DeleteFilterFunc)(void *);
-typedef void(__cdecl *ProcessFilterDataFunc)(void *, double *, size_t);
+typedef void(__cdecl *ProcessFilterDataFunc)(void *, INT16 *, size_t);
 
 int main(int argc, char *argv[])
 {
@@ -126,16 +126,16 @@ int main(int argc, char *argv[])
 	auto start = std::chrono::high_resolution_clock::now();
 	auto end = start;
 
-	 // Create filter
-	 double f0 = 50.0; // Example values
-	 double fs = 30000.0;
-	 void *filter = create_filter(f0, fs);
-	 if (filter == NULL)
-	 {
-	 	std::cerr << "Failed to create filter!" << std::endl;
-	 	FreeLibrary(hinstLib);
-	 	return 1;
-	 }
+	// Create filter
+	double f0 = 50.0; // Example values
+	double fs = 30000.0;
+	void *filter = create_filter(f0, fs);
+	if (filter == NULL)
+	{
+		std::cerr << "Failed to create filter!" << std::endl;
+		FreeLibrary(hinstLib);
+		return 1;
+	}
 
 	// main loop do for 10 seconds
 	while (loop_count < loop_end)
@@ -153,33 +153,24 @@ int main(int argc, char *argv[])
 				cout << "Number of samples: " << trial.num_samples[0] << endl;
 				INT16 *myIntPtr = (INT16 *)trial.samples[0]; // Look at only Channel 1 (index 0)
 
-				//if (RUN_TEST_ROUTINES)
+				// if (RUN_TEST_ROUTINES)
 				//{
 				//	TestRoutines::RunTestRoutines(testRoutines, myIntPtr, trial.num_samples[0]);
-				//}
+				// }
 
-				 start = std::chrono::high_resolution_clock::now();
-				 // Process data with filter
-				 double *data = new double[trial.num_samples[0]];
-				 for (size_t i = 0; i < trial.num_samples[0]; ++i)
-				 {
-				 	data[i] = static_cast<double>(myIntPtr[i]);
-				 }
-				 process_filter_data(filter, data, trial.num_samples[0]);
-				 for (size_t i = 0; i < trial.num_samples[0]; ++i)
-				 {
-				 	myIntPtr[i] = static_cast<INT16>(data[i]);
-				 }
-				 delete[] data;
-				 end = std::chrono::high_resolution_clock::now();
-				 std::cout << "Time elapsed in Rust Filter function: "
-				 					<< std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()
-				 					<< " microseconds" << std::endl;
+				start = std::chrono::high_resolution_clock::now();
+				// Process data with filter
+				process_filter_data(filter, myIntPtr, trial.num_samples[0]);
+				end = std::chrono::high_resolution_clock::now();
+
+				std::cout << "Time elapsed in Rust Filter function: "
+									<< std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()
+									<< " microseconds" << std::endl;
 
 				for (int z = 0; z < trial.num_samples[0]; z++)
 				{
 
-					cout << myIntPtr[z] << endl; // Print each sample
+					cout << myIntPtr[z] << endl; // Print each sample#
 				}
 			}
 		}
