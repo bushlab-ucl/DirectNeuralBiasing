@@ -34,7 +34,7 @@ fn butterworth_filter(f0: f64, fs: f64, signal: Vec<f64>) -> PyResult<Vec<f64>> 
 
     let mut filered_signal = vec![];
     for value in signal {
-        let filtered = butterworth.filter(value);
+        let filtered = butterworth.process_sample(value);
         filered_signal.push(filtered);
     }
 
@@ -52,7 +52,7 @@ fn biquad_filter(f0: f64, fs: f64, q: f64, signal: Vec<f64>) -> PyResult<Vec<f64
 
     let mut filered_signal = vec![];
     for value in signal {
-        let filtered = biquad.filter(value);
+        let filtered = biquad.process_sample(value);
         filered_signal.push(filtered);
     }
 
@@ -70,7 +70,7 @@ fn chebyshev_filter(f0: f64, fs: f64, q: f64, signal: Vec<f64>) -> PyResult<Vec<
 
     let mut filered_signal = vec![];
     for value in signal {
-        let filtered = chebyshev.filter(value);
+        let filtered = chebyshev.process_sample(value);
         filered_signal.push(filtered);
     }
 
