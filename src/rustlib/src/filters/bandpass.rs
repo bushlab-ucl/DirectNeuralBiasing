@@ -28,6 +28,26 @@ impl BandPassFilter {
         }
     }
 
+    // Getter for 'b' coefficients
+    pub fn get_b_coeffs(&self) -> [f64; 3] {
+        self.b
+    }
+
+    // Getter for 'a' coefficients
+    pub fn get_a_coeffs(&self) -> [f64; 3] {
+        self.a
+    }
+
+    // Create a filter with custom coefficients
+    pub fn new_custom(b_coeffs: [f64; 3], a_coeffs: [f64; 3]) -> Self {
+        BandPassFilter {
+            b: b_coeffs,
+            a: a_coeffs,
+            x: [0.0, 0.0],
+            y: [0.0, 0.0],
+        }
+    }
+
     // Create a new bandpass filter - With bounds. Lower and upper frequency bounds, and sampling frequency.
     pub fn with_bounds(bounds: Vec<f64>, fs: f64) -> Self {
         if bounds.len() != 2 {
