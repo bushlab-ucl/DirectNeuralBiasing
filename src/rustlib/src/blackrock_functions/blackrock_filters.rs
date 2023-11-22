@@ -9,6 +9,8 @@ struct FilterState {
     mean: f64,
     sum_of_squares: f64,
     std_dev: f64,
+    prev_sample: f64,
+    samples_since_zero_crossing: usize,
 }
 
 impl FilterState {
@@ -26,6 +28,18 @@ impl FilterState {
     pub fn calculate_z_score(&self, sample: f64) -> f64 {
         (sample - self.mean) / self.std_dev
     }
+
+    // Method to detect zero crossings
+    pub fn detect_zero_crossings(&mut self, sample: f64) -> usize {
+        if sample < 0.0 && self.prev_sample >= 0.0 {
+            let samples_since_zero_crossing = self.samples_since_zero_crossing;
+            self.samples_since_zero_crossing = 0;
+            return samples_since_zero_crossing;
+        } else {
+            self.samples_since_zero_crossing += 1;
+            return 0;
+        }
+    }
 }
 
 #[no_mangle]
@@ -39,6 +53,8 @@ pub extern "C" fn create_filter_state(f0: f64, fs: f64, threshold: f64) -> *mut 
         mean: 0.0,
         sum_of_squares: 0.0,
         std_dev: 1.0, // Starting with a default value to avoid division by zero
+        prev_sample: 0.0,
+        samples_since_zero_crossing: 0,
     };
     let boxed_state = Box::new(state);
     Box::into_raw(boxed_state) as *mut c_void
@@ -65,7 +81,11 @@ pub extern "C" fn process_single_sample(filter_ptr: *mut c_void, sample: f64) ->
     state.update_statistics(filtered_sample);
 
     let z_score = state.calculate_z_score(filtered_sample);
-    z_score > state.threshold
+    let above_threshold = z_score > state.threshold;
+
+    state.detect_zero_crossings(filtered_sample);
+
+    above_threshold
 }
 
 #[no_mangle]

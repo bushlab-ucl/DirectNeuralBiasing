@@ -17,10 +17,29 @@ fn dnb(_py: Python, m: &PyModule) -> PyResult<()> {
 #[pymodule]
 #[pyo3(name = "filters")]
 fn filters_module(_py: Python, m: &PyModule) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(with_bounds, m)?)?;
     m.add_function(wrap_pyfunction!(butterworth_filter, m)?)?;
     m.add_function(wrap_pyfunction!(biquad_filter, m)?)?;
     m.add_function(wrap_pyfunction!(chebyshev_filter, m)?)?;
     Ok(())
+}
+
+// #[cfg(feature = "python-extension")]
+#[pyfunction]
+#[pyo3(name = "with_bounds")]
+fn with_bounds(bounds: Vec<f64>, fs: f64, signal: Vec<f64>) -> PyResult<Vec<f64>> {
+    let mut with_bounds = BandPassFilter::with_bounds(bounds, fs);
+
+    // Add your own code to generate or fetch the input data
+    // let input_data = vec![0.0, 1.0, 2.0]; // Placeholder
+
+    let mut filered_signal = vec![];
+    for value in signal {
+        let filtered = with_bounds.process_sample(value);
+        filered_signal.push(filtered);
+    }
+
+    Ok(filered_signal)
 }
 
 // #[cfg(feature = "python-extension")]

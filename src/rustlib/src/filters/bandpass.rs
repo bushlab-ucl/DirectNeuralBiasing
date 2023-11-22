@@ -28,6 +28,23 @@ impl BandPassFilter {
         }
     }
 
+    // Create a new bandpass filter - With bounds. Lower and upper frequency bounds, and sampling frequency.
+    pub fn with_bounds(bounds: Vec<f64>, fs: f64) -> Self {
+        if bounds.len() != 2 {
+            panic!("Bounds should be a 2D array containing two elements (lower and upper bounds)");
+        }
+
+        // should maybe look at which is larger
+        let fl = bounds[0];
+        let fh = bounds[1];
+
+        let f0 = (fl * fh).sqrt(); // Center frequency
+        let bw = fh - fl; // Bandwidth
+        let q = f0 / bw; // Quality factor
+
+        Self::biquad(f0, fs, q)
+    }
+
     // Butterworth filter, Q set to sqrt(2)/2. This is the most commonly used filter, as it has a maximally flat response in the passband.
     pub fn butterworth(f0: f64, fs: f64) -> Self {
         let q = (2.0f64).sqrt() / 2.0;
