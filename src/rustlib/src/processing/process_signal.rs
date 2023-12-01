@@ -1,5 +1,10 @@
 use crate::filters::bandpass::BandPassFilter;
+use pyo3::prelude::*;
 use std::os::raw::c_void;
+
+// -----------------------------------------------------------------------------
+// RUST CORE LOGIC
+// -----------------------------------------------------------------------------
 
 struct FilterState {
     filter: BandPassFilter,
@@ -42,9 +47,19 @@ impl FilterState {
     }
 }
 
+// -----------------------------------------------------------------------------
+// C++ FFI LOGIC
+// -----------------------------------------------------------------------------
+
 #[no_mangle]
-pub extern "C" fn create_filter_state(f0: f64, fs: f64, threshold: f64) -> *mut c_void {
-    let filter = BandPassFilter::butterworth(f0, fs);
+pub extern "C" fn create_filter_state(
+    f0_l: f64,
+    f0_h: f64,
+    fs: f64,
+    threshold: f64,
+) -> *mut c_void {
+    let bounds: Vec<f64> = vec![f0_l, f0_h];
+    let filter = BandPassFilter::with_bounds(bounds, fs);
     let state = FilterState {
         filter,
         sum: 0.0,
@@ -113,4 +128,45 @@ pub extern "C" fn process_sample_chunk(
     }
 
     threshold_exceeded
+}
+
+// -----------------------------------------------------------------------------
+// PY03 PYTHON LOGIC
+// -----------------------------------------------------------------------------
+
+#[pyclass]
+pub struct PyFilterState {
+    state: FilterState,
+}
+
+#[pymethods]
+impl PyFilterState {
+    #[new]
+    pub fn new(f0_l: f64, f0_h: f64, fs: f64, threshold: f64) -> Self {
+        let bounds: Vec<f64> = vec![f0_l, f0_h];
+        let filter = BandPassFilter::with_bounds(bounds, fs);
+        PyFilterState {
+            state: FilterState {
+                filter,
+                sum: 0.0,
+                count: 0,
+                threshold,
+                mean: 0.0,
+                sum_of_squares: 0.0,
+                std_dev: 1.0, // default value to avoid division by zero
+                prev_sample: 0.0,
+                samples_since_zero_crossing: 0,
+            },
+        }
+    }
+
+    pub fn filter_signal(&mut self, data: Vec<f64>) -> PyResult<Vec<f64>> {
+        let mut filtered_signal = Vec::with_capacity(data.len());
+        for &sample in &data {
+            let filtered_sample = self.state.filter.process_sample(sample);
+            self.state.update_statistics(filtered_sample);
+            filtered_signal.push(filtered_sample);
+        }
+        Ok(filtered_signal)
+    }
 }
