@@ -24,7 +24,7 @@ pub fn run() -> io::Result<()> {
         match stream.read_exact(&mut buffer) {
             Ok(_) => {
                 let raw = i32::from_be_bytes(buffer);
-                let filtered = butterworth.process_sample(raw as f64) as i32;
+                let filtered = butterworth.filter_sample(raw as f64) as i32;
 
                 // Keep track of the last six filtered values
                 if last_vals.len() >= window_size {

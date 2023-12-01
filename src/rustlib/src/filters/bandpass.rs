@@ -98,7 +98,7 @@ impl BandPassFilter {
     }
 
     // Filter an input sample and update the internal state
-    pub fn process_sample(&mut self, input: f64) -> f64 {
+    pub fn filter_sample(&mut self, input: f64) -> f64 {
         let output = (self.b[0] / self.a[0]) * input
             + (self.b[1] / self.a[0]) * self.x[0]
             + (self.b[2] / self.a[0]) * self.x[1]
