@@ -2,7 +2,7 @@ use crate::filters::bandpass::BandPassFilter;
 use pyo3::prelude::*;
 // use std::os::raw::c_void;
 
-use std::fs::{File, OpenOptions};
+use std::fs::OpenOptions;
 use std::io::{Result, Write};
 
 fn log_to_file(msg: &str) -> Result<()> {
@@ -21,6 +21,7 @@ fn log_to_file(msg: &str) -> Result<()> {
 
 struct Filter {
     filter: BandPassFilter,
+    logging: bool,
     sum: f64,
     count: usize,
     min_threshold_signal: f64,
@@ -49,8 +50,10 @@ impl Filter {
     pub fn process_sample(&mut self, sample: f64) {
         // Apply bandpass filter to the sample
 
-        let formatted_message = format!("{}, {}", self.current_index, sample);
-        log_to_file(&formatted_message).expect("Failed to write to log file");
+        if self.logging {
+            let formatted_message = format!("{}, {}", self.current_index, sample);
+            log_to_file(&formatted_message).expect("Failed to write to log file");
+        }
 
         self.filtered_sample = self.filter.filter_sample(sample);
 
@@ -207,12 +210,14 @@ impl PyFilter {
         threshold_sinusoid: f64,
         min_zero_crossing: usize,
         max_zero_crossing: usize,
+        logging: bool,
     ) -> Self {
         let bounds: Vec<f64> = vec![f0_l, f0_h];
         let filter = BandPassFilter::with_bounds(bounds, fs);
         PyFilter {
             state: Filter {
                 filter,
+                logging,
                 sum: 0.0,
                 count: 0,
                 min_threshold_signal,
