@@ -2,6 +2,19 @@ use crate::filters::bandpass::BandPassFilter;
 use pyo3::prelude::*;
 // use std::os::raw::c_void;
 
+use std::fs::{File, OpenOptions};
+use std::io::{Result, Write};
+
+fn log_to_file(msg: &str) -> Result<()> {
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("log.txt")?;
+
+    writeln!(file, "{}", msg)?;
+    Ok(())
+}
+
 // -----------------------------------------------------------------------------
 // RUST CORE LOGIC
 // -----------------------------------------------------------------------------
@@ -10,7 +23,8 @@ struct Filter {
     filter: BandPassFilter,
     sum: f64,
     count: usize,
-    threshold_signal: f64,
+    min_threshold_signal: f64,
+    max_threshold_signal: f64,
     mean: f64,
     sum_of_squares: f64,
     std_dev: f64,
@@ -22,6 +36,7 @@ struct Filter {
     ongoing_wave_idx: Vec<usize>,
     detected_waves_idx: Vec<Vec<usize>>,
     refractory_period: usize,
+    refractory_samples_to_skip: usize,
     delay_to_up_state: usize,
     absolute_min_threshold: f64,
     absolute_max_threshold: f64,
@@ -33,13 +48,22 @@ struct Filter {
 impl Filter {
     pub fn process_sample(&mut self, sample: f64) {
         // Apply bandpass filter to the sample
+
+        let formatted_message = format!("{}, {}", self.current_index, sample);
+        log_to_file(&formatted_message).expect("Failed to write to log file");
+
         self.filtered_sample = self.filter.filter_sample(sample);
+
+        if self.refractory_samples_to_skip > 0 {
+            self.refractory_samples_to_skip -= 1;
+            return;
+        }
 
         // Update statistics
         self.update_statistics();
 
         // Check for zero crossings or other criteria to detect wave beginnings/ends
-        if self.detect_zero_crossings() {
+        if self.detect_upwards_zero_crossings() {
             // If an upwards zero-crossing is detected, see if it's a slow wave
             if self.detect_slow_wave() {
                 self.detected_waves_idx.push(self.ongoing_wave_idx.clone());
@@ -65,14 +89,21 @@ impl Filter {
 
         self.mean = self.sum / self.count as f64;
         self.std_dev = ((self.sum_of_squares / self.count as f64) - self.mean.powi(2)).sqrt();
+
+        self.absolute_min_threshold = self.calculate_threshold(self.min_threshold_signal as u8);
+        self.absolute_max_threshold = self.calculate_threshold(self.max_threshold_signal as u8);
     }
 
-    fn calculate_z_score(&self, sample: f64) -> f64 {
-        (sample - self.mean) / self.std_dev
+    // fn calculate_z_score(&self, sample: f64) -> f64 {
+    //     (sample - self.mean) / self.std_dev
+    // }
+
+    fn calculate_threshold(&mut self, percentile: u8) -> f64 {
+        self.mean + self.std_dev * (percentile as f64 / 100.0)
     }
 
-    fn detect_zero_crossings(&mut self) -> bool {
-        if self.filtered_sample < 0.0 && self.prev_sample >= 0.0 {
+    fn detect_upwards_zero_crossings(&mut self) -> bool {
+        if self.filtered_sample > 0.0 && self.prev_sample <= 0.0 {
             self.samples_since_zero_crossing = 0;
             true
         } else {
@@ -83,18 +114,19 @@ impl Filter {
 
     fn detect_slow_wave(&mut self) -> bool {
         let minima_idx = self.find_wave_minima(&self.ongoing_wave);
-        let maxima_idx = self.find_wave_maxima(&self.ongoing_wave);
+        // let maxima_idx = self.find_wave_maxima(&self.ongoing_wave);
 
         let wave_length = self.ongoing_wave.len();
 
         if wave_length >= self.min_zero_crossing && wave_length <= self.max_zero_crossing {
-            let amplitude = self.ongoing_wave[minima_idx];
+            let amplitude = self.ongoing_wave[minima_idx].abs();
             if amplitude > self.absolute_min_threshold && amplitude < self.absolute_max_threshold {
-                let sinusoid = self.construct_sinusoidal(minima_idx, wave_length);
+                let sinusoid = self.construct_cosine_wave(minima_idx, wave_length);
                 let correlation = self.calculate_correlation(&self.ongoing_wave, &sinusoid);
 
                 if correlation > self.threshold_sinusoid {
                     // Detected slow wave
+                    self.refractory_samples_to_skip = self.refractory_period;
                     return true;
                 }
             }
@@ -111,20 +143,20 @@ impl Filter {
             .unwrap_or(0)
     }
 
-    fn find_wave_maxima(&self, wave: &Vec<f64>) -> usize {
-        wave.iter()
-            .enumerate()
-            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
-            .map(|(idx, _)| idx)
-            .unwrap_or(0)
-    }
+    // fn find_wave_maxima(&self, wave: &Vec<f64>) -> usize {
+    //     wave.iter()
+    //         .enumerate()
+    //         .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+    //         .map(|(idx, _)| idx)
+    //         .unwrap_or(0)
+    // }
 
-    fn construct_sinusoidal(&self, peak_idx: usize, wave_length: usize) -> Vec<f64> {
+    fn construct_cosine_wave(&self, peak_idx: usize, wave_length: usize) -> Vec<f64> {
         let frequency = 1.0 / (wave_length as f64 / 2.0);
         (0..wave_length)
             .map(|i| {
                 let amplitude = self.ongoing_wave[peak_idx];
-                amplitude * (i as f64 * 2.0 * std::f64::consts::PI * frequency).sin()
+                amplitude * (i as f64 * 2.0 * std::f64::consts::PI * frequency).cos()
             })
             .collect()
     }
@@ -168,11 +200,10 @@ impl PyFilter {
         f0_l: f64,
         f0_h: f64,
         fs: f64,
-        threshold_signal: f64,
+        min_threshold_signal: f64,
+        max_threshold_signal: f64,
         refractory_period: usize,
         delay_to_up_state: usize,
-        absolute_min_threshold: f64,
-        absolute_max_threshold: f64,
         threshold_sinusoid: f64,
         min_zero_crossing: usize,
         max_zero_crossing: usize,
@@ -184,7 +215,8 @@ impl PyFilter {
                 filter,
                 sum: 0.0,
                 count: 0,
-                threshold_signal,
+                min_threshold_signal,
+                max_threshold_signal,
                 mean: 0.0,
                 sum_of_squares: 0.0,
                 std_dev: 1.0,
@@ -196,9 +228,10 @@ impl PyFilter {
                 ongoing_wave_idx: Vec::new(),
                 detected_waves_idx: Vec::new(),
                 refractory_period,
+                refractory_samples_to_skip: 0,
                 delay_to_up_state,
-                absolute_min_threshold,
-                absolute_max_threshold,
+                absolute_min_threshold: 0.0,
+                absolute_max_threshold: 0.0,
                 threshold_sinusoid,
                 min_zero_crossing,
                 max_zero_crossing,
