@@ -6,11 +6,11 @@ use pyo3::prelude::*;
 // RUST CORE LOGIC
 // -----------------------------------------------------------------------------
 
-struct FilterState {
+struct Filter {
     filter: BandPassFilter,
     sum: f64,
     count: usize,
-    threshold: f64,
+    threshold_signal: f64,
     mean: f64,
     sum_of_squares: f64,
     std_dev: f64,
@@ -19,34 +19,48 @@ struct FilterState {
     samples_since_zero_crossing: usize,
     current_index: usize,
     ongoing_wave: Vec<f64>,
-    detected_waves: Vec<Vec<f64>>,
+    ongoing_wave_idx: Vec<usize>,
+    detected_waves_idx: Vec<Vec<usize>>,
+    refractory_period: usize,
+    delay_to_up_state: usize,
+    absolute_min_threshold: f64,
+    absolute_max_threshold: f64,
+    threshold_sinusoid: f64,
+    min_zero_crossing: usize,
+    max_zero_crossing: usize,
 }
 
-impl FilterState {
+impl Filter {
     pub fn process_sample(&mut self, sample: f64) {
         // Apply bandpass filter to the sample
         self.filtered_sample = self.filter.filter_sample(sample);
 
         // Update statistics
-        self.update_statistics(self.filtered_sample);
+        self.update_statistics();
 
         // Check for zero crossings or other criteria to detect wave beginnings/ends
-        if self.detect_zero_crossings(self.filtered_sample) {
+        if self.detect_zero_crossings() {
             // If an upwards zero-crossing is detected, see if it's a slow wave
             if self.detect_slow_wave() {
-                // do something
+                self.detected_waves_idx.push(self.ongoing_wave_idx.clone());
+                // do stuff for preparing pulse ?
             }
             self.ongoing_wave.clear(); // Reset for the next wave
+            self.ongoing_wave_idx.clear();
         } else {
             // If no upwards zero-crossing is detected, accumulate the sample
             self.ongoing_wave.push(self.filtered_sample);
+            self.ongoing_wave_idx.push(self.current_index);
         }
+
+        // prepare for next sample
+        self.prev_sample = self.filtered_sample;
     }
 
     // Method to update the power and z-score calculations
-    fn update_statistics(&mut self, sample: f64) {
-        self.sum += sample;
-        self.sum_of_squares += sample.powi(2);
+    fn update_statistics(&mut self) {
+        self.sum += self.filtered_sample;
+        self.sum_of_squares += self.filtered_sample.powi(2);
         self.count += 1;
 
         self.mean = self.sum / self.count as f64;
@@ -57,9 +71,8 @@ impl FilterState {
         (sample - self.mean) / self.std_dev
     }
 
-    fn detect_zero_crossings(&mut self, sample: f64) -> bool {
-        if sample < 0.0 && self.prev_sample >= 0.0 {
-            let samples_since_zero_crossing = self.samples_since_zero_crossing;
+    fn detect_zero_crossings(&mut self) -> bool {
+        if self.filtered_sample < 0.0 && self.prev_sample >= 0.0 {
             self.samples_since_zero_crossing = 0;
             true
         } else {
@@ -68,24 +81,139 @@ impl FilterState {
         }
     }
 
-    // Adapted for real-time processing
     fn detect_slow_wave(&mut self) -> bool {
-        if self.detect_sinusoidal() {
-            // do something
-            true
-        } else {
-            false
+        let minima_idx = self.find_wave_minima(&self.ongoing_wave);
+        let maxima_idx = self.find_wave_maxima(&self.ongoing_wave);
+
+        let wave_length = self.ongoing_wave.len();
+
+        if wave_length >= self.min_zero_crossing && wave_length <= self.max_zero_crossing {
+            let amplitude = self.ongoing_wave[minima_idx];
+            if amplitude > self.absolute_min_threshold && amplitude < self.absolute_max_threshold {
+                let sinusoid = self.construct_sinusoidal(minima_idx, wave_length);
+                let correlation = self.calculate_correlation(&self.ongoing_wave, &sinusoid);
+
+                if correlation > self.threshold_sinusoid {
+                    // Detected slow wave
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
+
+    fn find_wave_minima(&self, wave: &Vec<f64>) -> usize {
+        wave.iter()
+            .enumerate()
+            .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+            .map(|(idx, _)| idx)
+            .unwrap_or(0)
+    }
+
+    fn find_wave_maxima(&self, wave: &Vec<f64>) -> usize {
+        wave.iter()
+            .enumerate()
+            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+            .map(|(idx, _)| idx)
+            .unwrap_or(0)
+    }
+
+    fn construct_sinusoidal(&self, peak_idx: usize, wave_length: usize) -> Vec<f64> {
+        let frequency = 1.0 / (wave_length as f64 / 2.0);
+        (0..wave_length)
+            .map(|i| {
+                let amplitude = self.ongoing_wave[peak_idx];
+                amplitude * (i as f64 * 2.0 * std::f64::consts::PI * frequency).sin()
+            })
+            .collect()
+    }
+
+    fn calculate_correlation(&self, wave: &Vec<f64>, sinusoid: &Vec<f64>) -> f64 {
+        let mean_wave = wave.iter().sum::<f64>() / wave.len() as f64;
+        let mean_sinusoid = sinusoid.iter().sum::<f64>() / sinusoid.len() as f64;
+
+        let covariance: f64 = wave
+            .iter()
+            .zip(sinusoid.iter())
+            .map(|(&x, &y)| (x - mean_wave) * (y - mean_sinusoid))
+            .sum();
+
+        let std_dev_wave =
+            (wave.iter().map(|&x| (x - mean_wave).powi(2)).sum::<f64>() / wave.len() as f64).sqrt();
+        let std_dev_sinusoid = (sinusoid
+            .iter()
+            .map(|&x| (x - mean_sinusoid).powi(2))
+            .sum::<f64>()
+            / sinusoid.len() as f64)
+            .sqrt();
+
+        covariance / (std_dev_wave * std_dev_sinusoid)
+    }
+}
+
+// -----------------------------------------------------------------------------
+// PY03 PYTHON LOGIC
+// -----------------------------------------------------------------------------
+
+#[pyclass]
+pub struct PyFilter {
+    state: Filter,
+}
+
+#[pymethods]
+impl PyFilter {
+    #[new]
+    pub fn new(
+        f0_l: f64,
+        f0_h: f64,
+        fs: f64,
+        threshold_signal: f64,
+        refractory_period: usize,
+        delay_to_up_state: usize,
+        absolute_min_threshold: f64,
+        absolute_max_threshold: f64,
+        threshold_sinusoid: f64,
+        min_zero_crossing: usize,
+        max_zero_crossing: usize,
+    ) -> Self {
+        let bounds: Vec<f64> = vec![f0_l, f0_h];
+        let filter = BandPassFilter::with_bounds(bounds, fs);
+        PyFilter {
+            state: Filter {
+                filter,
+                sum: 0.0,
+                count: 0,
+                threshold_signal,
+                mean: 0.0,
+                sum_of_squares: 0.0,
+                std_dev: 1.0,
+                filtered_sample: 0.0,
+                prev_sample: 0.0,
+                samples_since_zero_crossing: 0,
+                current_index: 0,
+                ongoing_wave: Vec::new(),
+                ongoing_wave_idx: Vec::new(),
+                detected_waves_idx: Vec::new(),
+                refractory_period,
+                delay_to_up_state,
+                absolute_min_threshold,
+                absolute_max_threshold,
+                threshold_sinusoid,
+                min_zero_crossing,
+                max_zero_crossing,
+            },
         }
     }
 
-    fn detect_sinusoidal(&mut self) -> bool {
-        // construct sinsuoidal wave and convolve with ongoing wave
-        let mut sinusoid = Vec::with_capacity(self.ongoing_wave.len());
-        for i in 0..self.ongoing_wave.len() {
-            sinusoid.push((i as f64 * 2.0 * std::f64::consts::PI / 100.0).sin());
+    pub fn filter_signal(&mut self, data: Vec<f64>) -> PyResult<(Vec<f64>, Vec<Vec<usize>>)> {
+        let mut filtered_signal = Vec::with_capacity(data.len());
+        for (idx, &sample) in data.iter().enumerate() {
+            self.state.current_index = idx;
+            self.state.process_sample(sample);
+            filtered_signal.push(self.state.filtered_sample);
         }
-        // let convolved = convolve(&self.ongoing_wave, &sinusoid);
-        true
+        Ok((filtered_signal, self.state.detected_waves_idx.clone()))
     }
 }
 
@@ -172,47 +300,3 @@ impl FilterState {
 
 //     threshold_exceeded
 // }
-
-// -----------------------------------------------------------------------------
-// PY03 PYTHON LOGIC
-// -----------------------------------------------------------------------------
-
-#[pyclass]
-pub struct PyFilterState {
-    state: FilterState,
-}
-
-#[pymethods]
-impl PyFilterState {
-    #[new]
-    pub fn new(f0_l: f64, f0_h: f64, fs: f64, threshold: f64) -> Self {
-        let bounds: Vec<f64> = vec![f0_l, f0_h];
-        let filter = BandPassFilter::with_bounds(bounds, fs);
-        PyFilterState {
-            state: FilterState {
-                filter,
-                sum: 0.0,
-                count: 0,
-                threshold,
-                mean: 0.0,
-                sum_of_squares: 0.0,
-                std_dev: 1.0, // default value to avoid division by zero
-                prev_sample: 0.0,
-                filtered_sample: 0.0,
-                samples_since_zero_crossing: 0,
-                ongoing_wave: Vec::new(),
-                detected_waves: Vec::new(),
-                current_index: 0,
-            },
-        }
-    }
-
-    pub fn filter_signal(&mut self, data: Vec<f64>) -> PyResult<Vec<f64>> {
-        let mut filtered_signal = Vec::with_capacity(data.len());
-        for &sample in &data {
-            self.state.process_sample(sample);
-            filtered_signal.push(self.state.filtered_sample);
-        }
-        Ok(filtered_signal)
-    }
-}
