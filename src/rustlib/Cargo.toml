@@ -1,6 +1,6 @@
 [package]
-name = "dnb"
-version = "0.2.0"
+name = "direct-neural-biasing"
+version = "0.3.3"
 edition = "2021"
 
 [dependencies]
@@ -17,9 +17,9 @@ path = "src/main.rs"
 
 # this breaks it for some reason
 [lib]
-name = "dnb"
+name = "direct_neural_biasing"
 crate-type = ["cdylib"]
 
 [package.metadata.maturin]
-name = "dnb"
+name = "direct-neural-biasing"
 rustc-extra-args = ["--cfg", "feature=\"python-extension\""]

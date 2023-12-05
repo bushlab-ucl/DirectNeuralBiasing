@@ -5,7 +5,8 @@ pub mod filters;
 pub mod processing;
 
 #[pymodule]
-fn dnb(_py: Python, m: &PyModule) -> PyResult<()> {
+#[pyo3(name = "direct_neural_biasing")]
+fn direct_neural_biasing(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyFilter>()?;
     Ok(())
 }

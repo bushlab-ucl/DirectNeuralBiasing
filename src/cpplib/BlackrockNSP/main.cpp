@@ -1,7 +1,7 @@
 // #include "stdafx.h"
 #include <windows.h>
 #include "cbsdk.h"
-#include "Test/TestRoutines.h"
+// #include "Test/TestRoutines.h"
 #include <iostream>
 #include <string.h>
 #include <chrono>
@@ -20,17 +20,22 @@ Blackrock Function Description: Gets values from continuous trial data and print
 UCL Research Function Description: On each cycle, runs a rust function to perform real-time analysis of the data.
 */
 
-const double fs = 30000.0;						 // Sampling rate
-const double f0_swr = 100.0;					 // SWR frequency
-const double f0_interictal = 220.0;		 // Interictal Spike frequency
-const double threshold_swr = 1;				 // SWR threshold
-const double threshold_interictal = 1; // Interictal Spike threshold
+const double fs = 30000.0;					// Sampling rate
+const double f0_l = 80.0;					// Lower bound of bandpass filter
+const double f0_h = 120.0;					// Upper bound of bandpass filter
+const double min_threshold_signal = 90; // Minimum threshold for signal detection
+const double max_threshold_signal = 250; // Maximum threshold for signal detection
+const size_t refractory_period = 2.5 * fs; // Refractory period in number of samples
+const size_t delay_to_up_state = 0; // Delay to upstate in number of samples
+const double threshold_sinusoid = 0.5; // Threshold for sinusoidal correlation
+const bool logging = false; // Whether to log the data
 
-#define RUN_TEST_ROUTINES true
+
+#define RUN_TEST_ROUTINES false
 
 // Define function pointers for the filter
-typedef void *(__cdecl *CreateFilterStateFunc)(double, double, double);
-typedef void(__cdecl *DeleteFilterStateFunc)(void *);
+typedef void *(__cdecl *CreateFilterFunc)(double, double, double, double, double, int, int, double, bool);
+typedef void(__cdecl *DeleteFilterFunc)(void *);
 typedef bool(__cdecl *ProcessSingleSampleFunc)(void *, double);
 typedef bool(__cdecl *ProcessSampleChunkFunc)(void *, double *, size_t);
 
@@ -42,7 +47,7 @@ int main(int argc, char *argv[])
 {
 
 	// Load the Rust library
-	HINSTANCE hinstLib = LoadLibrary(TEXT("..\\..\\rustlib\\target\\release\\dnb.dll"));
+	HINSTANCE hinstLib = LoadLibrary(TEXT("..\\..\\rustlib\\target\\release\\direct_neural_biasing.dll"));
 	if (hinstLib == NULL)
 	{
 		std::cerr << "DLL failed to load!" << std::endl;
@@ -50,20 +55,20 @@ int main(int argc, char *argv[])
 	}
 
 	// Load the test routines
-	TestRoutines testRoutines;
-	if (!testRoutines.loadRustLibrary())
-	{
-		std::cerr << "Failed to load Rust library" << std::endl;
-		return 1;
-	}
+	//TestRoutines testRoutines;
+	//if (!testRoutines.loadRustLibrary())
+	//{
+	//	std::cerr << "Failed to load Rust library" << std::endl;
+	//	return 1;
+	//}
 
 	// Load filter functions
-	CreateFilterStateFunc create_filter_state = (CreateFilterStateFunc)GetProcAddress(hinstLib, "create_filter_state");
-	DeleteFilterStateFunc delete_filter_state = (DeleteFilterStateFunc)GetProcAddress(hinstLib, "delete_filter_state");
+	CreateFilterFunc create_filter = (CreateFilterFunc)GetProcAddress(hinstLib, "create_filter");
+	DeleteFilterFunc delete_filter = (DeleteFilterFunc)GetProcAddress(hinstLib, "delete_filter");
 	ProcessSingleSampleFunc process_single_sample = (ProcessSingleSampleFunc)GetProcAddress(hinstLib, "process_single_sample");
 	ProcessSampleChunkFunc process_sample_chunk = (ProcessSampleChunkFunc)GetProcAddress(hinstLib, "process_sample_chunk");
 
-	if (create_filter_state == NULL || delete_filter_state == NULL || process_single_sample == NULL || process_sample_chunk == NULL)
+	if (create_filter == NULL || delete_filter == NULL || process_single_sample == NULL || process_sample_chunk == NULL)
 	{
 		std::cerr << "Filter functions not found!" << std::endl;
 		FreeLibrary(hinstLib);
@@ -130,10 +135,20 @@ int main(int argc, char *argv[])
 	auto end = start;
 
 	// Create filter
-	void *filter_swr = create_filter_state(f0_swr, fs, threshold_swr);
-	void *filter_interictal = create_filter_state(f0_interictal, fs, threshold_interictal);
+	void* filter_swr = create_filter(
+		f0_l,
+		f0_h,
+		fs,
+		min_threshold_signal,
+		max_threshold_signal,
+		refractory_period,
+		delay_to_up_state,
+		threshold_sinusoid,
+		logging
+	);
+	// void *filter_interictal = create_filter_state(f0_interictal, fs, threshold_interictal);
 
-	if (filter_swr == NULL || filter_interictal == NULL)
+	if (filter_swr == NULL)
 	{
 		std::cerr << "Failed to create filters!" << std::endl;
 		FreeLibrary(hinstLib);
@@ -170,12 +185,7 @@ int main(int argc, char *argv[])
 
 				// Process data with filters
 				bool swr_detected = process_sample_chunk(filter_swr, doubleArray, trial.num_samples[0]);
-				bool interictal_detected = process_sample_chunk(filter_interictal, doubleArray, trial.num_samples[0]);
-
-				if (interictal_detected)
-				{
-					swr_detected = false; // Reset SWR detection if Interictal spike is detected
-				}
+				// bool interictal_detected = process_sample_chunk(filter_interictal, doubleArray, trial.num_samples[0]);
 
 				if (swr_detected)
 				{
@@ -205,8 +215,7 @@ int main(int argc, char *argv[])
 	}
 
 	// free library + filters
-	delete_filter_state(filter_swr);
-	delete_filter_state(filter_interictal);
+	delete_filter(filter_swr);
 	FreeLibrary(hinstLib);
 
 	// close system
