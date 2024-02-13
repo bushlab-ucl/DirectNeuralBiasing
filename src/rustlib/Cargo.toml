@@ -7,6 +7,7 @@ edition = "2021"
 pyo3 = { version = "0.20.0", features = ["extension-module"] }
 rand = "0.8.4"
 colored = "2.0.4"
+csv = "1.1"
 
 [build-dependencies]
 maturin = "1.2.3"

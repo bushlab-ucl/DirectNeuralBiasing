@@ -9,11 +9,15 @@ pub fn run() -> io::Result<()> {
     let mut stream = TcpStream::connect("127.0.0.1:8080")?;
     let mut buffer = [0u8; 4];
 
-    let sensitivity = 5;
-    let window_size = 10;
+    let swr_sensitivity = 1;
+    let ied_sensitivity = 4;
+    let window_size = 20;
 
-    let f0 = 13.0;
-    let fs = 40.0;
+    const ied_cooldown: i32 = 200 as i32;
+    let mut current_ied_cooldown = 0 as i32;
+
+    let f0 = 100.0;
+    let fs = 1000.0;
 
     let mut butterworth = BandPassFilter::butterworth(f0, fs);
 
@@ -23,7 +27,8 @@ pub fn run() -> io::Result<()> {
     loop {
         match stream.read_exact(&mut buffer) {
             Ok(_) => {
-                let raw = i32::from_be_bytes(buffer);
+                // let raw = i32::from_be_bytes(buffer);
+                let raw = i32::from_be_bytes(buffer).abs();
                 let filtered = butterworth.filter_sample(raw as f64) as i32;
 
                 // Keep track of the last six filtered values
@@ -32,10 +37,26 @@ pub fn run() -> io::Result<()> {
                 }
                 last_vals.push_back(filtered);
 
-                let alert = if last_vals.iter().filter(|&&x| x > sensitivity).count()
-                    >= sensitivity as usize
+                // if current_ied_cooldown > 0 {
+                //     current_ied_cooldown -= 1;
+                // } else if last_vals.iter().filter(|&&x| x > ied_sensitivity).count()
+                //     >= ied_sensitivity as usize
+                // {
+                //     current_ied_cooldown = ied_cooldown;
+                // }
+
+                let alert = if current_ied_cooldown > 0 {
+                    current_ied_cooldown -= 1;
+                    "IED Cooldown  ".blue()
+                } else if last_vals.iter().filter(|&&x| x > ied_sensitivity).count()
+                    >= ied_sensitivity as usize
                 {
-                    "SWR Detected !".red()
+                    current_ied_cooldown = ied_cooldown;
+                    "IED Detected X".red()
+                } else if last_vals.iter().filter(|&&x| x > swr_sensitivity).count()
+                    >= swr_sensitivity as usize
+                {
+                    "SWR Detected !".green()
                 } else {
                     "              ".white()
                 };
@@ -53,14 +74,14 @@ pub fn run() -> io::Result<()> {
                         "{}{}{}{}",
                         alert,
                         raw_string.white(),
-                        filtered_string.red(),
+                        filtered_string.green(),
                         "\n"
                     )
                 } else {
                     format!(
                         "{}{}{}{}",
                         alert,
-                        filtered_string.red(),
+                        filtered_string.green(),
                         raw_string.white(),
                         "\n"
                     )
