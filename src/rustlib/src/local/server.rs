@@ -69,8 +69,23 @@ fn read_signals_from_csv(file_path: &str) -> Result<Vec<Vec<f32>>, Box<dyn Error
 
 pub fn run() -> std::io::Result<()> {
     let listener = TcpListener::bind("127.0.0.1:8080")?;
+    // print current dir
+
+    // make current dir to the crate root
+    std::env::set_current_dir(
+        std::env::current_exe()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap(),
+    )
+    .unwrap();
+    println!("{:?}", std::env::current_dir().unwrap());
+
+    // read data
     let signal_data = if USE_DATA {
-        Arc::new(read_signals_from_csv("../../data/signals.csv").unwrap())
+        Arc::new(read_signals_from_csv("../../../data/signals.csv").unwrap())
     } else {
         Arc::new(Vec::new()) // Use an empty vector when not using CSV data
     };
