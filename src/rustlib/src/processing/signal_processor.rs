@@ -1,0 +1,345 @@
+use crate::filters::bandpass::BandPassFilter;
+use crate::utils::log::log_to_file;
+use rayon::prelude::*;
+
+// use pyo3::prelude::*;
+// use std::os::raw::c_void;
+
+// use super::detectors::slow_wave::SlowWaveDetector;
+
+// -----------------------------------------------------------------------------
+// RUST CORE LOGIC
+// -----------------------------------------------------------------------------
+
+// SIGNAL PROCESSOR COMPONENT ----------------------------------------------------------
+
+struct SignalProcessor {
+    index: usize,
+    filter: Filter,
+    statistics: Statistics,
+    detectors: Detectors,
+    logging: bool,
+}
+
+impl SignalProcessor {
+    pub fn new(filter_instance: BandPassFilter, logging: bool) -> Self {
+        SignalProcessor {
+            index: 0,
+            filter: Filter::new(filter_instance),
+            statistics: Statistics::new(),
+            detectors: Detectors::new(),
+            logging,
+        }
+    }
+
+    pub fn add_detector(&mut self, detector: Box<dyn DetectorInstance + Send + Sync>) {
+        self.detectors.add_detector(detector);
+    }
+
+    pub fn process_sample(&mut self, sample: f64) {
+        self.filter.filter_sample(sample);
+        let filtered_sample = self.filter.filtered_sample;
+        self.statistics.update_statistics(filtered_sample);
+
+        self.detectors.process_sample(
+            filtered_sample,
+            self.index,
+            self.filter.prev_sample,
+            self.statistics.mean,
+            self.statistics.std_dev,
+        );
+
+        if self.logging {
+            let formatted_message = format!("{}, {}, {}", self.index, sample, filtered_sample);
+            log_to_file(&formatted_message).expect("Failed to write to log file");
+        }
+
+        self.index += 1;
+    }
+}
+
+// -----------------------------------------------------------------------------
+// SIGNAL PROCESSOR SUBCOMPONENTS
+// -----------------------------------------------------------------------------
+
+// FILTER COMPONENT ------------------------------------------------------------
+
+struct Filter {
+    filter: BandPassFilter,
+    filtered_sample: f64,
+    prev_sample: f64,
+}
+
+impl Filter {
+    fn new(filter: BandPassFilter) -> Self {
+        Self {
+            filter,
+            filtered_sample: 0.0,
+            prev_sample: 0.0,
+        }
+    }
+
+    fn filter_sample(&mut self, sample: f64) {
+        self.prev_sample = self.filtered_sample;
+        self.filtered_sample = self.filter.filter_sample(sample); // Placeholder for actual filter implementation
+    }
+}
+
+// STATISTICS COMPONENT --------------------------------------------------------
+
+struct Statistics {
+    sum: f64,
+    count: usize,
+    mean: f64,
+    std_dev: f64,
+}
+
+impl Statistics {
+    fn new() -> Self {
+        Self {
+            sum: 0.0,
+            count: 0,
+            mean: 0.0,
+            std_dev: 0.0,
+        }
+    }
+
+    fn update_statistics(&mut self, sample: f64) {
+        self.sum += sample;
+        self.count += 1;
+        self.mean = self.sum / self.count as f64;
+        // Update standard deviation calculation to correctly reflect population/std sample deviation as needed
+        self.std_dev = ((self.sum / self.count as f64) - self.mean.powi(2)).sqrt();
+    }
+}
+
+// DETECTOR COMPONENT ----------------------------------------------------------
+
+trait DetectorInstance {
+    fn process_sample(
+        &mut self,
+        sample: f64,
+        index: usize,
+        prev_sample: f64,
+        mean: f64,
+        std_dev: f64,
+    ) -> Option<Vec<usize>>;
+}
+
+struct Detectors {
+    detectors: Vec<Box<dyn DetectorInstance + Send + Sync>>, // Ensure thread safety
+}
+
+impl Detectors {
+    fn new() -> Self {
+        Self {
+            detectors: Vec::new(),
+        }
+    }
+
+    fn add_detector(&mut self, detector: Box<dyn DetectorInstance + Send + Sync>) {
+        self.detectors.push(detector);
+    }
+
+    fn process_sample(
+        &mut self,
+        sample: f64,
+        index: usize,
+        prev_sample: f64,
+        mean: f64,
+        std_dev: f64,
+    ) {
+        // Parallel iteration over detectors
+        self.detectors.par_iter_mut().for_each(|detector| {
+            if let Some(detected_wave_indices) =
+                detector.process_sample(sample, index, prev_sample, mean, std_dev)
+            {
+                // Handle detected waves, e.g., logging or processing
+                // Note: Printing or other side-effects here might need to be managed carefully
+                // to avoid issues with non-thread-safe operations or order-dependent output
+                println!("Detected wave at indices: {:?}", detected_wave_indices);
+            }
+        });
+    }
+}
+
+// // Buffer COMPONENT ------------------------------------------------------------
+
+// struct Buffer {
+//     buffer: Vec<f64>,
+// }
+
+// impl Buffer {
+//     fn new() -> Self {
+//         Self { buffer: Vec::new() }
+//     }
+
+//     fn add_sample(&mut self, sample: f64) {
+//         self.buffer.push(sample);
+//     }
+// }
+
+// // -----------------------------------------------------------------------------
+// // PY03 PYTHON LOGIC
+// // -----------------------------------------------------------------------------
+
+// #[pyclass]
+// pub struct PyFilter {
+//     state: Filter,
+// }
+
+// #[pymethods]
+// impl PyFilter {
+//     #[new]
+//     pub fn new(
+//         f0_l: f64,
+//         f0_h: f64,
+//         fs: f64,
+//         min_threshold_signal: f64,
+//         max_threshold_signal: f64,
+//         refractory_period: usize,
+//         delay_to_up_state: usize,
+//         threshold_sinusoid: f64,
+//         logging: bool,
+//     ) -> Self {
+//         let bounds: Vec<f64> = vec![f0_l, f0_h];
+//         let filter = BandPassFilter::with_bounds(bounds, fs);
+//         PyFilter {
+//             state: Filter {
+//                 filter,
+//                 sum: 0.0,
+//                 count: 0,
+//                 min_threshold_signal,
+//                 max_threshold_signal,
+//                 mean: 0.0,
+//                 sum_of_squares: 0.0,
+//                 std_dev: 1.0,
+//                 filtered_sample: 0.0,
+//                 prev_sample: 0.0,
+//                 samples_since_zero_crossing: 0,
+//                 current_index: 0,
+//                 ongoing_wave: Vec::new(),
+//                 ongoing_wave_idx: Vec::new(),
+//                 detected_waves_idx: Vec::new(),
+//                 refractory_period,
+//                 refractory_samples_to_skip: 0,
+//                 delay_to_up_state,
+//                 absolute_min_threshold: 0.0,
+//                 absolute_max_threshold: 0.0,
+//                 threshold_sinusoid,
+//                 logging,
+//             },
+//         }
+//     }
+
+//     pub fn filter_signal(&mut self, data: Vec<f64>) -> PyResult<(Vec<f64>, Vec<Vec<usize>>)> {
+//         let mut filtered_signal = Vec::with_capacity(data.len());
+//         for (idx, &sample) in data.iter().enumerate() {
+//             self.state.current_index = idx;
+//             self.state.process_sample(sample);
+//             filtered_signal.push(self.state.filtered_sample);
+//         }
+//         Ok((filtered_signal, self.state.detected_waves_idx.clone()))
+//     }
+// }
+
+// // -----------------------------------------------------------------------------
+// // C++ FFI LOGIC
+// // -----------------------------------------------------------------------------
+
+// #[no_mangle]
+// pub extern "C" fn create_filter(
+//     f0_l: f64,
+//     f0_h: f64,
+//     fs: f64,
+//     min_threshold_signal: f64,
+//     max_threshold_signal: f64,
+//     refractory_period: usize,
+//     delay_to_up_state: usize,
+//     threshold_sinusoid: f64,
+//     logging: bool,
+// ) -> *mut c_void {
+//     let bounds: Vec<f64> = vec![f0_l, f0_h];
+//     let filter = BandPassFilter::with_bounds(bounds, fs);
+//     let state = Filter {
+//         filter,
+//         sum: 0.0,
+//         count: 0,
+//         min_threshold_signal,
+//         max_threshold_signal,
+//         mean: 0.0,
+//         sum_of_squares: 0.0,
+//         std_dev: 1.0,
+//         filtered_sample: 0.0,
+//         prev_sample: 0.0,
+//         samples_since_zero_crossing: 0,
+//         current_index: 0,
+//         ongoing_wave: Vec::new(),
+//         ongoing_wave_idx: Vec::new(),
+//         detected_waves_idx: Vec::new(),
+//         refractory_period,
+//         refractory_samples_to_skip: 0,
+//         delay_to_up_state,
+//         absolute_min_threshold: 0.0,
+//         absolute_max_threshold: 0.0,
+//         threshold_sinusoid,
+//         logging,
+//     };
+//     let boxed_state = Box::new(state);
+//     Box::into_raw(boxed_state) as *mut c_void
+// }
+
+// #[no_mangle]
+// pub extern "C" fn delete_filter(filter_ptr: *mut c_void) {
+//     if filter_ptr.is_null() {
+//         return;
+//     }
+//     unsafe {
+//         drop(Box::from_raw(filter_ptr as *mut Filter));
+//     }
+// }
+
+// #[no_mangle]
+// pub extern "C" fn process_single_sample(filter_ptr: *mut c_void, sample: f64) -> bool {
+//     if filter_ptr.is_null() {
+//         return false;
+//     }
+//     let state = unsafe { &mut *(filter_ptr as *mut Filter) };
+
+//     state.process_sample(sample);
+//     // let z_score = state.calculate_z_score();
+
+//     let above_min_threshold = state.filtered_sample > state.min_threshold_signal;
+//     let below_max_threshold = state.filtered_sample < state.max_threshold_signal;
+
+//     above_min_threshold & below_max_threshold
+// }
+
+// #[no_mangle]
+// pub extern "C" fn process_sample_chunk(
+//     filter_ptr: *mut c_void,
+//     data: *mut f64,
+//     length: usize,
+// ) -> bool {
+//     if filter_ptr.is_null() {
+//         return false;
+//     }
+//     let state = unsafe { &mut *(filter_ptr as *mut Filter) };
+//     let data_slice = unsafe { std::slice::from_raw_parts(data, length) };
+
+//     let mut threshold_exceeded = false;
+//     for &sample in data_slice {
+//         state.process_sample(sample);
+//         // let z_score = state.calculate_z_score();
+
+//         let above_min_threshold = state.filtered_sample > state.min_threshold_signal;
+//         let below_max_threshold = state.filtered_sample < state.max_threshold_signal;
+
+//         if above_min_threshold & below_max_threshold {
+//             threshold_exceeded = true;
+//             break;
+//         }
+//     }
+
+//     threshold_exceeded
+// }

@@ -1,3 +1,3 @@
-pub mod blackrock_test;
-pub mod process_signal;
-mod slow_wave;
+pub mod detectors;
+pub mod signal_processor;
+pub mod test;

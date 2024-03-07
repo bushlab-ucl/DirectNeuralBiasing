@@ -13,8 +13,8 @@ impl SlowWaveDetector {
     pub fn new(
         refractory_period: usize,
         threshold_sinusoid: f64,
-        min_threshold_signal: f64,
-        max_threshold_signal: f64,
+        min_threshold_signal: f64, // not sure this is right
+        max_threshold_signal: f64, // not sure this is right
     ) -> Self {
         SlowWaveDetector {
             refractory_period,
@@ -43,7 +43,7 @@ impl SlowWaveDetector {
 
         let crossed_zero = sample > 0.0 && prev_sample <= 0.0;
         if crossed_zero {
-            let detected = self.detect_slow_wave(mean, std_dev);
+            let detected = self.detect_slow_wave();
             if detected {
                 self.refractory_samples_to_skip = self.refractory_period;
                 let indices = self.ongoing_wave_idx.clone();
