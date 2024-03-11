@@ -1,3 +1,4 @@
+use super::detectors::DetectorInstance;
 use crate::filters::bandpass::BandPassFilter;
 use crate::utils::log::log_to_file;
 use rayon::prelude::*;
@@ -18,17 +19,17 @@ struct SignalProcessor {
     filter: Filter,
     statistics: Statistics,
     detectors: Detectors,
-    logging: bool,
+    config: Config,
 }
 
 impl SignalProcessor {
-    pub fn new(filter_instance: BandPassFilter, logging: bool) -> Self {
+    pub fn new(filter_instance: BandPassFilter, config: Config) -> Self {
         SignalProcessor {
             index: 0,
             filter: Filter::new(filter_instance),
             statistics: Statistics::new(),
             detectors: Detectors::new(),
-            logging,
+            config,
         }
     }
 
@@ -49,7 +50,7 @@ impl SignalProcessor {
             self.statistics.std_dev,
         );
 
-        if self.logging {
+        if self.config.logging {
             let formatted_message = format!("{}, {}, {}", self.index, sample, filtered_sample);
             log_to_file(&formatted_message).expect("Failed to write to log file");
         }
@@ -61,6 +62,18 @@ impl SignalProcessor {
 // -----------------------------------------------------------------------------
 // SIGNAL PROCESSOR SUBCOMPONENTS
 // -----------------------------------------------------------------------------
+
+// CONFIG COMPONENT ------------------------------------------------------------
+
+struct Config {
+    logging: bool,
+}
+
+impl Config {
+    pub fn new(logging: bool) -> Self {
+        Self { logging }
+    }
+}
 
 // FILTER COMPONENT ------------------------------------------------------------
 
@@ -115,33 +128,22 @@ impl Statistics {
 
 // DETECTOR COMPONENT ----------------------------------------------------------
 
-trait DetectorInstance {
-    fn process_sample(
-        &mut self,
-        sample: f64,
-        index: usize,
-        prev_sample: f64,
-        mean: f64,
-        std_dev: f64,
-    ) -> Option<Vec<usize>>;
-}
-
-struct Detectors {
+pub struct Detectors {
     detectors: Vec<Box<dyn DetectorInstance + Send + Sync>>, // Ensure thread safety
 }
 
 impl Detectors {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             detectors: Vec::new(),
         }
     }
 
-    fn add_detector(&mut self, detector: Box<dyn DetectorInstance + Send + Sync>) {
+    pub fn add_detector(&mut self, detector: Box<dyn DetectorInstance + Send + Sync>) {
         self.detectors.push(detector);
     }
 
-    fn process_sample(
+    pub fn process_sample(
         &mut self,
         sample: f64,
         index: usize,
@@ -162,22 +164,6 @@ impl Detectors {
         });
     }
 }
-
-// // Buffer COMPONENT ------------------------------------------------------------
-
-// struct Buffer {
-//     buffer: Vec<f64>,
-// }
-
-// impl Buffer {
-//     fn new() -> Self {
-//         Self { buffer: Vec::new() }
-//     }
-
-//     fn add_sample(&mut self, sample: f64) {
-//         self.buffer.push(sample);
-//     }
-// }
 
 // // -----------------------------------------------------------------------------
 // // PY03 PYTHON LOGIC
