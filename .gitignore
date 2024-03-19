@@ -6,3 +6,5 @@
 *.vscode
 *.venv
 *checkpoint*
+*/log.txt
+src/rustlib/src/local/log.txt
