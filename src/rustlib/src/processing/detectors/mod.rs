@@ -18,8 +18,7 @@ pub struct DetectionResult {
     pub confidence_ratio: f64,
 }
 
-// Buffer COMPONENT ------------------------------------------------------------
-
+// BUFFER COMPONENT ------------------------------------------------------------
 pub struct RingBuffer {
     buffer: Vec<f64>,
     capacity: usize,
