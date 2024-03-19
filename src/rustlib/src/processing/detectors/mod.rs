@@ -1,5 +1,6 @@
-pub mod slow_wave;
-use rayon::prelude::*;
+// pub mod slow_wave;
+pub mod threshold_detector;
+// use rayon::prelude::*;
 
 // DETECTOR COMPONENT ----------------------------------------------------------
 pub trait DetectorInstance {
@@ -7,15 +8,19 @@ pub trait DetectorInstance {
         &mut self,
         sample: f64,
         index: usize,
-        prev_sample: f64,
         mean: f64,
         std_dev: f64,
-    ) -> Option<Vec<usize>>;
+    ) -> Option<DetectionResult>;
+}
+
+pub struct DetectionResult {
+    pub name: String,
+    pub confidence_ratio: f64,
 }
 
 // Buffer COMPONENT ------------------------------------------------------------
 
-struct RingBuffer {
+pub struct RingBuffer {
     buffer: Vec<f64>,
     capacity: usize,
     start: usize,
@@ -40,6 +45,7 @@ impl RingBuffer {
         }
     }
 
+    #[allow(dead_code)]
     pub fn get(&self, index: usize) -> Option<f64> {
         if index >= self.capacity {
             return None;

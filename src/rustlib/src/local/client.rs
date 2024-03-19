@@ -1,97 +1,42 @@
-use colored::Colorize;
-use std::collections::VecDeque;
 use std::io::{self, Read};
 use std::net::TcpStream;
 
 use crate::filters::bandpass::BandPassFilter;
+use crate::processing::detectors::threshold_detector::ThresholdDetector;
+use crate::processing::signal_processor::{Config, SignalProcessor};
 
+// In client.rs
 pub fn run() -> io::Result<()> {
     let mut stream = TcpStream::connect("127.0.0.1:8080")?;
     let mut buffer = [0u8; 4];
 
-    let swr_sensitivity = 1;
-    let ied_sensitivity = 4;
-    let window_size = 20;
-
-    const ied_cooldown: i32 = 200 as i32;
-    let mut current_ied_cooldown = 0 as i32;
-
     let f0 = 100.0;
-    let fs = 1000.0;
+    let fs = 10000.0;
 
-    let mut butterworth = BandPassFilter::butterworth(f0, fs);
+    let butterworth = BandPassFilter::butterworth(f0, fs);
+    let mut processor = SignalProcessor::new(butterworth, Config::new(true));
 
-    // Store the last 6 filtered values
-    let mut last_vals = VecDeque::with_capacity(4);
+    let test_detector_1 = Box::new(ThresholdDetector::new("test_1".to_string(), 100, 1.0, 10));
+    let test_detector_2 = Box::new(ThresholdDetector::new("test_2".to_string(), 100, 1.0, 80));
+    processor.add_detector(test_detector_1);
+    processor.add_detector(test_detector_2);
 
     loop {
         match stream.read_exact(&mut buffer) {
             Ok(_) => {
-                // let raw = i32::from_be_bytes(buffer);
-                let raw = i32::from_be_bytes(buffer).abs();
-                let filtered = butterworth.filter_sample(raw as f64) as i32;
-
-                // Keep track of the last six filtered values
-                if last_vals.len() >= window_size {
-                    last_vals.pop_front();
+                let raw = i32::from_be_bytes(buffer).abs() as f64;
+                // println!("{}", processor.index);
+                let detections = processor.process_sample(raw);
+                if !detections.is_empty() {
+                    for detection in detections {
+                        println!(
+                            "{} detected - confidence: {}",
+                            detection.name, detection.confidence_ratio
+                        );
+                    }
                 }
-                last_vals.push_back(filtered);
-
-                // if current_ied_cooldown > 0 {
-                //     current_ied_cooldown -= 1;
-                // } else if last_vals.iter().filter(|&&x| x > ied_sensitivity).count()
-                //     >= ied_sensitivity as usize
-                // {
-                //     current_ied_cooldown = ied_cooldown;
-                // }
-
-                let alert = if current_ied_cooldown > 0 {
-                    current_ied_cooldown -= 1;
-                    "IED Cooldown  ".blue()
-                } else if last_vals.iter().filter(|&&x| x > ied_sensitivity).count()
-                    >= ied_sensitivity as usize
-                {
-                    current_ied_cooldown = ied_cooldown;
-                    "IED Detected X".red()
-                } else if last_vals.iter().filter(|&&x| x > swr_sensitivity).count()
-                    >= swr_sensitivity as usize
-                {
-                    "SWR Detected !".green()
-                } else {
-                    "              ".white()
-                };
-
-                // To ensure |repeat| doesn't overflow
-                let max_len = 1000;
-                let raw_len = (raw.max(0) as usize).min(max_len);
-                let filtered_len = (filtered.max(0) as usize).min(max_len);
-
-                let raw_string = "|".repeat(raw_len);
-                let filtered_string = "|".repeat(filtered_len);
-
-                let output = if raw < filtered {
-                    format!(
-                        "{}{}{}{}",
-                        alert,
-                        raw_string.white(),
-                        filtered_string.green(),
-                        "\n"
-                    )
-                } else {
-                    format!(
-                        "{}{}{}{}",
-                        alert,
-                        filtered_string.green(),
-                        raw_string.white(),
-                        "\n"
-                    )
-                };
-
-                print!("{}", output);
             }
-            Err(e) => {
-                eprintln!("Failed to receive data: {}", e);
-            }
+            Err(e) => return Err(e),
         }
     }
 }

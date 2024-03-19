@@ -1,4 +1,4 @@
-use super::detectors::DetectorInstance;
+use super::detectors::{DetectionResult, DetectorInstance};
 use crate::filters::bandpass::BandPassFilter;
 use crate::utils::log::log_to_file;
 use rayon::prelude::*;
@@ -14,8 +14,8 @@ use rayon::prelude::*;
 
 // SIGNAL PROCESSOR COMPONENT ----------------------------------------------------------
 
-struct SignalProcessor {
-    index: usize,
+pub struct SignalProcessor {
+    pub index: usize,
     filter: Filter,
     statistics: Statistics,
     detectors: Detectors,
@@ -37,15 +37,14 @@ impl SignalProcessor {
         self.detectors.add_detector(detector);
     }
 
-    pub fn process_sample(&mut self, sample: f64) {
+    pub fn process_sample(&mut self, sample: f64) -> Vec<DetectionResult> {
         self.filter.filter_sample(sample);
         let filtered_sample = self.filter.filtered_sample;
         self.statistics.update_statistics(filtered_sample);
 
-        self.detectors.process_sample(
+        let detection_results = self.detectors.run_detectors(
             filtered_sample,
             self.index,
-            self.filter.prev_sample,
             self.statistics.mean,
             self.statistics.std_dev,
         );
@@ -53,9 +52,18 @@ impl SignalProcessor {
         if self.config.logging {
             let formatted_message = format!("{}, {}, {}", self.index, sample, filtered_sample);
             log_to_file(&formatted_message).expect("Failed to write to log file");
+
+            for detection in &detection_results {
+                let log_message = format!(
+                    "{} detected - confidence: {}",
+                    detection.name, detection.confidence_ratio
+                );
+                log_to_file(&log_message).expect("Failed to write detection to log file");
+            }
         }
 
         self.index += 1;
+        detection_results
     }
 }
 
@@ -65,7 +73,7 @@ impl SignalProcessor {
 
 // CONFIG COMPONENT ------------------------------------------------------------
 
-struct Config {
+pub struct Config {
     logging: bool,
 }
 
@@ -80,7 +88,6 @@ impl Config {
 struct Filter {
     filter: BandPassFilter,
     filtered_sample: f64,
-    prev_sample: f64,
 }
 
 impl Filter {
@@ -88,12 +95,10 @@ impl Filter {
         Self {
             filter,
             filtered_sample: 0.0,
-            prev_sample: 0.0,
         }
     }
 
     fn filter_sample(&mut self, sample: f64) {
-        self.prev_sample = self.filtered_sample;
         self.filtered_sample = self.filter.filter_sample(sample); // Placeholder for actual filter implementation
     }
 }
@@ -143,25 +148,17 @@ impl Detectors {
         self.detectors.push(detector);
     }
 
-    pub fn process_sample(
+    pub fn run_detectors(
         &mut self,
         sample: f64,
         index: usize,
-        prev_sample: f64,
         mean: f64,
         std_dev: f64,
-    ) {
-        // Parallel iteration over detectors
-        self.detectors.par_iter_mut().for_each(|detector| {
-            if let Some(detected_wave_indices) =
-                detector.process_sample(sample, index, prev_sample, mean, std_dev)
-            {
-                // Handle detected waves, e.g., logging or processing
-                // Note: Printing or other side-effects here might need to be managed carefully
-                // to avoid issues with non-thread-safe operations or order-dependent output
-                println!("Detected wave at indices: {:?}", detected_wave_indices);
-            }
-        });
+    ) -> Vec<DetectionResult> {
+        self.detectors
+            .par_iter_mut()
+            .filter_map(|detector| detector.process_sample(sample, index, mean, std_dev))
+            .collect()
     }
 }
 
