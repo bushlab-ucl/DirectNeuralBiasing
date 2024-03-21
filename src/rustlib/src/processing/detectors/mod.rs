@@ -8,14 +8,13 @@ pub trait DetectorInstance {
         &mut self,
         sample: f64,
         index: usize,
-        mean: f64,
-        std_dev: f64,
+        z_score: f64,
     ) -> Option<DetectionResult>;
 }
 
 pub struct DetectionResult {
     pub name: String,
-    pub confidence_ratio: f64,
+    pub confidence: f64, // 0 - 100
 }
 
 // BUFFER COMPONENT ------------------------------------------------------------
@@ -36,8 +35,8 @@ impl RingBuffer {
         }
     }
 
-    pub fn add(&mut self, sample: f64) {
-        self.buffer[self.end] = sample;
+    pub fn add(&mut self, element: f64) {
+        self.buffer[self.end] = element;
         self.end = (self.end + 1) % self.capacity;
         if self.end == self.start {
             self.start = (self.start + 1) % self.capacity; // Overwrite oldest if full

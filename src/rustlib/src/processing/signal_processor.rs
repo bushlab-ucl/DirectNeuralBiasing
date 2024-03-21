@@ -110,6 +110,7 @@ struct Statistics {
     count: usize,
     mean: f64,
     std_dev: f64,
+    z_score: f64,
 }
 
 impl Statistics {
@@ -119,6 +120,7 @@ impl Statistics {
             count: 0,
             mean: 0.0,
             std_dev: 0.0,
+            z_score: 0.0,
         }
     }
 
@@ -128,6 +130,7 @@ impl Statistics {
         self.mean = self.sum / self.count as f64;
         // Update standard deviation calculation to correctly reflect population/std sample deviation as needed
         self.std_dev = ((self.sum / self.count as f64) - self.mean.powi(2)).sqrt();
+        self.z_score = (sample - self.mean) / self.std_dev;
     }
 }
 
