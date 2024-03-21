@@ -42,12 +42,9 @@ impl SignalProcessor {
         let filtered_sample = self.filter.filtered_sample;
         self.statistics.update_statistics(filtered_sample);
 
-        let detection_results = self.detectors.run_detectors(
-            filtered_sample,
-            self.index,
-            self.statistics.mean,
-            self.statistics.std_dev,
-        );
+        let detection_results =
+            self.detectors
+                .run_detectors(filtered_sample, self.index, self.statistics.z_score);
 
         if self.config.logging {
             let formatted_message = format!("{}, {}, {}", self.index, sample, filtered_sample);
@@ -56,7 +53,7 @@ impl SignalProcessor {
             for detection in &detection_results {
                 let log_message = format!(
                     "{} detected - confidence: {}",
-                    detection.name, detection.confidence_ratio
+                    detection.name, detection.confidence
                 );
                 log_to_file(&log_message).expect("Failed to write detection to log file");
             }
@@ -155,12 +152,11 @@ impl Detectors {
         &mut self,
         sample: f64,
         index: usize,
-        mean: f64,
-        std_dev: f64,
+        z_score: f64,
     ) -> Vec<DetectionResult> {
         self.detectors
             .par_iter_mut()
-            .filter_map(|detector| detector.process_sample(sample, index, mean, std_dev))
+            .filter_map(|detector| detector.process_sample(sample, index, z_score))
             .collect()
     }
 }

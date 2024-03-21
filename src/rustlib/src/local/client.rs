@@ -16,8 +16,8 @@ pub fn run() -> io::Result<()> {
     let butterworth = BandPassFilter::butterworth(f0, fs);
     let mut processor = SignalProcessor::new(butterworth, Config::new(true));
 
-    let test_detector_1 = Box::new(ThresholdDetector::new("test_1".to_string(), 100, 1.0, 10));
-    let test_detector_2 = Box::new(ThresholdDetector::new("test_2".to_string(), 100, 1.0, 80));
+    let test_detector_1 = Box::new(ThresholdDetector::new("test_1".to_string(), 1.0, 100, 10));
+    let test_detector_2 = Box::new(ThresholdDetector::new("test_2".to_string(), 1.0, 100, 80));
     processor.add_detector(test_detector_1);
     processor.add_detector(test_detector_2);
 
@@ -31,7 +31,8 @@ pub fn run() -> io::Result<()> {
                     for detection in detections {
                         println!(
                             "{} detected - confidence: {}",
-                            detection.name, detection.confidence_ratio
+                            detection.name,
+                            detection.confidence.floor()
                         );
                     }
                 }
