@@ -3,7 +3,7 @@ pub mod threshold_detector;
 // use rayon::prelude::*;
 
 // DETECTOR COMPONENT ----------------------------------------------------------
-pub trait DetectorInstance {
+pub trait DetectorInstance: Send {
     fn process_sample(
         &mut self,
         sample: f64,
@@ -18,6 +18,7 @@ pub struct DetectionResult {
 }
 
 // BUFFER COMPONENT ------------------------------------------------------------
+#[derive(Clone)]
 pub struct RingBuffer {
     buffer: Vec<f64>,
     capacity: usize,

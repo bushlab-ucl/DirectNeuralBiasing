@@ -1,10 +1,11 @@
+use super::detectors::threshold_detector::ThresholdDetector;
 use super::detectors::{DetectionResult, DetectorInstance};
 use crate::filters::bandpass::BandPassFilter;
 use crate::utils::log::log_to_file;
 // use rayon::prelude::*;
 use std::time::Instant;
 
-// use pyo3::prelude::*;
+use pyo3::prelude::*;
 // use std::os::raw::c_void;
 
 // use super::detectors::slow_wave::SlowWaveDetector;
@@ -168,6 +169,69 @@ impl Detectors {
             .filter_map(|detector| detector.process_sample(sample, index, z_score))
             .collect()
     }
+}
+
+// -----------------------------------------------------------------------------
+// PY03 PYTHON LOGIC
+// -----------------------------------------------------------------------------
+
+// Define PyThresholdDetector without `Box`
+#[pyclass]
+struct PyThresholdDetector {
+    detector: ThresholdDetector,
+}
+
+#[pymethods]
+impl PyThresholdDetector {
+    #[new]
+    fn new(name: String, z_score_threshold: f64, buffer_capacity: usize, sensitivity: f64) -> Self {
+        PyThresholdDetector {
+            detector: ThresholdDetector::new(name, z_score_threshold, buffer_capacity, sensitivity),
+        }
+    }
+}
+
+// Define PySignalProcessor without `Box<dyn DetectorInstance>`
+#[pyclass]
+struct PySignalProcessor {
+    processor: SignalProcessor,
+}
+
+#[pymethods]
+impl PySignalProcessor {
+    #[new]
+    fn new(f0: f64, fs: f64, logging: bool) -> Self {
+        let bandpass = BandPassFilter::butterworth(f0, fs);
+        let config = Config::new(logging);
+        let processor = SignalProcessor::new(bandpass, config);
+        PySignalProcessor { processor }
+    }
+
+    // Add PyThresholdDetector by reference to avoid `Clone`
+    fn add_detector(&mut self, detector: &PyThresholdDetector) {
+        self.processor
+            .add_detector(Box::new(detector.detector.clone())); // Avoid `Clone` on dyn trait
+    }
+
+    // Process a list of samples
+    fn process_signal(&mut self, data: Vec<f64>) -> Vec<(String, f64)> {
+        let mut results = Vec::new();
+        for sample in data {
+            let detections = self.processor.process_sample(sample);
+            for detection in detections {
+                results.push((detection.name.clone(), detection.confidence));
+            }
+        }
+        results
+    }
+}
+
+#[pymodule]
+#[pyo3(name = "direct_neural_biasing")]
+fn direct_neural_biasing(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<PySignalProcessor>()?;
+    m.add_class::<PyThresholdDetector>()?;
+    Ok(())
 }
 
 // // -----------------------------------------------------------------------------
