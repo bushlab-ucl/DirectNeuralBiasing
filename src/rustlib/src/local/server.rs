@@ -10,40 +10,6 @@ use std::thread;
 const USE_DATA: bool = true;
 
 // -----------------------------------------------------------------------------
-// SETUP FOR THE SIMULATED SIGNALS
-// -----------------------------------------------------------------------------
-
-const BASELINE_AMPLITUDE: f64 = 70.0;
-const SLEEP_TIME: u64 = 10;
-const INCREMENT_TIME: f64 = 0.1;
-
-const BACKGROUND_I_FREQ: f64 = 0.5;
-const BACKGROUND_II_FREQ: f64 = 1.0;
-const BACKGROUND_III_FREQ: f64 = 2.0;
-const SHARP_WAVE_RIPPLE_FREQ: f64 = 13.0;
-const INTERICTAL_SPIKE_FREQ: f64 = 3.0;
-const SLOW_WAVE_FREQ: f64 = 0.5;
-
-#[derive(Debug)]
-struct PulseParams {
-    amplitude: f64,
-    frequency: f64,
-    iterations: usize,
-    start_phase: f64,
-}
-
-impl PulseParams {
-    fn new(amplitude: f64, frequency: f64, iterations: usize, start_phase: f64) -> Self {
-        Self {
-            amplitude,
-            frequency,
-            iterations,
-            start_phase,
-        }
-    }
-}
-
-// -----------------------------------------------------------------------------
 // SETUP FOR INPORTING SIGNALS FROM CSV
 // -----------------------------------------------------------------------------
 
@@ -114,7 +80,7 @@ pub fn run() -> std::io::Result<()> {
 }
 
 // -----------------------------------------------------------------------------
-// SENDING DATAB FROM CSV
+// SENDING DATA FROM CSV
 // -----------------------------------------------------------------------------
 
 fn send_csv_data(
@@ -149,6 +115,40 @@ fn send_csv_data(
         std::thread::sleep(std::time::Duration::from_millis(SLEEP_TIME));
     }
     Ok(())
+}
+
+// -----------------------------------------------------------------------------
+// SETUP FOR THE SIMULATED SIGNALS
+// -----------------------------------------------------------------------------
+
+const BASELINE_AMPLITUDE: f64 = 70.0;
+const SLEEP_TIME: u64 = 10;
+const INCREMENT_TIME: f64 = 0.1;
+
+const BACKGROUND_I_FREQ: f64 = 0.5;
+const BACKGROUND_II_FREQ: f64 = 1.0;
+const BACKGROUND_III_FREQ: f64 = 2.0;
+const SHARP_WAVE_RIPPLE_FREQ: f64 = 13.0;
+const INTERICTAL_SPIKE_FREQ: f64 = 3.0;
+const SLOW_WAVE_FREQ: f64 = 0.5;
+
+#[derive(Debug)]
+struct PulseParams {
+    amplitude: f64,
+    frequency: f64,
+    iterations: usize,
+    start_phase: f64,
+}
+
+impl PulseParams {
+    fn new(amplitude: f64, frequency: f64, iterations: usize, start_phase: f64) -> Self {
+        Self {
+            amplitude,
+            frequency,
+            iterations,
+            start_phase,
+        }
+    }
 }
 
 // -----------------------------------------------------------------------------

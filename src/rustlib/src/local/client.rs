@@ -14,7 +14,7 @@ pub fn run() -> io::Result<()> {
     let fs = 10000.0;
 
     let butterworth = BandPassFilter::butterworth(f0, fs);
-    let mut processor = SignalProcessor::new(butterworth, Config::new(true));
+    let mut processor = SignalProcessor::new(butterworth, Config::new(false));
 
     let test_detector_1 = Box::new(ThresholdDetector::new("test_1".to_string(), 1.0, 100, 10));
     let test_detector_2 = Box::new(ThresholdDetector::new("test_2".to_string(), 1.0, 100, 80));

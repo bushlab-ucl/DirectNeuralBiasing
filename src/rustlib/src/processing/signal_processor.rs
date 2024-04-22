@@ -1,7 +1,8 @@
 use super::detectors::{DetectionResult, DetectorInstance};
 use crate::filters::bandpass::BandPassFilter;
 use crate::utils::log::log_to_file;
-use rayon::prelude::*;
+// use rayon::prelude::*;
+use std::time::Instant;
 
 // use pyo3::prelude::*;
 // use std::os::raw::c_void;
@@ -33,11 +34,13 @@ impl SignalProcessor {
         }
     }
 
-    pub fn add_detector(&mut self, detector: Box<dyn DetectorInstance + Send + Sync>) {
+    pub fn add_detector(&mut self, detector: Box<dyn DetectorInstance>) {
         self.detectors.add_detector(detector);
     }
 
     pub fn process_sample(&mut self, sample: f64) -> Vec<DetectionResult> {
+        let start = Instant::now(); // Start timing
+
         self.filter.filter_sample(sample);
         let filtered_sample = self.filter.filtered_sample;
         self.statistics.update_statistics(filtered_sample);
@@ -47,7 +50,10 @@ impl SignalProcessor {
                 .run_detectors(filtered_sample, self.index, self.statistics.z_score);
 
         if self.config.logging {
-            let formatted_message = format!("{}, {}, {}", self.index, sample, filtered_sample);
+            let formatted_message = format!(
+                "index: {}, sample: {}, filtered_sample: {}, z_score: {}",
+                self.index, sample, filtered_sample, self.statistics.z_score
+            );
             log_to_file(&formatted_message).expect("Failed to write to log file");
 
             for detection in &detection_results {
@@ -58,6 +64,9 @@ impl SignalProcessor {
                 log_to_file(&log_message).expect("Failed to write detection to log file");
             }
         }
+
+        let duration = start.elapsed(); // Calculate how long the function took
+        println!("process_sample took: {:?}", duration);
 
         self.index += 1;
         detection_results
@@ -134,7 +143,7 @@ impl Statistics {
 // DETECTOR COMPONENT ----------------------------------------------------------
 
 pub struct Detectors {
-    detectors: Vec<Box<dyn DetectorInstance + Send + Sync>>, // Ensure thread safety
+    detectors: Vec<Box<dyn DetectorInstance>>, // Ensure thread safety
 }
 
 impl Detectors {
@@ -144,7 +153,7 @@ impl Detectors {
         }
     }
 
-    pub fn add_detector(&mut self, detector: Box<dyn DetectorInstance + Send + Sync>) {
+    pub fn add_detector(&mut self, detector: Box<dyn DetectorInstance>) {
         self.detectors.push(detector);
     }
 
@@ -155,7 +164,7 @@ impl Detectors {
         z_score: f64,
     ) -> Vec<DetectionResult> {
         self.detectors
-            .par_iter_mut()
+            .iter_mut()
             .filter_map(|detector| detector.process_sample(sample, index, z_score))
             .collect()
     }
