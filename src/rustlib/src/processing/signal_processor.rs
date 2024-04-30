@@ -1,9 +1,10 @@
 use super::detectors::threshold_detector::ThresholdDetector;
 use super::detectors::{DetectionResult, DetectorInstance};
-use crate::filters::bandpass::BandPassFilter;
+use super::filters::FilterInstance;
+use super::triggers::TriggerInstance;
 // use crate::utils::log::log_to_file;
 // use rayon::prelude::*;
-use std::time::Instant;
+use std::collections::HashMap;
 
 use pyo3::prelude::*;
 // use std::os::raw::c_void;
@@ -16,90 +17,81 @@ use pyo3::prelude::*;
 
 // SIGNAL PROCESSOR COMPONENT --------------------------------------------------
 
+pub struct SignalProcessorConfig {
+    pub logging: bool,
+    pub downsampling_rate: usize,
+}
+
 pub struct SignalProcessor {
     pub index: usize,
     pub sample_count: usize,
-    filter: Filter,
-    statistics: Statistics,
-    active_detectors: Vec<Box<dyn DetectorInstance>>,
-    cooldown_detectors: Vec<Box<dyn DetectorInstance>>,
-    last_trigger_time: Option<Instant>,
-    config: Config,
+    pub statistics: Statistics,
+    pub filters: HashMap<String, Box<dyn FilterInstance>>,
+    pub detectors: HashMap<String, Box<dyn DetectorInstance>>,
+    pub triggers: HashMap<String, Box<dyn TriggerInstance>>,
+    pub config: SignalProcessorConfig,
 }
 
 impl SignalProcessor {
-    pub fn new(filter_instance: BandPassFilter, config: Config) -> Self {
+    pub fn new(config: SignalProcessorConfig) -> Self {
         SignalProcessor {
             index: 0,
             sample_count: 0,
-            filter: Filter::new(filter_instance),
             statistics: Statistics::new(),
-            active_detectors: Vec::new(),
-            cooldown_detectors: Vec::new(),
-            last_trigger_time: None,
+            filters: HashMap::new(),
+            detectors: HashMap::new(),
+            triggers: HashMap::new(),
             config,
         }
     }
 
-    pub fn add_active_detector(&mut self, detector: Box<dyn DetectorInstance>) {
-        self.active_detectors.push(detector);
+    pub fn add_filter(&mut self, id: String, filter: Box<dyn FilterInstance>) {
+        self.filters.insert(id, filter);
     }
 
-    pub fn add_cooldown_detector(&mut self, detector: Box<dyn DetectorInstance>) {
-        self.cooldown_detectors.push(detector);
+    pub fn add_detector(&mut self, id: String, detector: Box<dyn DetectorInstance>) {
+        self.detectors.insert(id, detector);
     }
 
-    pub fn process_sample(&mut self, sample: f64) -> Option<Vec<DetectorOutput>> {
-        self.sample_count += 1;
+    pub fn add_trigger(&mut self, id: String, trigger: Box<dyn TriggerInstance>) {
+        self.triggers.insert(id, trigger);
+    }
 
-        // Skip processing based on downsampling rate
-        if self.sample_count % self.config.downsampling_rate != 0 {
-            return None;
-        }
+    pub fn run(&mut self, raw_samples: Vec<f64>) {
+        for sample in raw_samples.iter() {
+            self.sample_count += 1;
 
-        let start = Instant::now();
-
-        self.filter.filter_sample(sample);
-        let filtered_sample = self.filter.filtered_sample;
-        self.statistics.update_statistics(filtered_sample);
-
-        // Check cooldown before processing
-        if let Some(last) = self.last_trigger_time {
-            if start.duration_since(last) < self.config.trigger_cooldown {
-                return None;
+            // Check if the sample should be processed based on downsampling
+            if self.sample_count % self.config.downsampling_rate != 0 {
+                continue;
             }
-        }
 
-        let mut results = Vec::new();
-        let mut trigger_event = false;
-
-        for detector in self.active_detectors.iter_mut() {
-            if let Some(result) =
-                detector.process_sample(filtered_sample, self.index, self.statistics.z_score)
-            {
-                results.push(DetectorOutput {
-                    name: detector.name(),
-                    detected: true,
-                    confidence: result.confidence,
-                });
-                trigger_event = true;
+            // Process each sample through all filters
+            let mut filtered_samples = HashMap::new();
+            for (id, filter) in self.filters.iter_mut() {
+                filtered_samples.insert(id.clone(), filter.filter_sample(*sample));
             }
-        }
 
-        if trigger_event {
-            self.last_trigger_time = Some(Instant::now());
-        }
+            // Process each filtered sample through the corresponding detector
+            let mut detector_outputs = HashMap::new();
+            for (id, detector) in self.detectors.iter_mut() {
+                if let filter_id = &detector.filter_id() {
+                    // Assuming this method exists to fetch associated filter ID
+                    if let Some(filtered_sample) = filtered_samples.get(filter_id) {
+                        detector_outputs.insert(
+                            id.clone(),
+                            detector.process_sample(&self.filters, self.index, *filtered_sample),
+                        );
+                    }
+                }
+            }
 
-        self.index += 1;
-        if self.config.logging {
-            let duration = start.elapsed();
-            println!("process_sample took: {:?}", duration);
-        }
-
-        if results.is_empty() {
-            None
-        } else {
-            Some(results)
+            // Evaluate triggers based on detector outputs
+            for (id, trigger) in self.triggers.iter_mut() {
+                if trigger.evaluate(&self.detectors) {
+                    println!("Trigger {} activated!", id);
+                }
+            }
         }
     }
 }
@@ -133,34 +125,14 @@ impl Config {
     }
 }
 
-// FILTER COMPONENT ------------------------------------------------------------
-
-struct Filter {
-    filter: BandPassFilter,
-    filtered_sample: f64,
-}
-
-impl Filter {
-    fn new(filter: BandPassFilter) -> Self {
-        Self {
-            filter,
-            filtered_sample: 0.0,
-        }
-    }
-
-    fn filter_sample(&mut self, sample: f64) {
-        self.filtered_sample = self.filter.filter_sample(sample); // Placeholder for actual filter implementation
-    }
-}
-
 // STATISTICS COMPONENT --------------------------------------------------------
 
-struct Statistics {
-    sum: f64,
-    count: usize,
-    mean: f64,
-    std_dev: f64,
-    z_score: f64,
+pub struct Statistics {
+    pub sum: f64,
+    pub count: usize,
+    pub mean: f64,
+    pub std_dev: f64,
+    pub z_score: f64,
 }
 
 impl Statistics {
@@ -184,157 +156,177 @@ impl Statistics {
     }
 }
 
+// FILTER COMPONENT ------------------------------------------------------------
+
+// struct Filter {
+//     filter: BandPassFilter,
+//     filtered_sample: f64,
+// }
+
+// impl Filter {
+//     fn new(filter: BandPassFilter) -> Self {
+//         Self {
+//             filter,
+//             filtered_sample: 0.0,
+//         }
+//     }
+
+//     fn filter_sample(&mut self, sample: f64) {
+//         self.filtered_sample = self.filter.filter_sample(sample); // Placeholder for actual filter implementation
+//     }
+// }
+
 // DETECTOR COMPONENT ----------------------------------------------------------
 
-pub struct Detectors {
-    detectors: Vec<Box<dyn DetectorInstance>>, // Ensure thread safety
-}
+// pub struct Detectors {
+//     detectors: Vec<Box<dyn DetectorInstance>>, // Ensure thread safety
+// }
 
-impl Detectors {
-    pub fn new() -> Self {
-        Self {
-            detectors: Vec::new(),
-        }
-    }
+// impl Detectors {
+//     pub fn new() -> Self {
+//         Self {
+//             detectors: Vec::new(),
+//         }
+//     }
 
-    pub fn add_detector(&mut self, detector: Box<dyn DetectorInstance>) {
-        self.detectors.push(detector);
-    }
+//     pub fn add_detector(&mut self, detector: Box<dyn DetectorInstance>) {
+//         self.detectors.push(detector);
+//     }
 
-    pub fn run_detectors(
-        &mut self,
-        sample: f64,
-        index: usize,
-        z_score: f64,
-    ) -> Vec<DetectionResult> {
-        self.detectors
-            .iter_mut()
-            .filter_map(|detector| detector.process_sample(sample, index, z_score))
-            .collect()
-    }
-}
+//     pub fn run_detectors(
+//         &mut self,
+//         sample: f64,
+//         index: usize,
+//         z_score: f64,
+//     ) -> Vec<DetectionResult> {
+//         self.detectors
+//             .iter_mut()
+//             .filter_map(|detector| detector.process_sample(sample, index, z_score))
+//             .collect()
+//     }
+// }
 
-struct DetectorOutput {
-    name: String,
-    detected: bool,
-    confidence: f64,
-}
+// struct DetectorOutput {
+//     name: String,
+//     detected: bool,
+//     confidence: f64,
+// }
 
 // -----------------------------------------------------------------------------
 // PY03 PYTHON LOGIC
 // -----------------------------------------------------------------------------
 
-// Define PyThresholdDetector without `Box`
-#[pyclass]
-struct PyThresholdDetector {
-    detector: ThresholdDetector,
-}
+// // Define PyThresholdDetector without `Box`
+// #[pyclass]
+// struct PyThresholdDetector {
+//     detector: ThresholdDetector,
+// }
 
-#[pymethods]
-impl PyThresholdDetector {
-    #[new]
-    fn new(name: String, z_score_threshold: f64, buffer_capacity: usize, sensitivity: f64) -> Self {
-        PyThresholdDetector {
-            detector: ThresholdDetector::new(name, z_score_threshold, buffer_capacity, sensitivity),
-        }
-    }
-}
+// #[pymethods]
+// impl PyThresholdDetector {
+//     #[new]
+//     fn new(name: String, z_score_threshold: f64, buffer_capacity: usize, sensitivity: f64) -> Self {
+//         PyThresholdDetector {
+//             detector: ThresholdDetector::new(name, z_score_threshold, buffer_capacity, sensitivity),
+//         }
+//     }
+// }
 
-// PyControllerConfig without `std::time::Duration`
-#[pyclass]
-struct PyConfig {
-    config: Config,
-}
+// // PyControllerConfig without `std::time::Duration`
+// #[pyclass]
+// struct PyConfig {
+//     config: Config,
+// }
 
-#[pymethods]
-impl PyConfig {
-    #[new]
-    fn new(
-        downsampling_rate: usize,
-        trigger_cooldown: usize,
-        detector_cooldown: usize,
-        logging: bool,
-    ) -> Self {
-        let config = Config {
-            downsampling_rate,
-            trigger_cooldown: std::time::Duration::from_secs(trigger_cooldown as u64),
-            detector_cooldown: std::time::Duration::from_secs(detector_cooldown as u64),
-            logging,
-        };
-        PyConfig { config }
-    }
-}
+// #[pymethods]
+// impl PyConfig {
+//     #[new]
+//     fn new(
+//         downsampling_rate: usize,
+//         trigger_cooldown: usize,
+//         detector_cooldown: usize,
+//         logging: bool,
+//     ) -> Self {
+//         let config = Config {
+//             downsampling_rate,
+//             trigger_cooldown: std::time::Duration::from_secs(trigger_cooldown as u64),
+//             detector_cooldown: std::time::Duration::from_secs(detector_cooldown as u64),
+//             logging,
+//         };
+//         PyConfig { config }
+//     }
+// }
 
-// Define PyController without `Box<dyn DetectorInstance>`
-#[pyclass]
-struct PyController {
-    controller: Controller,
-}
+// // Define PyController without `Box<dyn DetectorInstance>`
+// #[pyclass]
+// struct PyController {
+//     controller: Controller,
+// }
 
-#[pymethods]
-impl PyController {
-    #[new]
-    fn new(
-        downsampling_rate: usize,
-        trigger_cooldown: std::time::Duration,
-        detector_cooldown: std::time::Duration,
-        logging: bool,
-    ) -> Self {
-        let config = Config {
-            downsampling_rate,
-            trigger_cooldown,
-            detector_cooldown,
-            logging,
-        };
-        PyController {
-            controller: Controller::new(config),
-        }
-    }
+// #[pymethods]
+// impl PyController {
+//     #[new]
+//     fn new(
+//         downsampling_rate: usize,
+//         trigger_cooldown: std::time::Duration,
+//         detector_cooldown: std::time::Duration,
+//         logging: bool,
+//     ) -> Self {
+//         let config = Config {
+//             downsampling_rate,
+//             trigger_cooldown,
+//             detector_cooldown,
+//             logging,
+//         };
+//         PyController {
+//             controller: Controller::new(config),
+//         }
+//     }
 
-    fn add_active_detector(&mut self, detector: &PyThresholdDetector) {
-        self.controller
-            .add_active_detector(Box::new(detector.detector.clone()));
-    }
+//     fn add_active_detector(&mut self, detector: &PyThresholdDetector) {
+//         self.controller
+//             .add_active_detector(Box::new(detector.detector.clone()));
+//     }
 
-    fn add_cooldown_detector(&mut self, detector: &PyThresholdDetector) {
-        self.controller
-            .add_cooldown_detector(Box::new(detector.detector.clone()));
-    }
-}
+//     fn add_cooldown_detector(&mut self, detector: &PyThresholdDetector) {
+//         self.controller
+//             .add_cooldown_detector(Box::new(detector.detector.clone()));
+//     }
+// }
 
-// Define PySignalProcessor without `Box<dyn DetectorInstance>`
-#[pyclass]
-struct PySignalProcessor {
-    processor: SignalProcessor,
-}
+// // Define PySignalProcessor without `Box<dyn DetectorInstance>`
+// #[pyclass]
+// struct PySignalProcessor {
+//     processor: SignalProcessor,
+// }
 
-#[pymethods]
-impl PySignalProcessor {
-    #[new]
-    fn new(f0: f64, fs: f64, py_controller: &PyController, config: &PyConfig) -> Self {
-        let bandpass = BandPassFilter::butterworth(f0, fs);
-        let processor = SignalProcessor::new(bandpass, py_controller.controller, config.config);
-        PySignalProcessor { processor }
-    }
+// #[pymethods]
+// impl PySignalProcessor {
+//     #[new]
+//     fn new(f0: f64, fs: f64, py_controller: &PyController, config: &PyConfig) -> Self {
+//         let bandpass = BandPassFilter::butterworth(f0, fs);
+//         let processor = SignalProcessor::new(bandpass, py_controller.controller, config.config);
+//         PySignalProcessor { processor }
+//     }
 
-    fn process_sample(&mut self, sample: f64) -> Vec<(String, bool, f64)> {
-        let output = self.processor.process_sample(sample);
-        output
-            .detector_outputs
-            .iter()
-            .map(|det| (det.name.clone(), det.detected, det.confidence))
-            .collect()
-    }
-}
+//     fn process_sample(&mut self, sample: f64) -> Vec<(String, bool, f64)> {
+//         let output = self.processor.process_sample(sample);
+//         output
+//             .detector_outputs
+//             .iter()
+//             .map(|det| (det.name.clone(), det.detected, det.confidence))
+//             .collect()
+//     }
+// }
 
-#[pymodule]
-#[pyo3(name = "direct_neural_biasing")]
-fn direct_neural_biasing(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_class::<PySignalProcessor>()?;
-    m.add_class::<PyThresholdDetector>()?;
-    m.add_class::<PyController>()?;
-    Ok(())
-}
+// #[pymodule]
+// #[pyo3(name = "direct_neural_biasing")]
+// fn direct_neural_biasing(m: &Bound<'_, PyModule>) -> PyResult<()> {
+//     m.add_class::<PySignalProcessor>()?;
+//     m.add_class::<PyThresholdDetector>()?;
+//     m.add_class::<PyController>()?;
+//     Ok(())
+// }
 
 // // -----------------------------------------------------------------------------
 // // PY03 PYTHON LOGIC

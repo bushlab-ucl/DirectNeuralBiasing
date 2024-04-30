@@ -1,8 +1,8 @@
 // use crate::processing::process_signal::PyFilter;
 // use pyo3::prelude::*;
 
-pub mod filters;
 pub mod processing;
+pub mod tests;
 pub mod utils;
 
 // #[pymodule]

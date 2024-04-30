@@ -1,7 +1,7 @@
-mod filters;
 #[cfg(not(feature = "python-extension"))]
 mod local;
 mod processing;
+mod tests;
 mod utils;
 
 #[cfg(not(feature = "python-extension"))]

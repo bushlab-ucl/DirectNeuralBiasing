@@ -1,3 +1,4 @@
 pub mod detectors;
+pub mod filters;
 pub mod signal_processor;
-pub mod test;
+pub mod triggers;
