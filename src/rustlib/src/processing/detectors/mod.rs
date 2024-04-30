@@ -10,6 +10,8 @@ pub trait DetectorInstance: Send {
         index: usize,
         z_score: f64,
     ) -> Option<DetectionResult>;
+
+    fn name(&self) -> String;
 }
 
 pub struct DetectionResult {

@@ -28,6 +28,10 @@ impl ThresholdDetector {
 }
 
 impl DetectorInstance for ThresholdDetector {
+    fn name(&self) -> String {
+        self.name.clone()
+    }
+
     fn process_sample(
         &mut self,
         _sample: f64,
