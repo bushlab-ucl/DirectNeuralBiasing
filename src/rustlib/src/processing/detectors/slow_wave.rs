@@ -1,62 +1,80 @@
-pub struct SlowWaveDetector {
+#[derive(Clone)]
+pub struct SlowWaveDetectorConfig {
+    pub filter_id: String,
     pub refractory_period: usize,
-    pub refractory_samples_to_skip: usize,
     pub threshold_sinusoid: f64,
     pub absolute_min_threshold: f64,
     pub absolute_max_threshold: f64,
+}
+
+pub struct SlowWaveDetector {
+    config: SlowWaveDetectorConfig,
+    refractory_samples_to_skip: usize,
     ongoing_wave: Vec<f64>,
     ongoing_wave_idx: Vec<usize>,
-    pub detected_waves_idx: Vec<Vec<usize>>,
 }
 
 impl SlowWaveDetector {
-    pub fn new(
-        refractory_period: usize,
-        threshold_sinusoid: f64,
-        min_threshold_signal: f64, // not sure this is right
-        max_threshold_signal: f64, // not sure this is right
-    ) -> Self {
+    pub fn new(config: SlowWaveDetectorConfig) -> Self {
         SlowWaveDetector {
-            refractory_period,
+            config,
             refractory_samples_to_skip: 0,
-            threshold_sinusoid,
-            absolute_min_threshold: min_threshold_signal,
-            absolute_max_threshold: max_threshold_signal,
             ongoing_wave: Vec::new(),
             ongoing_wave_idx: Vec::new(),
-            detected_waves_idx: Vec::new(),
         }
     }
+}
 
-    pub fn process_sample(
+impl DetectorInstance for SlowWaveDetector {
+    fn process_sample(
         &mut self,
-        sample: f64,
-        current_index: usize,
-        prev_sample: f64,
-        mean: f64,
-        std_dev: f64,
-    ) -> Option<Vec<usize>> {
+        results: &mut HashMap<String, f64>,
+        index: usize,
+        detector_id: &str,
+    ) {
+        // Only proceed if not in refractory period
         if self.refractory_samples_to_skip > 0 {
             self.refractory_samples_to_skip -= 1;
-            return None;
+            return;
         }
 
-        let crossed_zero = sample > 0.0 && prev_sample <= 0.0;
-        if crossed_zero {
-            let detected = self.detect_slow_wave();
-            if detected {
-                self.refractory_samples_to_skip = self.refractory_period;
-                let indices = self.ongoing_wave_idx.clone();
+        // Fetch the filtered sample from results
+        if let Some(&filtered_sample) =
+            results.get(&format!("filters:{}:output", self.config.filter_id))
+        {
+            let prev_sample = results
+                .get(&format!("detectors:{}:last_sample", detector_id))
+                .cloned()
+                .unwrap_or(0.0);
+            results.insert(
+                format!("detectors:{}:last_sample", detector_id),
+                filtered_sample,
+            );
+
+            let mean = results
+                .get(&format!("filters:{}:mean", self.config.filter_id))
+                .cloned()
+                .unwrap_or(0.0);
+            let std_dev = results
+                .get(&format!("filters:{}:std_dev", self.config.filter_id))
+                .cloned()
+                .unwrap_or(0.0);
+
+            let crossed_zero = filtered_sample > 0.0 && prev_sample <= 0.0;
+
+            if crossed_zero && self.detect_slow_wave(filtered_sample, mean, std_dev) {
+                results.insert(format!("detectors:{}:detected", detector_id), 1.0);
+                results.insert(format!("detectors:{}:confidence", detector_id), 100.0); // Arbitrary confidence for example
+                self.refractory_samples_to_skip = self.config.refractory_period;
                 self.ongoing_wave.clear();
                 self.ongoing_wave_idx.clear();
-                return Some(indices);
+            } else {
+                self.ongoing_wave.push(filtered_sample);
+                self.ongoing_wave_idx.push(index);
+                results.insert(format!("detectors:{}:detected", detector_id), 0.0);
+                results.insert(format!("detectors:{}:confidence", detector_id), 0.0);
             }
-        } else {
-            self.ongoing_wave.push(sample);
-            self.ongoing_wave_idx.push(current_index);
         }
-
-        None
     }
 
     fn detect_slow_wave(&mut self) -> bool {

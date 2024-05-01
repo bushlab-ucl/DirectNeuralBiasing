@@ -1,5 +1,5 @@
 use super::detectors::threshold_detector::ThresholdDetector;
-use super::detectors::{DetectionResult, DetectorInstance};
+use super::detectors::DetectorInstance;
 use super::filters::FilterInstance;
 use super::triggers::TriggerInstance;
 // use crate::utils::log::log_to_file;
@@ -25,11 +25,11 @@ pub struct SignalProcessorConfig {
 pub struct SignalProcessor {
     pub index: usize,
     pub sample_count: usize,
-    pub statistics: Statistics,
     pub filters: HashMap<String, Box<dyn FilterInstance>>,
     pub detectors: HashMap<String, Box<dyn DetectorInstance>>,
     pub triggers: HashMap<String, Box<dyn TriggerInstance>>,
     pub config: SignalProcessorConfig,
+    pub results: HashMap<String, f64>,
 }
 
 impl SignalProcessor {
@@ -37,11 +37,11 @@ impl SignalProcessor {
         SignalProcessor {
             index: 0,
             sample_count: 0,
-            statistics: Statistics::new(),
             filters: HashMap::new(),
             detectors: HashMap::new(),
             triggers: HashMap::new(),
             config,
+            results: HashMap::new(),
         }
     }
 
@@ -57,42 +57,42 @@ impl SignalProcessor {
         self.triggers.insert(id, trigger);
     }
 
-    pub fn run(&mut self, raw_samples: Vec<f64>) {
-        for sample in raw_samples.iter() {
+    // Process a Vec of raw samples
+    pub fn run(&mut self, raw_samples: Vec<f64>) -> Vec<HashMap<String, f64>> {
+        let mut output = Vec::new();
+
+        for sample in raw_samples {
             self.sample_count += 1;
 
-            // Check if the sample should be processed based on downsampling
             if self.sample_count % self.config.downsampling_rate != 0 {
                 continue;
             }
 
-            // Process each sample through all filters
-            let mut filtered_samples = HashMap::new();
+            // Reset and update globals
+            self.results.clear();
+            self.results
+                .insert("global:index".to_string(), self.index as f64);
+            self.results.insert("global:raw_sample".to_string(), sample);
+
+            // Filters process the sample
             for (id, filter) in self.filters.iter_mut() {
-                filtered_samples.insert(id.clone(), filter.filter_sample(*sample));
+                filter.process_sample(&mut self.results, id);
             }
 
-            // Process each filtered sample through the corresponding detector
-            let mut detector_outputs = HashMap::new();
+            // Detectors process the filtered results
             for (id, detector) in self.detectors.iter_mut() {
-                if let filter_id = &detector.filter_id() {
-                    // Assuming this method exists to fetch associated filter ID
-                    if let Some(filtered_sample) = filtered_samples.get(filter_id) {
-                        detector_outputs.insert(
-                            id.clone(),
-                            detector.process_sample(&self.filters, self.index, *filtered_sample),
-                        );
-                    }
-                }
+                detector.process_sample(&mut self.results, self.index, id);
             }
 
-            // Evaluate triggers based on detector outputs
+            // Triggers evaluate based on detector outputs
             for (id, trigger) in self.triggers.iter_mut() {
-                if trigger.evaluate(&self.detectors) {
-                    println!("Trigger {} activated!", id);
-                }
+                trigger.evaluate(&mut self.results, id);
             }
+
+            output.push(self.results.clone());
         }
+
+        output
     }
 }
 
@@ -122,37 +122,6 @@ impl Config {
             detector_cooldown,
             logging,
         }
-    }
-}
-
-// STATISTICS COMPONENT --------------------------------------------------------
-
-pub struct Statistics {
-    pub sum: f64,
-    pub count: usize,
-    pub mean: f64,
-    pub std_dev: f64,
-    pub z_score: f64,
-}
-
-impl Statistics {
-    fn new() -> Self {
-        Self {
-            sum: 0.0,
-            count: 0,
-            mean: 0.0,
-            std_dev: 0.0,
-            z_score: 0.0,
-        }
-    }
-
-    fn update_statistics(&mut self, sample: f64) {
-        self.sum += sample;
-        self.count += 1;
-        self.mean = self.sum / self.count as f64;
-        // Update standard deviation calculation to correctly reflect population/std sample deviation as needed
-        self.std_dev = ((self.sum / self.count as f64) - self.mean.powi(2)).sqrt();
-        self.z_score = (sample - self.mean) / self.std_dev;
     }
 }
 

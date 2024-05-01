@@ -1,9 +1,12 @@
-use super::super::filters::FilterInstance;
-use super::{DetectionResult, DetectorInstance, RingBuffer};
+use std::collections::HashMap;
+
+use pyo3::buffer;
+
+use super::{DetectorInstance, RingBuffer};
 
 #[derive(Clone)]
 pub struct ThresholdDetectorConfig {
-    pub filter_id: String,
+    pub filter_id: String, // ID of the filter whose output this detector should analyze
     pub threshold: f64,
     pub buffer_size: usize,
     pub sensitivity: f64,
@@ -29,41 +32,42 @@ impl ThresholdDetector {
 }
 
 impl DetectorInstance for ThresholdDetector {
-    fn filter_id(&self) -> String {
-        self.filter_id().clone()
-    }
-
     fn process_sample(
         &mut self,
-        _filters: &std::collections::HashMap<String, Box<dyn FilterInstance>>,
-        // _sample: f64,
-        _index: usize,
-        z_score: f64,
-    ) -> Option<DetectionResult> {
-        self.buffer.add(z_score);
+        results: &mut HashMap<String, f64>,
+        index: usize,
+        detector_id: &str,
+    ) {
+        // Fetch the filtered sample from results using the filter_id
+        if let Some(&filtered_sample) =
+            results.get(&format!("filters:{}:output", self.config.filter_id))
+        {
+            self.buffer.add(filtered_sample);
 
-        // Count the number of z_scores in the buffer that exceed the threshold
-        let above_threshold_count = self
-            .buffer
-            .buffer
-            .iter()
-            .filter(|&&z| z > self.config.threshold)
-            .count();
+            // Count the number of values in the buffer that exceed the threshold
+            let above_threshold_count = self
+                .buffer
+                .buffer
+                .iter()
+                .filter(|&&value| value > self.config.threshold)
+                .count();
 
-        // Calculate the required count based on the sensitivity ratio and buffer capacity
-        let required_count =
-            (self.buffer.buffer.len() as f64 * self.config.sensitivity).ceil() as usize;
-
-        // If the count of values above the threshold meets or exceeds the required count, trigger detection
-        if above_threshold_count >= required_count {
+            let required_count =
+                (self.buffer.buffer.len() as f64 * self.config.sensitivity).ceil() as usize;
+            let detection_status = if above_threshold_count >= required_count {
+                1.0
+            } else {
+                0.0
+            };
             let confidence =
                 (above_threshold_count as f64 / self.buffer.buffer.len() as f64) * 100.0;
-            Some(DetectionResult {
-                name: self.filter_id().clone(),
-                confidence,
-            })
-        } else {
-            None
+
+            // Write detection status and confidence to the results
+            results.insert(
+                format!("detectors:{}:detected", detector_id),
+                detection_status,
+            );
+            results.insert(format!("detectors:{}:confidence", detector_id), confidence);
         }
     }
 }

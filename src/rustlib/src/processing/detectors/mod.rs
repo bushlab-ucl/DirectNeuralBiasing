@@ -1,25 +1,14 @@
 // pub mod slow_wave;
 pub mod threshold_detector;
-use super::filters::FilterInstance;
 use std::collections::HashMap;
-// use rayon::prelude::*;
 
-// DETECTOR COMPONENT ----------------------------------------------------------
 pub trait DetectorInstance: Send {
     fn process_sample(
         &mut self,
-        filters: &HashMap<String, Box<dyn FilterInstance>>,
-        // sample: f64,
+        results: &mut HashMap<String, f64>,
         index: usize,
-        z_score: f64,
-    ) -> Option<DetectionResult>;
-
-    fn filter_id(&self) -> String;
-}
-
-pub struct DetectionResult {
-    pub name: String,
-    pub confidence: f64, // 0 - 100
+        detector_id: &str,
+    );
 }
 
 // BUFFER COMPONENT ------------------------------------------------------------
