@@ -3,7 +3,6 @@ use std::collections::HashMap;
 // use pyo3::buffer;
 
 use super::{DetectorInstance, RingBuffer};
-use colored::*;
 
 #[derive(Clone)]
 pub struct ThresholdDetectorConfig {

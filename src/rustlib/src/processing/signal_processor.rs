@@ -174,7 +174,7 @@ impl PySignalProcessor {
 
 /// A Python module implemented in Rust.
 #[pymodule]
-fn direct_neural_biasing(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
+fn direct_neural_biasing(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PySignalProcessor>()?;
 
     Ok(())
