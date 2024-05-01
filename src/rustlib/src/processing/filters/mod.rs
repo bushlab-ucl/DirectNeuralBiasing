@@ -1,6 +1,6 @@
-use std::collections::HashMap;
-
 pub mod bandpass;
+
+use std::collections::HashMap;
 
 // FILTER INSTANCE -------------------------------------------------------------
 

@@ -1,4 +1,3 @@
-use super::detectors::threshold_detector::ThresholdDetector;
 use super::detectors::DetectorInstance;
 use super::filters::FilterInstance;
 use super::triggers::TriggerInstance;
@@ -6,10 +5,8 @@ use super::triggers::TriggerInstance;
 // use rayon::prelude::*;
 use std::collections::HashMap;
 
-use pyo3::prelude::*;
+// use pyo3::prelude::*;
 // use std::os::raw::c_void;
-
-// use super::detectors::slow_wave::SlowWaveDetector;
 
 // -----------------------------------------------------------------------------
 // RUST CORE LOGIC
@@ -62,6 +59,7 @@ impl SignalProcessor {
         let mut output = Vec::new();
 
         for sample in raw_samples {
+            self.index += 1;
             self.sample_count += 1;
 
             if self.sample_count % self.config.downsampling_rate != 0 {
@@ -95,91 +93,6 @@ impl SignalProcessor {
         output
     }
 }
-
-// -----------------------------------------------------------------------------
-// SIGNAL PROCESSOR SUBCOMPONENTS
-// -----------------------------------------------------------------------------
-
-// CONFIG COMPONENT ------------------------------------------------------------
-
-pub struct Config {
-    pub downsampling_rate: usize,
-    pub trigger_cooldown: std::time::Duration,
-    pub detector_cooldown: std::time::Duration,
-    pub logging: bool,
-}
-
-impl Config {
-    pub fn new(
-        downsampling_rate: usize,
-        trigger_cooldown: std::time::Duration,
-        detector_cooldown: std::time::Duration,
-        logging: bool,
-    ) -> Self {
-        Self {
-            downsampling_rate,
-            trigger_cooldown,
-            detector_cooldown,
-            logging,
-        }
-    }
-}
-
-// FILTER COMPONENT ------------------------------------------------------------
-
-// struct Filter {
-//     filter: BandPassFilter,
-//     filtered_sample: f64,
-// }
-
-// impl Filter {
-//     fn new(filter: BandPassFilter) -> Self {
-//         Self {
-//             filter,
-//             filtered_sample: 0.0,
-//         }
-//     }
-
-//     fn filter_sample(&mut self, sample: f64) {
-//         self.filtered_sample = self.filter.filter_sample(sample); // Placeholder for actual filter implementation
-//     }
-// }
-
-// DETECTOR COMPONENT ----------------------------------------------------------
-
-// pub struct Detectors {
-//     detectors: Vec<Box<dyn DetectorInstance>>, // Ensure thread safety
-// }
-
-// impl Detectors {
-//     pub fn new() -> Self {
-//         Self {
-//             detectors: Vec::new(),
-//         }
-//     }
-
-//     pub fn add_detector(&mut self, detector: Box<dyn DetectorInstance>) {
-//         self.detectors.push(detector);
-//     }
-
-//     pub fn run_detectors(
-//         &mut self,
-//         sample: f64,
-//         index: usize,
-//         z_score: f64,
-//     ) -> Vec<DetectionResult> {
-//         self.detectors
-//             .iter_mut()
-//             .filter_map(|detector| detector.process_sample(sample, index, z_score))
-//             .collect()
-//     }
-// }
-
-// struct DetectorOutput {
-//     name: String,
-//     detected: bool,
-//     confidence: f64,
-// }
 
 // -----------------------------------------------------------------------------
 // PY03 PYTHON LOGIC

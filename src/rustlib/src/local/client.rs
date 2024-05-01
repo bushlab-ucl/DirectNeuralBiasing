@@ -1,81 +1,108 @@
 use std::io::{self, Read};
-// use std::net::TcpStream;
+use std::net::TcpStream;
+use std::time::{Duration, Instant};
 
-// use crate::filters::bandpass::BandPassFilter;
-// use crate::processing::detectors::threshold_detector::ThresholdDetector;
-// use crate::processing::signal_processor::{Config, Controller, SignalProcessor};
+use colored::Colorize; // Ensure the 'colored' crate is included in your dependencies
 
-// emptry pass
+use crate::processing::detectors::threshold::{ThresholdDetector, ThresholdDetectorConfig};
+use crate::processing::filters::bandpass::{BandPassFilter, BandPassFilterConfig};
+use crate::processing::signal_processor::{SignalProcessor, SignalProcessorConfig};
+use crate::processing::triggers::pulse::{PulseTrigger, PulseTriggerConfig};
+
 pub fn run() -> io::Result<()> {
+    let mut stream = TcpStream::connect("127.0.0.1:8080")?;
+    let mut buffer = [0u8; 4];
+
+    let processor_config = SignalProcessorConfig {
+        logging: true,
+        downsampling_rate: 1,
+    };
+
+    let mut processor = SignalProcessor::new(processor_config);
+
+    let filter_config = BandPassFilterConfig {
+        f0: 100.0,
+        fs: 10000.0,
+    };
+    let butterworth_filter = BandPassFilter::new(filter_config);
+    processor.add_filter("butterworth".to_string(), Box::new(butterworth_filter));
+
+    let swr_detector_config = ThresholdDetectorConfig {
+        filter_id: "butterworth".to_string(),
+        threshold: 3.0,
+        buffer_size: 100,
+        sensitivity: 0.2,
+    };
+    let swr_detector = ThresholdDetector::new(swr_detector_config);
+    processor.add_detector("swr_detector".to_string(), Box::new(swr_detector));
+
+    let ied_detector_config = ThresholdDetectorConfig {
+        filter_id: "butterworth".to_string(),
+        threshold: 5.0,
+        buffer_size: 100,
+        sensitivity: 0.2,
+    };
+    let ied_detector = ThresholdDetector::new(ied_detector_config);
+    processor.add_detector("ied_detector".to_string(), Box::new(ied_detector));
+
+    let trigger_config = PulseTriggerConfig {
+        trigger_id: "main_trigger".to_string(),
+        activation_detector_id: "swr_detector".to_string(),
+        inhibition_detector_id: "ied_detector".to_string(),
+        activate_cooldown: Duration::from_secs(2),
+        inhibit_cooldown: Duration::from_secs(1),
+    };
+    let main_trigger = PulseTrigger::new(trigger_config);
+    processor.add_trigger("main_trigger".to_string(), Box::new(main_trigger));
+
+    while let Ok(_) = stream.read_exact(&mut buffer) {
+        let raw_sample = i32::from_be_bytes(buffer).abs() as f64;
+
+        let start_time = Instant::now(); // Start timer before analysis
+        let output = processor.run(vec![raw_sample]);
+        let duration = start_time.elapsed();
+
+        println!("Processed sample in {:?}", duration); // Timing the analysis phase only
+
+        if let Some(results) = output.last() {
+            println!("Complete Results: {:#?}", results);
+
+            // Display the filtered signal
+            if let Some(&filtered_signal) = results.get("filters:butterworth:filtered_signal") {
+                println!("Filtered signal: {:.2}", filtered_signal);
+            }
+
+            // SWR detector output
+            if let Some(&swr_detection) = results.get("detectors:swr_detector:detected") {
+                let message = format!("SWR Detector Output: {:.2}", swr_detection);
+                if swr_detection > 0.0 {
+                    println!("{}", message.green());
+                } else {
+                    println!("{}", message.red());
+                }
+            }
+
+            // IED detector output
+            if let Some(&ied_detection) = results.get("detectors:ied_detector:detected") {
+                let message = format!("IED Detector Output: {:.2}", ied_detection);
+                if ied_detection > 0.0 {
+                    println!("{}", message.green());
+                } else {
+                    println!("{}", message.red());
+                }
+            }
+
+            // Trigger result
+            if let Some(&triggered) = results.get("triggers:main_trigger:triggered") {
+                let message = format!("Trigger Result: {:.2}", triggered);
+                if triggered > 0.0 {
+                    println!("{}", message.blue()); // Keeping trigger blue for activation
+                } else {
+                    println!("{}", message.red()); // Red to indicate no trigger
+                }
+            }
+        }
+    }
+
     Ok(())
 }
-
-// // In client.rs
-// pub fn run() -> io::Result<()> {
-//     use std::io::{self, Read};
-//     use std::net::TcpStream;
-
-//     let mut stream = TcpStream::connect("127.0.0.1:8080")?;
-//     let mut buffer = [0u8; 4];
-
-//     let f0 = 100.0;
-//     let fs = 10000.0;
-
-//     let butterworth = BandPassFilter::butterworth(f0, fs);
-
-//     // Configure the controller with appropriate settings
-//     let config = Config {
-//         downsampling_rate: 100,                               // Example setting
-//         logging: true,                                        // Logging enabled
-//         trigger_cooldown: std::time::Duration::from_secs(10), // 10 seconds trigger cooldown
-//         detector_cooldown: std::time::Duration::from_secs(2), // 2 seconds detector cooldown
-//     };
-//     let mut controller = Controller::new(config);
-
-//     // Adding detectors to the controller
-//     let z_score_threshold = 1.0; // z-score threshold
-//     let buffer_size = 100; // buffer size for z-scores
-//     let sensitivity_1 = 0.1; // sensitivity configuration
-//     let sensitivity_2 = 0.8;
-
-//     let test_detector_1 = Box::new(ThresholdDetector::new(
-//         "test_1".to_string(),
-//         z_score_threshold,
-//         buffer_size,
-//         sensitivity_1,
-//     ));
-//     let test_detector_2 = Box::new(ThresholdDetector::new(
-//         "test_2".to_string(),
-//         z_score_threshold,
-//         buffer_size,
-//         sensitivity_2,
-//     ));
-
-//     // Attach detectors to controller
-//     controller.add_active_detector(test_detector_1);
-//     controller.add_active_detector(test_detector_2);
-
-//     // Create SignalProcessor with the controller
-//     let mut processor = SignalProcessor::new(butterworth, controller);
-
-//     loop {
-//         match stream.read_exact(&mut buffer) {
-//             Ok(_) => {
-//                 let raw = i32::from_be_bytes(buffer).abs() as f64;
-//                 let controller_output = processor.process_sample(raw);
-//                 if controller_output.trigger_event {
-//                     for output in controller_output.detector_outputs {
-//                         if output.detected {
-//                             println!(
-//                                 "{} detected - confidence: {}",
-//                                 output.name,
-//                                 output.confidence.floor()
-//                             );
-//                         }
-//                     }
-//                 }
-//             }
-//             Err(e) => return Err(e),
-//         }
-//     }
-// }

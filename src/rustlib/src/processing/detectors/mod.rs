@@ -1,5 +1,6 @@
 // pub mod slow_wave;
-pub mod threshold_detector;
+pub mod threshold;
+
 use std::collections::HashMap;
 
 pub trait DetectorInstance: Send {
