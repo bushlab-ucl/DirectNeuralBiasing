@@ -1,11 +1,17 @@
 use super::detectors::DetectorInstance;
 use super::filters::FilterInstance;
 use super::triggers::TriggerInstance;
+
+use super::detectors::threshold::{ThresholdDetector, ThresholdDetectorConfig};
+use super::filters::bandpass::{BandPassFilter, BandPassFilterConfig};
+use super::triggers::pulse::{PulseTrigger, PulseTriggerConfig};
+
 // use crate::utils::log::log_to_file;
 // use rayon::prelude::*;
 use std::collections::HashMap;
 
-// use pyo3::prelude::*;
+use pyo3::prelude::*;
+use std::time::Duration;
 // use std::os::raw::c_void;
 
 // -----------------------------------------------------------------------------
@@ -97,6 +103,86 @@ impl SignalProcessor {
 // -----------------------------------------------------------------------------
 // PY03 PYTHON LOGIC
 // -----------------------------------------------------------------------------
+
+#[pyclass]
+struct PySignalProcessor {
+    processor: SignalProcessor,
+}
+
+#[pymethods]
+impl PySignalProcessor {
+    #[new]
+    pub fn new(logging: bool, downsampling_rate: usize) -> Self {
+        let config = SignalProcessorConfig {
+            logging,
+            downsampling_rate,
+        };
+        PySignalProcessor {
+            processor: SignalProcessor::new(config),
+        }
+    }
+
+    pub fn add_filter(&mut self, id: String, f0: f64, fs: f64) {
+        let filter_config = BandPassFilterConfig { f0, fs };
+        let filter = BandPassFilter::new(filter_config);
+        self.processor.add_filter(id, Box::new(filter));
+    }
+
+    pub fn add_threshold_detector(
+        &mut self,
+        id: String,
+        filter_id: String,
+        threshold: f64,
+        buffer_size: usize,
+        sensitivity: f64,
+    ) {
+        let detector_id = id.clone();
+        let config = ThresholdDetectorConfig {
+            filter_id,
+            threshold,
+            buffer_size,
+            sensitivity,
+        };
+        let detector = ThresholdDetector::new(config);
+        self.processor.add_detector(detector_id, Box::new(detector));
+    }
+
+    pub fn add_pulse_trigger(
+        &mut self,
+        id: String,
+        activation_detector_id: String,
+        inhibition_detector_id: String,
+        activate_cooldown: usize,
+        inhibit_cooldown: usize,
+    ) {
+        let trigger_id = id.clone();
+        let config = PulseTriggerConfig {
+            trigger_id: id,
+            activation_detector_id,
+            inhibition_detector_id,
+            activate_cooldown: Duration::from_secs(activate_cooldown as u64),
+            inhibit_cooldown: Duration::from_secs(inhibit_cooldown as u64),
+        };
+        let trigger = PulseTrigger::new(config);
+        self.processor.add_trigger(trigger_id, Box::new(trigger));
+    }
+
+    pub fn run(&mut self, data: Vec<f64>) -> Vec<HashMap<String, f64>> {
+        self.processor.run(data)
+    }
+}
+
+/// A Python module implemented in Rust.
+#[pymodule]
+fn direct_neural_biasing(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
+    m.add_class::<PySignalProcessor>()?;
+
+    Ok(())
+}
+
+// // -----------------------------------------------------------------------------
+// // PY03 PYTHON LOGIC
+// // -----------------------------------------------------------------------------
 
 // // Define PyThresholdDetector without `Box`
 // #[pyclass]
@@ -208,169 +294,4 @@ impl SignalProcessor {
 //     m.add_class::<PyThresholdDetector>()?;
 //     m.add_class::<PyController>()?;
 //     Ok(())
-// }
-
-// // -----------------------------------------------------------------------------
-// // PY03 PYTHON LOGIC
-// // -----------------------------------------------------------------------------
-
-// #[pyclass]
-// pub struct PyFilter {
-//     state: Filter,
-// }
-
-// #[pymethods]
-// impl PyFilter {
-//     #[new]
-//     pub fn new(
-//         f0_l: f64,
-//         f0_h: f64,
-//         fs: f64,
-//         min_threshold_signal: f64,
-//         max_threshold_signal: f64,
-//         refractory_period: usize,
-//         delay_to_up_state: usize,
-//         threshold_sinusoid: f64,
-//         logging: bool,
-//     ) -> Self {
-//         let bounds: Vec<f64> = vec![f0_l, f0_h];
-//         let filter = BandPassFilter::with_bounds(bounds, fs);
-//         PyFilter {
-//             state: Filter {
-//                 filter,
-//                 sum: 0.0,
-//                 count: 0,
-//                 min_threshold_signal,
-//                 max_threshold_signal,
-//                 mean: 0.0,
-//                 sum_of_squares: 0.0,
-//                 std_dev: 1.0,
-//                 filtered_sample: 0.0,
-//                 prev_sample: 0.0,
-//                 samples_since_zero_crossing: 0,
-//                 current_index: 0,
-//                 ongoing_wave: Vec::new(),
-//                 ongoing_wave_idx: Vec::new(),
-//                 detected_waves_idx: Vec::new(),
-//                 refractory_period,
-//                 refractory_samples_to_skip: 0,
-//                 delay_to_up_state,
-//                 absolute_min_threshold: 0.0,
-//                 absolute_max_threshold: 0.0,
-//                 threshold_sinusoid,
-//                 logging,
-//             },
-//         }
-//     }
-
-//     pub fn filter_signal(&mut self, data: Vec<f64>) -> PyResult<(Vec<f64>, Vec<Vec<usize>>)> {
-//         let mut filtered_signal = Vec::with_capacity(data.len());
-//         for (idx, &sample) in data.iter().enumerate() {
-//             self.state.current_index = idx;
-//             self.state.process_sample(sample);
-//             filtered_signal.push(self.state.filtered_sample);
-//         }
-//         Ok((filtered_signal, self.state.detected_waves_idx.clone()))
-//     }
-// }
-
-// // -----------------------------------------------------------------------------
-// // C++ FFI LOGIC
-// // -----------------------------------------------------------------------------
-
-// #[no_mangle]
-// pub extern "C" fn create_filter(
-//     f0_l: f64,
-//     f0_h: f64,
-//     fs: f64,
-//     min_threshold_signal: f64,
-//     max_threshold_signal: f64,
-//     refractory_period: usize,
-//     delay_to_up_state: usize,
-//     threshold_sinusoid: f64,
-//     logging: bool,
-// ) -> *mut c_void {
-//     let bounds: Vec<f64> = vec![f0_l, f0_h];
-//     let filter = BandPassFilter::with_bounds(bounds, fs);
-//     let state = Filter {
-//         filter,
-//         sum: 0.0,
-//         count: 0,
-//         min_threshold_signal,
-//         max_threshold_signal,
-//         mean: 0.0,
-//         sum_of_squares: 0.0,
-//         std_dev: 1.0,
-//         filtered_sample: 0.0,
-//         prev_sample: 0.0,
-//         samples_since_zero_crossing: 0,
-//         current_index: 0,
-//         ongoing_wave: Vec::new(),
-//         ongoing_wave_idx: Vec::new(),
-//         detected_waves_idx: Vec::new(),
-//         refractory_period,
-//         refractory_samples_to_skip: 0,
-//         delay_to_up_state,
-//         absolute_min_threshold: 0.0,
-//         absolute_max_threshold: 0.0,
-//         threshold_sinusoid,
-//         logging,
-//     };
-//     let boxed_state = Box::new(state);
-//     Box::into_raw(boxed_state) as *mut c_void
-// }
-
-// #[no_mangle]
-// pub extern "C" fn delete_filter(filter_ptr: *mut c_void) {
-//     if filter_ptr.is_null() {
-//         return;
-//     }
-//     unsafe {
-//         drop(Box::from_raw(filter_ptr as *mut Filter));
-//     }
-// }
-
-// #[no_mangle]
-// pub extern "C" fn process_single_sample(filter_ptr: *mut c_void, sample: f64) -> bool {
-//     if filter_ptr.is_null() {
-//         return false;
-//     }
-//     let state = unsafe { &mut *(filter_ptr as *mut Filter) };
-
-//     state.process_sample(sample);
-//     // let z_score = state.calculate_z_score();
-
-//     let above_min_threshold = state.filtered_sample > state.min_threshold_signal;
-//     let below_max_threshold = state.filtered_sample < state.max_threshold_signal;
-
-//     above_min_threshold & below_max_threshold
-// }
-
-// #[no_mangle]
-// pub extern "C" fn process_sample_chunk(
-//     filter_ptr: *mut c_void,
-//     data: *mut f64,
-//     length: usize,
-// ) -> bool {
-//     if filter_ptr.is_null() {
-//         return false;
-//     }
-//     let state = unsafe { &mut *(filter_ptr as *mut Filter) };
-//     let data_slice = unsafe { std::slice::from_raw_parts(data, length) };
-
-//     let mut threshold_exceeded = false;
-//     for &sample in data_slice {
-//         state.process_sample(sample);
-//         // let z_score = state.calculate_z_score();
-
-//         let above_min_threshold = state.filtered_sample > state.min_threshold_signal;
-//         let below_max_threshold = state.filtered_sample < state.max_threshold_signal;
-
-//         if above_min_threshold & below_max_threshold {
-//             threshold_exceeded = true;
-//             break;
-//         }
-//     }
-
-//     threshold_exceeded
 // }
