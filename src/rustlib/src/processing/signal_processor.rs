@@ -181,117 +181,102 @@ fn direct_neural_biasing(m: &Bound<'_, PyModule>) -> PyResult<()> {
 }
 
 // // -----------------------------------------------------------------------------
-// // PY03 PYTHON LOGIC
+// // C++ FFI LOGIC
 // // -----------------------------------------------------------------------------
 
-// // Define PyThresholdDetector without `Box`
-// #[pyclass]
-// struct PyThresholdDetector {
-//     detector: ThresholdDetector,
+// #[no_mangle]
+// pub extern "C" fn create_filter(
+//     f0_l: f64,
+//     f0_h: f64,
+//     fs: f64,
+//     min_threshold_signal: f64,
+//     max_threshold_signal: f64,
+//     refractory_period: usize,
+//     delay_to_up_state: usize,
+//     threshold_sinusoid: f64,
+//     logging: bool,
+// ) -> *mut c_void {
+//     let bounds: Vec<f64> = vec![f0_l, f0_h];
+//     let filter = BandPassFilter::with_bounds(bounds, fs);
+//     let state = Filter {
+//         filter,
+//         sum: 0.0,
+//         count: 0,
+//         min_threshold_signal,
+//         max_threshold_signal,
+//         mean: 0.0,
+//         sum_of_squares: 0.0,
+//         std_dev: 1.0,
+//         filtered_sample: 0.0,
+//         prev_sample: 0.0,
+//         samples_since_zero_crossing: 0,
+//         current_index: 0,
+//         ongoing_wave: Vec::new(),
+//         ongoing_wave_idx: Vec::new(),
+//         detected_waves_idx: Vec::new(),
+//         refractory_period,
+//         refractory_samples_to_skip: 0,
+//         delay_to_up_state,
+//         absolute_min_threshold: 0.0,
+//         absolute_max_threshold: 0.0,
+//         threshold_sinusoid,
+//         logging,
+//     };
+//     let boxed_state = Box::new(state);
+//     Box::into_raw(boxed_state) as *mut c_void
 // }
 
-// #[pymethods]
-// impl PyThresholdDetector {
-//     #[new]
-//     fn new(name: String, z_score_threshold: f64, buffer_capacity: usize, sensitivity: f64) -> Self {
-//         PyThresholdDetector {
-//             detector: ThresholdDetector::new(name, z_score_threshold, buffer_capacity, sensitivity),
+// #[no_mangle]
+// pub extern "C" fn delete_filter(filter_ptr: *mut c_void) {
+//     if filter_ptr.is_null() {
+//         return;
+//     }
+//     unsafe {
+//         drop(Box::from_raw(filter_ptr as *mut Filter));
+//     }
+// }
+
+// #[no_mangle]
+// pub extern "C" fn process_single_sample(filter_ptr: *mut c_void, sample: f64) -> bool {
+//     if filter_ptr.is_null() {
+//         return false;
+//     }
+//     let state = unsafe { &mut *(filter_ptr as *mut Filter) };
+
+//     state.process_sample(sample);
+//     // let z_score = state.calculate_z_score();
+
+//     let above_min_threshold = state.filtered_sample > state.min_threshold_signal;
+//     let below_max_threshold = state.filtered_sample < state.max_threshold_signal;
+
+//     above_min_threshold & below_max_threshold
+// }
+
+// #[no_mangle]
+// pub extern "C" fn process_sample_chunk(
+//     filter_ptr: *mut c_void,
+//     data: *mut f64,
+//     length: usize,
+// ) -> bool {
+//     if filter_ptr.is_null() {
+//         return false;
+//     }
+//     let state = unsafe { &mut *(filter_ptr as *mut Filter) };
+//     let data_slice = unsafe { std::slice::from_raw_parts(data, length) };
+
+//     let mut threshold_exceeded = false;
+//     for &sample in data_slice {
+//         state.process_sample(sample);
+//         // let z_score = state.calculate_z_score();
+
+//         let above_min_threshold = state.filtered_sample > state.min_threshold_signal;
+//         let below_max_threshold = state.filtered_sample < state.max_threshold_signal;
+
+//         if above_min_threshold & below_max_threshold {
+//             threshold_exceeded = true;
+//             break;
 //         }
 //     }
-// }
 
-// // PyControllerConfig without `std::time::Duration`
-// #[pyclass]
-// struct PyConfig {
-//     config: Config,
-// }
-
-// #[pymethods]
-// impl PyConfig {
-//     #[new]
-//     fn new(
-//         downsampling_rate: usize,
-//         trigger_cooldown: usize,
-//         detector_cooldown: usize,
-//         logging: bool,
-//     ) -> Self {
-//         let config = Config {
-//             downsampling_rate,
-//             trigger_cooldown: std::time::Duration::from_secs(trigger_cooldown as u64),
-//             detector_cooldown: std::time::Duration::from_secs(detector_cooldown as u64),
-//             logging,
-//         };
-//         PyConfig { config }
-//     }
-// }
-
-// // Define PyController without `Box<dyn DetectorInstance>`
-// #[pyclass]
-// struct PyController {
-//     controller: Controller,
-// }
-
-// #[pymethods]
-// impl PyController {
-//     #[new]
-//     fn new(
-//         downsampling_rate: usize,
-//         trigger_cooldown: std::time::Duration,
-//         detector_cooldown: std::time::Duration,
-//         logging: bool,
-//     ) -> Self {
-//         let config = Config {
-//             downsampling_rate,
-//             trigger_cooldown,
-//             detector_cooldown,
-//             logging,
-//         };
-//         PyController {
-//             controller: Controller::new(config),
-//         }
-//     }
-
-//     fn add_active_detector(&mut self, detector: &PyThresholdDetector) {
-//         self.controller
-//             .add_active_detector(Box::new(detector.detector.clone()));
-//     }
-
-//     fn add_cooldown_detector(&mut self, detector: &PyThresholdDetector) {
-//         self.controller
-//             .add_cooldown_detector(Box::new(detector.detector.clone()));
-//     }
-// }
-
-// // Define PySignalProcessor without `Box<dyn DetectorInstance>`
-// #[pyclass]
-// struct PySignalProcessor {
-//     processor: SignalProcessor,
-// }
-
-// #[pymethods]
-// impl PySignalProcessor {
-//     #[new]
-//     fn new(f0: f64, fs: f64, py_controller: &PyController, config: &PyConfig) -> Self {
-//         let bandpass = BandPassFilter::butterworth(f0, fs);
-//         let processor = SignalProcessor::new(bandpass, py_controller.controller, config.config);
-//         PySignalProcessor { processor }
-//     }
-
-//     fn process_sample(&mut self, sample: f64) -> Vec<(String, bool, f64)> {
-//         let output = self.processor.process_sample(sample);
-//         output
-//             .detector_outputs
-//             .iter()
-//             .map(|det| (det.name.clone(), det.detected, det.confidence))
-//             .collect()
-//     }
-// }
-
-// #[pymodule]
-// #[pyo3(name = "direct_neural_biasing")]
-// fn direct_neural_biasing(m: &Bound<'_, PyModule>) -> PyResult<()> {
-//     m.add_class::<PySignalProcessor>()?;
-//     m.add_class::<PyThresholdDetector>()?;
-//     m.add_class::<PyController>()?;
-//     Ok(())
+//     threshold_exceeded
 // }
