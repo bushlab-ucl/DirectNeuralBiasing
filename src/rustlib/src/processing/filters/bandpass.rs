@@ -1,4 +1,4 @@
-use super::{FilterInstance, Statistics};
+use super::FilterInstance;
 use std::collections::HashMap;
 
 pub struct BandPassFilterConfig {
@@ -7,7 +7,6 @@ pub struct BandPassFilterConfig {
 }
 
 pub struct BandPassFilter {
-    statistics: Statistics, // Include Statistics in the filter
     a: [f64; 3],
     b: [f64; 3],
     x: [f64; 2],
@@ -29,7 +28,6 @@ impl BandPassFilter {
         let a2 = 1.0 - alpha;
 
         BandPassFilter {
-            statistics: Statistics::new(),
             a: [a0, a1, a2],
             b: [b0, b1, b2],
             x: [0.0, 0.0],
@@ -59,16 +57,9 @@ impl FilterInstance for BandPassFilter {
     fn process_sample(&mut self, results: &mut HashMap<String, f64>, filter_id: &str) {
         if let Some(&raw_sample) = results.get("global:raw_sample") {
             let filtered_sample = self.calculate_output(raw_sample);
-            self.statistics.update_statistics(filtered_sample);
-
-            // Update results with the filtered sample and its statistics
             results.insert(
                 format!("filters:{}:filtered_sample", filter_id),
                 filtered_sample,
-            );
-            results.insert(
-                format!("filters:{}:z_score", filter_id),
-                self.statistics.z_score,
             );
         }
     }

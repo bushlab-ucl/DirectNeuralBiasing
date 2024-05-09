@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 // use pyo3::buffer;
 
-use super::{DetectorInstance, RingBuffer};
+use super::{DetectorInstance, RingBuffer, Statistics};
 
 #[derive(Clone)]
 pub struct ThresholdDetectorConfig {
@@ -16,6 +16,7 @@ pub struct ThresholdDetectorConfig {
 pub struct ThresholdDetector {
     config: ThresholdDetectorConfig,
     buffer: RingBuffer,
+    statistics: Statistics,
 }
 
 impl ThresholdDetector {
@@ -27,6 +28,7 @@ impl ThresholdDetector {
         Self {
             config,
             buffer: RingBuffer::new(buffer_size),
+            statistics: Statistics::new(),
         }
     }
 }
@@ -44,8 +46,11 @@ impl DetectorInstance for ThresholdDetector {
         // Fetch the filtered sample using a cloned unwrap_or to handle the absence gracefully
         let filtered_sample = results.get(&filter_key).cloned().unwrap_or(0.0);
 
-        // Add the filtered sample to the buffer if it exists
-        self.buffer.add(filtered_sample);
+        // Update statistics with the new filtered sample
+        self.statistics.update_statistics(filtered_sample);
+
+        // Add the z-score to the buffer
+        self.buffer.add(self.statistics.z_score);
 
         // Calculate the number of values in the buffer that exceed the threshold
         let above_threshold_count = self
