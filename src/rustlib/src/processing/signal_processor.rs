@@ -152,16 +152,16 @@ impl PySignalProcessor {
         id: String,
         activation_detector_id: String,
         inhibition_detector_id: String,
-        activate_cooldown: usize,
-        inhibit_cooldown: usize,
+        activation_cooldown: usize,
+        inhibition_cooldown: usize,
     ) {
         let trigger_id = id.clone();
         let config = PulseTriggerConfig {
             trigger_id: id,
             activation_detector_id,
             inhibition_detector_id,
-            activate_cooldown: Duration::from_secs(activate_cooldown as u64),
-            inhibit_cooldown: Duration::from_secs(inhibit_cooldown as u64),
+            activation_cooldown: Duration::from_secs(activation_cooldown as u64),
+            inhibition_cooldown: Duration::from_secs(inhibition_cooldown as u64),
         };
         let trigger = PulseTrigger::new(config);
         self.processor.add_trigger(trigger_id, Box::new(trigger));

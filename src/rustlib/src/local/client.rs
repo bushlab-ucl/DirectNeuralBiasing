@@ -49,8 +49,8 @@ pub fn run() -> io::Result<()> {
         trigger_id: "main_trigger".to_string(),
         activation_detector_id: "swr_detector".to_string(),
         inhibition_detector_id: "ied_detector".to_string(),
-        activate_cooldown: Duration::from_secs(2),
-        inhibit_cooldown: Duration::from_secs(1),
+        activation_cooldown: Duration::from_secs(2),
+        inhibition_cooldown: Duration::from_secs(1),
     };
     let main_trigger = PulseTrigger::new(trigger_config);
     processor.add_trigger("main_trigger".to_string(), Box::new(main_trigger));
