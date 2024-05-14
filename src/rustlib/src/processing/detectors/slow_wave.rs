@@ -50,6 +50,9 @@ impl DetectorInstance for SlowWaveDetector {
             if !self.ongoing_wave.is_empty() {
                 let detection = self.analyse_wave(results, detector_id);
                 if detection {
+                    // Output the detection status and increment the detected count
+                    results.insert(format!("detectors:{}:detected", detector_id), 1.0);
+
                     // Construct a string of the detected wave indexes
                     let indexes_str = self
                         .ongoing_wave_idx
@@ -60,7 +63,7 @@ impl DetectorInstance for SlowWaveDetector {
 
                     // Output the detected wave indexes
                     results.insert(
-                        format!("detectors:{}:detected:{}", detector_id, indexes_str),
+                        format!("detectors:{}:slow_wave_idx:{}", detector_id, indexes_str),
                         1.0,
                     );
 
