@@ -61,17 +61,16 @@ impl DetectorInstance for SlowWaveDetector {
                         .collect::<Vec<String>>()
                         .join(", ");
 
-                    // Output the detected wave indexes
-                    results.insert(
-                        format!("detectors:{}:slow_wave_idx:{}", detector_id, indexes_str),
-                        1.0,
-                    );
-
                     // Predict the next wave maxima
                     let half_period = (self.ongoing_wave_idx.len() / 2) as usize;
                     let next_maxima_idx = index + half_period;
+
+                    // Output the detected wave indexes and the predicted next maxima
                     results.insert(
-                        format!("detectors:{}:next_maxima", detector_id),
+                        format!(
+                            "detectors:{}:slow_wave_idx:{}:next_maxima",
+                            detector_id, indexes_str
+                        ),
                         next_maxima_idx as f64,
                     );
                 }
