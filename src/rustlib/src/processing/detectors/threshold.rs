@@ -1,7 +1,5 @@
 use std::collections::HashMap;
 
-// use pyo3::buffer;
-
 use super::{DetectorInstance, RingBuffer, Statistics};
 
 #[derive(Clone)]

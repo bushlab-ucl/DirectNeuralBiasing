@@ -1,4 +1,5 @@
 // pub mod slow_wave;
+pub mod slow_wave;
 pub mod threshold;
 
 use std::collections::HashMap;

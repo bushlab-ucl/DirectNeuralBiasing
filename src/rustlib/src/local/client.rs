@@ -4,6 +4,7 @@ use std::time::{Duration, Instant};
 
 use colored::Colorize; // Ensure the 'colored' crate is included in your dependencies
 
+use crate::processing::detectors::slow_wave::{SlowWaveDetector, SlowWaveDetectorConfig};
 use crate::processing::detectors::threshold::{ThresholdDetector, ThresholdDetectorConfig};
 use crate::processing::filters::bandpass::{BandPassFilter, BandPassFilterConfig};
 use crate::processing::signal_processor::{SignalProcessor, SignalProcessorConfig};
@@ -27,15 +28,6 @@ pub fn run() -> io::Result<()> {
     let butterworth_filter = BandPassFilter::new(filter_config);
     processor.add_filter("butterworth".to_string(), Box::new(butterworth_filter));
 
-    let swr_detector_config = ThresholdDetectorConfig {
-        filter_id: "butterworth".to_string(),
-        threshold: 3.0,
-        buffer_size: 100,
-        sensitivity: 0.2,
-    };
-    let swr_detector = ThresholdDetector::new(swr_detector_config);
-    processor.add_detector("swr_detector".to_string(), Box::new(swr_detector));
-
     let ied_detector_config = ThresholdDetectorConfig {
         filter_id: "butterworth".to_string(),
         threshold: 5.0,
@@ -45,9 +37,28 @@ pub fn run() -> io::Result<()> {
     let ied_detector = ThresholdDetector::new(ied_detector_config);
     processor.add_detector("ied_detector".to_string(), Box::new(ied_detector));
 
+    // let swr_detector_config = ThresholdDetectorConfig {
+    //     filter_id: "butterworth".to_string(),
+    //     threshold: 3.0,
+    //     buffer_size: 100,
+    //     sensitivity: 0.2,
+    // };
+    // let swr_detector = ThresholdDetector::new(swr_detector_config);
+    // processor.add_detector("swr_detector".to_string(), Box::new(swr_detector));
+
+    let sw_detector_config = SlowWaveDetectorConfig {
+        filter_id: "butterworth".to_string(),
+        threshold_sinusoid: 0.6,
+        absolute_min_threshold: 300.0,
+        absolute_max_threshold: 1500.0,
+    };
+
+    let sw_detector = SlowWaveDetector::new(sw_detector_config);
+    processor.add_detector("sw_detector".to_string(), Box::new(sw_detector));
+
     let trigger_config = PulseTriggerConfig {
         trigger_id: "main_trigger".to_string(),
-        activation_detector_id: "swr_detector".to_string(),
+        activation_detector_id: "sw_detector".to_string(),
         inhibition_detector_id: "ied_detector".to_string(),
         activation_cooldown: Duration::from_secs(2),
         inhibition_cooldown: Duration::from_secs(1),

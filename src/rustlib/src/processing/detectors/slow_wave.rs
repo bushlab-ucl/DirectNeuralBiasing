@@ -1,141 +1,145 @@
+use std::collections::HashMap;
+
+use super::DetectorInstance;
+
 #[derive(Clone)]
 pub struct SlowWaveDetectorConfig {
     pub filter_id: String,
-    pub refractory_period: usize,
     pub threshold_sinusoid: f64,
     pub absolute_min_threshold: f64,
     pub absolute_max_threshold: f64,
 }
 
+#[derive(Clone)]
 pub struct SlowWaveDetector {
     config: SlowWaveDetectorConfig,
-    refractory_samples_to_skip: usize,
     ongoing_wave: Vec<f64>,
     ongoing_wave_idx: Vec<usize>,
+    last_sample: f64, // To keep track of the last sample for zero-crossing detection
 }
 
 impl SlowWaveDetector {
     pub fn new(config: SlowWaveDetectorConfig) -> Self {
         SlowWaveDetector {
             config,
-            refractory_samples_to_skip: 0,
             ongoing_wave: Vec::new(),
             ongoing_wave_idx: Vec::new(),
+            last_sample: 0.0,
         }
     }
 }
 
 impl DetectorInstance for SlowWaveDetector {
+    /// Processes a single sample and detects slow wave events based on configured thresholds.
     fn process_sample(
         &mut self,
         results: &mut HashMap<String, f64>,
         index: usize,
         detector_id: &str,
     ) {
-        // Only proceed if not in refractory period
-        if self.refractory_samples_to_skip > 0 {
-            self.refractory_samples_to_skip -= 1;
-            return;
-        }
+        let filtered_sample = results
+            .get(&format!(
+                "filters:{}:filtered_sample",
+                self.config.filter_id
+            ))
+            .cloned()
+            .unwrap_or(0.0);
 
-        // Fetch the filtered sample from results
-        if let Some(&filtered_sample) =
-            results.get(&format!("filters:{}:output", self.config.filter_id))
-        {
-            let prev_sample = results
-                .get(&format!("detectors:{}:last_sample", detector_id))
-                .cloned()
-                .unwrap_or(0.0);
-            results.insert(
-                format!("detectors:{}:last_sample", detector_id),
-                filtered_sample,
-            );
-
-            let mean = results
-                .get(&format!("filters:{}:mean", self.config.filter_id))
-                .cloned()
-                .unwrap_or(0.0);
-            let std_dev = results
-                .get(&format!("filters:{}:std_dev", self.config.filter_id))
-                .cloned()
-                .unwrap_or(0.0);
-
-            let crossed_zero = filtered_sample > 0.0 && prev_sample <= 0.0;
-
-            if crossed_zero && self.detect_slow_wave(filtered_sample, mean, std_dev) {
-                results.insert(format!("detectors:{}:detected", detector_id), 1.0);
-                results.insert(format!("detectors:{}:confidence", detector_id), 100.0); // Arbitrary confidence for example
-                self.refractory_samples_to_skip = self.config.refractory_period;
+        // Detect zero-crossing from negative to positive
+        if filtered_sample > 0.0 && self.last_sample <= 0.0 {
+            // Analyze the collected wave if the buffer is not empty
+            if !self.ongoing_wave.is_empty() {
+                let detection = self.analyze_wave(results, detector_id);
                 self.ongoing_wave.clear();
                 self.ongoing_wave_idx.clear();
-            } else {
-                self.ongoing_wave.push(filtered_sample);
-                self.ongoing_wave_idx.push(index);
-                results.insert(format!("detectors:{}:detected", detector_id), 0.0);
-                results.insert(format!("detectors:{}:confidence", detector_id), 0.0);
+                if detection {
+                    results.insert(format!("detectors:{}:detected", detector_id), 1.0);
+                }
             }
+        } else if filtered_sample < 0.0 {
+            // Continue collecting the wave data
+            self.ongoing_wave.push(filtered_sample);
+            self.ongoing_wave_idx.push(index);
+            results.insert(format!("detectors:{}:detected", detector_id), 0.0);
         }
+
+        // Update the last sample
+        self.last_sample = filtered_sample;
     }
+}
 
-    fn detect_slow_wave(&mut self) -> bool {
-        let minima_idx = self.find_wave_minima(&self.ongoing_wave);
-        // let maxima_idx = self.find_wave_maxima(&self.ongoing_wave);
-
+impl SlowWaveDetector {
+    /// Analyzes the collected wave data to determine if it meets the criteria for a slow wave.
+    fn analyze_wave(&mut self, results: &mut HashMap<String, f64>, detector_id: &str) -> bool {
         let wave_length = self.ongoing_wave.len();
 
-        let amplitude = self.ongoing_wave[minima_idx].abs();
-        if amplitude > self.absolute_min_threshold && amplitude < self.absolute_max_threshold {
-            let sinusoid = self.construct_cosine_wave(minima_idx, wave_length);
-            let correlation = self.calculate_correlation(&self.ongoing_wave, &sinusoid);
+        // Ensure there is enough data to analyze
+        if wave_length == 0 {
+            return false;
+        }
 
-            if correlation > self.threshold_sinusoid {
-                // Detected slow wave
-                self.refractory_samples_to_skip = self.refractory_period;
+        // Find the minimum amplitude within the wave to define the peak
+        let minima_idx = self.find_wave_minima();
+        let peak_amplitude = self.ongoing_wave[minima_idx].abs();
+
+        // Check if the amplitude is within the specified thresholds
+        if peak_amplitude > self.config.absolute_min_threshold
+            && peak_amplitude < self.config.absolute_max_threshold
+        {
+            let sinusoid = self.construct_cosine_wave(minima_idx, wave_length);
+            let correlation = self.calculate_correlation(&sinusoid);
+
+            // Check if the correlation with a sinusoidal wave exceeds the threshold
+            if correlation > self.config.threshold_sinusoid {
+                results.insert(
+                    format!("detectors:{}:confidence", detector_id),
+                    correlation * 100.0,
+                );
                 return true;
             }
         }
 
+        results.insert(format!("detectors:{}:confidence", detector_id), 0.0);
         false
     }
 
-    fn find_wave_minima(&self, wave: &Vec<f64>) -> usize {
-        wave.iter()
+    /// Finds the index of the minimum value within the ongoing_wave vector, which represents the peak of the wave.
+    fn find_wave_minima(&self) -> usize {
+        self.ongoing_wave
+            .iter()
             .enumerate()
             .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
             .map(|(idx, _)| idx)
             .unwrap_or(0)
     }
 
-    // fn find_wave_maxima(&self, wave: &Vec<f64>) -> usize {
-    //     wave.iter()
-    //         .enumerate()
-    //         .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
-    //         .map(|(idx, _)| idx)
-    //         .unwrap_or(0)
-    // }
-
+    /// Constructs a cosine wave that matches the frequency and amplitude of the detected wave.
     fn construct_cosine_wave(&self, peak_idx: usize, wave_length: usize) -> Vec<f64> {
-        let frequency = 1.0 / (wave_length as f64 / 2.0);
+        let frequency = 1.0 / (wave_length as f64 / 2.0); // Calculate the frequency based on the wave length
+        let amplitude = self.ongoing_wave[peak_idx]; // Use the amplitude at the peak index
         (0..wave_length)
-            .map(|i| {
-                let amplitude = self.ongoing_wave[peak_idx];
-                amplitude * (i as f64 * 2.0 * std::f64::consts::PI * frequency).cos()
-            })
+            .map(|i| amplitude * (i as f64 * 2.0 * std::f64::consts::PI * frequency).cos())
             .collect()
     }
 
-    fn calculate_correlation(&self, wave: &Vec<f64>, sinusoid: &Vec<f64>) -> f64 {
-        let mean_wave = wave.iter().sum::<f64>() / wave.len() as f64;
+    /// Calculates the correlation between the ongoing_wave and a generated sinusoid to check for pattern match.
+    fn calculate_correlation(&self, sinusoid: &Vec<f64>) -> f64 {
+        let mean_wave = self.ongoing_wave.iter().sum::<f64>() / self.ongoing_wave.len() as f64;
         let mean_sinusoid = sinusoid.iter().sum::<f64>() / sinusoid.len() as f64;
 
-        let covariance: f64 = wave
+        let covariance: f64 = self
+            .ongoing_wave
             .iter()
             .zip(sinusoid.iter())
             .map(|(&x, &y)| (x - mean_wave) * (y - mean_sinusoid))
             .sum();
-
-        let std_dev_wave =
-            (wave.iter().map(|&x| (x - mean_wave).powi(2)).sum::<f64>() / wave.len() as f64).sqrt();
+        let std_dev_wave = (self
+            .ongoing_wave
+            .iter()
+            .map(|&x| (x - mean_wave).powi(2))
+            .sum::<f64>()
+            / self.ongoing_wave.len() as f64)
+            .sqrt();
         let std_dev_sinusoid = (sinusoid
             .iter()
             .map(|&x| (x - mean_sinusoid).powi(2))
