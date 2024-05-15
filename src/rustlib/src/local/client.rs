@@ -49,20 +49,20 @@ pub fn run() -> io::Result<()> {
     // let swr_detector = ThresholdDetector::new(swr_detector_config);
     // processor.add_detector(Box::new(swr_detector));
 
-    let sw_detector_config = SlowWaveDetectorConfig {
-        id: "sw_detector".to_string(),
+    let slow_wave_detector_config = SlowWaveDetectorConfig {
+        id: "slow_wave_detector".to_string(),
         filter_id: "butterworth".to_string(),
         threshold_sinusoid: 0.6,
         absolute_min_threshold: 300.0,
         absolute_max_threshold: 1500.0,
     };
 
-    let sw_detector = SlowWaveDetector::new(sw_detector_config);
-    processor.add_detector(Box::new(sw_detector));
+    let slow_wave_detector = SlowWaveDetector::new(slow_wave_detector_config);
+    processor.add_detector(Box::new(slow_wave_detector));
 
     let trigger_config = PulseTriggerConfig {
         id: "main_trigger".to_string(),
-        activation_detector_id: "sw_detector".to_string(),
+        activation_detector_id: "slow_wave_detector".to_string(),
         inhibition_detector_id: "ied_detector".to_string(),
         activation_cooldown: Duration::from_secs(2),
         inhibition_cooldown: Duration::from_secs(1),
