@@ -5,6 +5,7 @@ pub mod threshold;
 use std::collections::HashMap;
 
 pub trait DetectorInstance: Send {
+    fn id(&self) -> &str;
     fn process_sample(
         &mut self,
         results: &mut HashMap<String, f64>,

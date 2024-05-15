@@ -48,15 +48,18 @@ impl SignalProcessor {
         }
     }
 
-    pub fn add_filter(&mut self, id: String, filter: Box<dyn FilterInstance>) {
+    pub fn add_filter(&mut self, filter: Box<dyn FilterInstance>) {
+        let id = filter.id().to_string();
         self.filters.insert(id, filter);
     }
 
-    pub fn add_detector(&mut self, id: String, detector: Box<dyn DetectorInstance>) {
+    pub fn add_detector(&mut self, detector: Box<dyn DetectorInstance>) {
+        let id = detector.id().to_string();
         self.detectors.insert(id, detector);
     }
 
-    pub fn add_trigger(&mut self, id: String, trigger: Box<dyn TriggerInstance>) {
+    pub fn add_trigger(&mut self, trigger: Box<dyn TriggerInstance>) {
+        let id = trigger.id().to_string();
         self.triggers.insert(id, trigger);
     }
 
@@ -123,9 +126,9 @@ impl PySignalProcessor {
     }
 
     pub fn add_filter(&mut self, id: String, f0: f64, fs: f64) {
-        let filter_config = BandPassFilterConfig { f0, fs };
-        let filter = BandPassFilter::new(filter_config);
-        self.processor.add_filter(id, Box::new(filter));
+        let config = BandPassFilterConfig { id, f0, fs };
+        let filter = BandPassFilter::new(config);
+        self.processor.add_filter(Box::new(filter));
     }
 
     pub fn add_threshold_detector(
@@ -136,15 +139,15 @@ impl PySignalProcessor {
         buffer_size: usize,
         sensitivity: f64,
     ) {
-        let detector_id = id.clone();
         let config = ThresholdDetectorConfig {
+            id,
             filter_id,
             threshold,
             buffer_size,
             sensitivity,
         };
         let detector = ThresholdDetector::new(config);
-        self.processor.add_detector(detector_id, Box::new(detector));
+        self.processor.add_detector(Box::new(detector));
     }
 
     pub fn add_pulse_trigger(
@@ -155,16 +158,15 @@ impl PySignalProcessor {
         activation_cooldown: usize,
         inhibition_cooldown: usize,
     ) {
-        let trigger_id = id.clone();
         let config = PulseTriggerConfig {
-            trigger_id: id,
+            id,
             activation_detector_id,
             inhibition_detector_id,
             activation_cooldown: Duration::from_secs(activation_cooldown as u64),
             inhibition_cooldown: Duration::from_secs(inhibition_cooldown as u64),
         };
         let trigger = PulseTrigger::new(config);
-        self.processor.add_trigger(trigger_id, Box::new(trigger));
+        self.processor.add_trigger(Box::new(trigger));
     }
 
     pub fn run(&mut self, data: Vec<f64>) -> Vec<HashMap<String, f64>> {

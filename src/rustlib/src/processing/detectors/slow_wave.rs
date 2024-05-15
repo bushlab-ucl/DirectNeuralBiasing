@@ -4,6 +4,7 @@ use super::DetectorInstance;
 
 #[derive(Clone)]
 pub struct SlowWaveDetectorConfig {
+    pub id: String,
     pub filter_id: String,
     pub threshold_sinusoid: f64,
     pub absolute_min_threshold: f64,
@@ -30,6 +31,10 @@ impl SlowWaveDetector {
 }
 
 impl DetectorInstance for SlowWaveDetector {
+    fn id(&self) -> &str {
+        &self.config.id
+    }
+
     fn process_sample(
         &mut self,
         results: &mut HashMap<String, f64>,

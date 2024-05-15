@@ -22,31 +22,35 @@ pub fn run() -> io::Result<()> {
     let mut processor = SignalProcessor::new(processor_config);
 
     let filter_config = BandPassFilterConfig {
+        id: "butterworth".to_string(),
         f0: 100.0,
         fs: 10000.0,
     };
     let butterworth_filter = BandPassFilter::new(filter_config);
-    processor.add_filter("butterworth".to_string(), Box::new(butterworth_filter));
+    processor.add_filter(Box::new(butterworth_filter));
 
     let ied_detector_config = ThresholdDetectorConfig {
+        id: "ied_detector".to_string(),
         filter_id: "butterworth".to_string(),
         threshold: 5.0,
         buffer_size: 100,
         sensitivity: 0.2,
     };
     let ied_detector = ThresholdDetector::new(ied_detector_config);
-    processor.add_detector("ied_detector".to_string(), Box::new(ied_detector));
+    processor.add_detector(Box::new(ied_detector));
 
     // let swr_detector_config = ThresholdDetectorConfig {
+    //     id: "swr_detector".to_string(),
     //     filter_id: "butterworth".to_string(),
     //     threshold: 3.0,
     //     buffer_size: 100,
     //     sensitivity: 0.2,
     // };
     // let swr_detector = ThresholdDetector::new(swr_detector_config);
-    // processor.add_detector("swr_detector".to_string(), Box::new(swr_detector));
+    // processor.add_detector(Box::new(swr_detector));
 
     let sw_detector_config = SlowWaveDetectorConfig {
+        id: "sw_detector".to_string(),
         filter_id: "butterworth".to_string(),
         threshold_sinusoid: 0.6,
         absolute_min_threshold: 300.0,
@@ -54,17 +58,17 @@ pub fn run() -> io::Result<()> {
     };
 
     let sw_detector = SlowWaveDetector::new(sw_detector_config);
-    processor.add_detector("sw_detector".to_string(), Box::new(sw_detector));
+    processor.add_detector(Box::new(sw_detector));
 
     let trigger_config = PulseTriggerConfig {
-        trigger_id: "main_trigger".to_string(),
+        id: "main_trigger".to_string(),
         activation_detector_id: "sw_detector".to_string(),
         inhibition_detector_id: "ied_detector".to_string(),
         activation_cooldown: Duration::from_secs(2),
         inhibition_cooldown: Duration::from_secs(1),
     };
     let main_trigger = PulseTrigger::new(trigger_config);
-    processor.add_trigger("main_trigger".to_string(), Box::new(main_trigger));
+    processor.add_trigger(Box::new(main_trigger));
 
     while let Ok(_) = stream.read_exact(&mut buffer) {
         let raw_sample = i32::from_be_bytes(buffer).abs() as f64;

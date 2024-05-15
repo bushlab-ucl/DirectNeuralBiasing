@@ -2,15 +2,33 @@ use super::FilterInstance;
 use std::collections::HashMap;
 
 pub struct BandPassFilterConfig {
+    pub id: String,
     pub f0: f64,
     pub fs: f64,
 }
 
 pub struct BandPassFilter {
+    config: BandPassFilterConfig,
     a: [f64; 3],
     b: [f64; 3],
     x: [f64; 2],
     y: [f64; 2],
+}
+
+impl FilterInstance for BandPassFilter {
+    fn id(&self) -> &str {
+        &self.config.id
+    }
+
+    fn process_sample(&mut self, results: &mut HashMap<String, f64>, filter_id: &str) {
+        if let Some(&raw_sample) = results.get("global:raw_sample") {
+            let filtered_sample = self.calculate_output(raw_sample);
+            results.insert(
+                format!("filters:{}:filtered_sample", filter_id),
+                filtered_sample,
+            );
+        }
+    }
 }
 
 impl BandPassFilter {
@@ -28,6 +46,7 @@ impl BandPassFilter {
         let a2 = 1.0 - alpha;
 
         BandPassFilter {
+            config,
             a: [a0, a1, a2],
             b: [b0, b1, b2],
             x: [0.0, 0.0],
@@ -50,17 +69,5 @@ impl BandPassFilter {
         self.y[0] = output;
 
         output
-    }
-}
-
-impl FilterInstance for BandPassFilter {
-    fn process_sample(&mut self, results: &mut HashMap<String, f64>, filter_id: &str) {
-        if let Some(&raw_sample) = results.get("global:raw_sample") {
-            let filtered_sample = self.calculate_output(raw_sample);
-            results.insert(
-                format!("filters:{}:filtered_sample", filter_id),
-                filtered_sample,
-            );
-        }
     }
 }

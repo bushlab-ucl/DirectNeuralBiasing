@@ -4,7 +4,8 @@ use super::{DetectorInstance, RingBuffer, Statistics};
 
 #[derive(Clone)]
 pub struct ThresholdDetectorConfig {
-    pub filter_id: String, // ID of the filter whose output this detector should analyze
+    pub id: String,
+    pub filter_id: String,
     pub threshold: f64,
     pub buffer_size: usize,
     pub sensitivity: f64,
@@ -32,6 +33,10 @@ impl ThresholdDetector {
 }
 
 impl DetectorInstance for ThresholdDetector {
+    fn id(&self) -> &str {
+        &self.config.id
+    }
+
     fn process_sample(
         &mut self,
         results: &mut HashMap<String, f64>,
