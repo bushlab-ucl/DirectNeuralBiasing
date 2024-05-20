@@ -1,11 +1,14 @@
-#[cfg(not(feature = "python-extension"))]
-mod local;
-mod processing;
-mod tests;
-mod utils;
+//! some documentation testing
 
 #[cfg(not(feature = "python-extension"))]
-fn main() {
+pub mod local;
+pub mod processing;
+pub mod tests;
+pub mod utils;
+
+/// a line
+#[cfg(not(feature = "python-extension"))]
+pub fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() > 1 {
         match args[1].as_str() {
