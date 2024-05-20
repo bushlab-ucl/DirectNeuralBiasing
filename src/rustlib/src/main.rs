@@ -19,7 +19,7 @@ pub mod tests;
 /// - Utility functions, such as reading and writing files.
 pub mod utils;
 
-/// a line
+/// - For running the local debug.
 #[cfg(not(feature = "python-extension"))]
 pub fn main() {
     let args: Vec<String> = std::env::args().collect();
