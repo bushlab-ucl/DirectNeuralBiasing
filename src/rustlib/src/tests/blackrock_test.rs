@@ -14,7 +14,7 @@ pub extern "C" fn process_data_complex(data: *mut i16, length: usize) {
     slice.copy_from_slice(&result);
 }
 
-fn convolution(data: &[i16], kernel: &[i16]) -> Vec<i16> {
+pub fn convolution(data: &[i16], kernel: &[i16]) -> Vec<i16> {
     let k_len = kernel.len();
     let d_len = data.len();
     let mut result = vec![0; d_len];

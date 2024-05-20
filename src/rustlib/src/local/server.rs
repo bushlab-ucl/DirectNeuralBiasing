@@ -133,7 +133,7 @@ const INTERICTAL_SPIKE_FREQ: f64 = 3.0;
 const SLOW_WAVE_FREQ: f64 = 0.5;
 
 #[derive(Debug)]
-struct PulseParams {
+pub struct PulseParams {
     amplitude: f64,
     frequency: f64,
     iterations: usize,
