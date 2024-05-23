@@ -10,7 +10,7 @@
 #[cfg(not(feature = "python-extension"))]
 pub mod local;
 
-/// - Processing is the main module, it has code for the signal processor, which itself is split up into filters, detectors, and triggers (for now).
+/// - Main rust source code. Contains code for the signal processor, which itself is split up into filters, detectors, and triggers (for now).
 pub mod processing;
 
 /// - Tests contains some tests for the Blackrock C++ bindings.
@@ -19,3 +19,6 @@ pub mod tests;
 
 /// - Utility functions, such as reading and writing files.
 pub mod utils;
+
+/// - Bindings for Python and C++ (wip).
+pub mod bindings;

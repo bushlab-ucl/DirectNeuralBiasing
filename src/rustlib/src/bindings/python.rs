@@ -1,7 +1,7 @@
-use super::detectors::threshold::{ThresholdDetector, ThresholdDetectorConfig};
-use super::filters::bandpass::{BandPassFilter, BandPassFilterConfig};
-use super::signal_processor::{SignalProcessor, SignalProcessorConfig};
-use super::triggers::pulse::{PulseTrigger, PulseTriggerConfig};
+use crate::processing::detectors::threshold::{ThresholdDetector, ThresholdDetectorConfig};
+use crate::processing::filters::bandpass::{BandPassFilter, BandPassFilterConfig};
+use crate::processing::signal_processor::{SignalProcessor, SignalProcessorConfig};
+use crate::processing::triggers::pulse::{PulseTrigger, PulseTriggerConfig};
 
 use std::collections::HashMap;
 use std::time::Duration;
