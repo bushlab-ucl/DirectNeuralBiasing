@@ -1,6 +1,8 @@
 [package]
 name = "direct-neural-biasing"
 version = "0.6.0"
+authors = ["Daniel Humphries <d.humphries@ucl.ac.uk>"]
+description = "A Rust library for low-latency closed-loop neural stimulation"
 edition = "2021"
 
 [dependencies]
@@ -21,6 +23,9 @@ path = "src/main.rs"
 [lib]
 name = "direct_neural_biasing"
 crate-type = ["cdylib"]
+
+[package.metadata]
+license = "CC BY-NC 4.0"
 
 [package.metadata.maturin]
 name = "direct-neural-biasing"
