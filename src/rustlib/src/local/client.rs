@@ -52,7 +52,7 @@ pub fn run() -> io::Result<()> {
     let slow_wave_detector_config = SlowWaveDetectorConfig {
         id: "slow_wave_detector".to_string(),
         filter_id: "butterworth".to_string(),
-        threshold_sinusoid: 0.6,
+        sinusoid_threshold: 0.6,
         absolute_min_threshold: 300.0,
         absolute_max_threshold: 1500.0,
     };

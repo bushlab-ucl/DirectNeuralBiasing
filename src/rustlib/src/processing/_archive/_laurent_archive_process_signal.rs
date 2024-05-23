@@ -40,7 +40,7 @@ struct Filter {
     delay_to_up_state: usize,
     absolute_min_threshold: f64,
     absolute_max_threshold: f64,
-    threshold_sinusoid: f64,
+    sinusoid_threshold: f64,
     logging: bool,
 }
 
@@ -124,7 +124,7 @@ impl Filter {
             let sinusoid = self.construct_cosine_wave(minima_idx, wave_length);
             let correlation = self.calculate_correlation(&self.ongoing_wave, &sinusoid);
 
-            if correlation > self.threshold_sinusoid {
+            if correlation > self.sinusoid_threshold {
                 // Detected slow wave
                 self.refractory_samples_to_skip = self.refractory_period;
                 return true;
@@ -203,7 +203,7 @@ impl PyFilter {
         max_threshold_signal: f64,
         refractory_period: usize,
         delay_to_up_state: usize,
-        threshold_sinusoid: f64,
+        sinusoid_threshold: f64,
         logging: bool,
     ) -> Self {
         let bounds: Vec<f64> = vec![f0_l, f0_h];
@@ -230,7 +230,7 @@ impl PyFilter {
                 delay_to_up_state,
                 absolute_min_threshold: 0.0,
                 absolute_max_threshold: 0.0,
-                threshold_sinusoid,
+                sinusoid_threshold,
                 logging,
             },
         }
@@ -260,7 +260,7 @@ pub extern "C" fn create_filter(
     max_threshold_signal: f64,
     refractory_period: usize,
     delay_to_up_state: usize,
-    threshold_sinusoid: f64,
+    sinusoid_threshold: f64,
     logging: bool,
 ) -> *mut c_void {
     let bounds: Vec<f64> = vec![f0_l, f0_h];
@@ -286,7 +286,7 @@ pub extern "C" fn create_filter(
         delay_to_up_state,
         absolute_min_threshold: 0.0,
         absolute_max_threshold: 0.0,
-        threshold_sinusoid,
+        sinusoid_threshold,
         logging,
     };
     let boxed_state = Box::new(state);

@@ -2,7 +2,7 @@
 pub struct SlowWaveDetectorConfig {
     pub filter_id: String,
     pub refractory_period: usize,
-    pub threshold_sinusoid: f64,
+    pub sinusoid_threshold: f64,
     pub absolute_min_threshold: f64,
     pub absolute_max_threshold: f64,
 }
@@ -88,7 +88,7 @@ impl DetectorInstance for SlowWaveDetector {
             let sinusoid = self.construct_cosine_wave(minima_idx, wave_length);
             let correlation = self.calculate_correlation(&self.ongoing_wave, &sinusoid);
 
-            if correlation > self.threshold_sinusoid {
+            if correlation > self.sinusoid_threshold {
                 // Detected slow wave
                 self.refractory_samples_to_skip = self.refractory_period;
                 return true;

@@ -56,14 +56,14 @@ impl PySignalProcessor {
         &mut self,
         id: String,
         filter_id: String,
-        threshold_sinusoid: f64,
+        sinusoid_threshold: f64,
         absolute_min_threshold: f64,
         absolute_max_threshold: f64,
     ) {
         let config = SlowWaveDetectorConfig {
             id,
             filter_id,
-            threshold_sinusoid,
+            sinusoid_threshold,
             absolute_min_threshold,
             absolute_max_threshold,
         };

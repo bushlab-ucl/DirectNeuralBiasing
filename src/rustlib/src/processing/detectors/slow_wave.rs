@@ -6,7 +6,7 @@ use super::DetectorInstance;
 pub struct SlowWaveDetectorConfig {
     pub id: String,
     pub filter_id: String,
-    pub threshold_sinusoid: f64,
+    pub sinusoid_threshold: f64,
     pub absolute_min_threshold: f64,
     pub absolute_max_threshold: f64,
 }
@@ -124,7 +124,7 @@ impl SlowWaveDetector {
             let correlation = self.calculate_correlation(&sinusoid);
 
             // Check if the correlation with a sinusoidal wave exceeds the threshold
-            if correlation > self.config.threshold_sinusoid {
+            if correlation > self.config.sinusoid_threshold {
                 results.insert(format!("detectors:{}:confidence", detector_id), correlation);
                 return true;
             }

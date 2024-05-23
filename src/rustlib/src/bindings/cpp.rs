@@ -18,7 +18,7 @@
 //     max_threshold_signal: f64,
 //     refractory_period: usize,
 //     delay_to_up_state: usize,
-//     threshold_sinusoid: f64,
+//     sinusoid_threshold: f64,
 //     logging: bool,
 // ) -> *mut c_void {
 //     let bounds: Vec<f64> = vec![f0_l, f0_h];
@@ -44,7 +44,7 @@
 //         delay_to_up_state,
 //         absolute_min_threshold: 0.0,
 //         absolute_max_threshold: 0.0,
-//         threshold_sinusoid,
+//         sinusoid_threshold,
 //         logging,
 //     };
 //     let boxed_state = Box::new(state);
