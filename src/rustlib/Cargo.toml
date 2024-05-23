@@ -1,6 +1,6 @@
 [package]
 name = "direct-neural-biasing"
-version = "0.6.1"
+version = "0.6.2"
 authors = ["Daniel Humphries <d.humphries@ucl.ac.uk>"]
 description = "A Rust library for low-latency, closed-loop neuroscience research"
 license = "CC-BY-NC-4.0"
