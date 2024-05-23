@@ -1,13 +1,21 @@
-// use crate::processing::process_signal::PyFilter;
-// use pyo3::prelude::*;
+//! Direct Neural Biasing is a rust package for the real time, closed-loop stimulation of neurons.
+//!
+//! It is being developed by the Human Electrophysiology lab at UCL.
+//!
+//! It is currently in development.
+//!
+//! It's primarily written in Rust, but has bindings for Python and (soon) C++, to interface with Blackrock Microsystems devices for lab use.
 
+/// - Local is a test module for Rust users, to debug the processing module.
+#[cfg(not(feature = "python-extension"))]
+pub mod local;
+
+/// - Processing is the main module, it has code for the signal processor, which itself is split up into filters, detectors, and triggers (for now).
 pub mod processing;
-pub mod tests;
-pub mod utils;
 
-// #[pymodule]
-// #[pyo3(name = "direct_neural_biasing")]
-// fn direct_neural_biasing(_py: Python, m: &PyModule) -> PyResult<()> {
-//     m.add_class::<PyFilter>()?;
-//     Ok(())
-// }
+/// - Tests contains some tests for the Blackrock C++ bindings.
+#[cfg(not(feature = "python-extension"))]
+pub mod tests;
+
+/// - Utility functions, such as reading and writing files.
+pub mod utils;
