@@ -6,7 +6,7 @@ use super::{DetectorInstance, RingBuffer, Statistics};
 pub struct ThresholdDetectorConfig {
     pub id: String,
     pub filter_id: String,
-    pub threshold: f64,
+    pub z_score_threshold: f64,
     pub buffer_size: usize,
     pub sensitivity: f64,
 }
@@ -60,7 +60,7 @@ impl DetectorInstance for ThresholdDetector {
             .buffer
             .buffer
             .iter()
-            .filter(|&&value| value > self.config.threshold)
+            .filter(|&&value| value > self.config.z_score_threshold)
             .count();
 
         // Calculate confidence as a percentage of samples above the threshold regardless of detection status

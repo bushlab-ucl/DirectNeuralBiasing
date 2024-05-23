@@ -32,7 +32,7 @@ pub fn run() -> io::Result<()> {
     let ied_detector_config = ThresholdDetectorConfig {
         id: "ied_detector".to_string(),
         filter_id: "butterworth".to_string(),
-        threshold: 5.0,
+        z_score_threshold: 5.0,
         buffer_size: 100,
         sensitivity: 0.2,
     };
