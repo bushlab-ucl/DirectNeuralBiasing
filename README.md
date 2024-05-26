@@ -204,3 +204,46 @@ impl SlowWaveDetector {
     fn calculate_correlation(&self, sinusoid: &Vec<f64>) -> f64 { ... }
 }
 ```
+
+## Triggers
+
+Triggers are activated based on the detector outputs and manage the event response.
+
+### `PulseTrigger` Struct
+
+1. **Configuration Struct**: `PulseTriggerConfig `
+
+```rust
+pub struct PulseTriggerConfig {
+    pub id: String,
+    pub activation_detector_id: String,
+    pub inhibition_detector_id: String,
+    pub activation_cooldown: Duration,
+    pub inhibition_cooldown: Duration,
+}
+```
+
+2. **PulseTrigger Struct**: `PulseTrigger`
+
+```rust
+pub struct PulseTrigger {
+    config: PulseTriggerConfig,
+    last_activation_time: Option<Instant>,
+    last_inhibition_time: Option<Instant>,
+}
+```
+
+3. **PulseTrigger Methods**: `PulseTrigger`
+
+```rust
+impl TriggerInstance for PulseTrigger {
+    fn id(&self) -> &str { ... }
+    fn evaluate(&mut self, results: &mut HashMap<String, f64>, id: &str) { ... }
+}
+```
+
+```rust
+impl TriggerInstance for PulseTrigger {
+    pub fn new(config: PulseTriggerConfig) -> Self { ... }
+}
+```
