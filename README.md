@@ -16,12 +16,6 @@ Direct Neural Biasing is a Rust package developed by the Human Electrophysiology
 - **src/pythonlib** - Example Python code for importing rust dnb module functions for python work.
 - **src/cpplib** - C++ code for interfacing with Blackrock NSP system and NPlay. Pulls 'extern c' functions from src/Rustlib (wip)
 
-#### Some Other Loose Bits:
-
-- **Rust DNB Server (rustlib)** - Generates a sample LFP signal and occasional Interictal spikes and SWRs. Streams to :8080.
-- **Rust DNB Client (rustlib)** - Listens to port 8080 and outputs signal to terminal.
-- **BlackrockNSP (cpplib)** - Visual studio project for connecting to realtime NSP/NPlay stream to run DNB closed-loop code.
-
 ## Structure and Use of `SignalProcessor` in Rust
 
 ### Rust Module Overview
@@ -40,7 +34,18 @@ The main submodule is `processing`, which includes:
    ```rust
    pub struct SignalProcessorConfig {
        pub verbose: bool,
-       pub log_to_file: bool,
        pub downsample_rate: usize,
+   }
+   ```
+1. **SignalProcessor Struct**: `SignalProcessor`
+   ```rust
+   pub struct SignalProcessor {
+      pub index: usize,
+      pub sample_count: usize,
+      pub filters: HashMap<String, Box<dyn FilterInstance>>,
+      pub detectors: HashMap<String, Box<dyn DetectorInstance>>,
+      pub triggers: HashMap<String, Box<dyn TriggerInstance>>,
+      pub config: SignalProcessorConfig,
+      pub results: HashMap<String, f64>,
    }
    ```
