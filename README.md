@@ -64,11 +64,7 @@ pub struct SignalProcessor {
     pub config: SignalProcessorConfig,
     pub results: HashMap<String, f64>,
 }
-```
 
-3. **SignalProcessor Methods**: `SignalProcessor`
-
-```rust
 impl SignalProcessor {
     pub fn new(config: SignalProcessorConfig) -> Self { ... }
     pub fn add_filter(&mut self, filter: Box<dyn FilterInstance>) { ... }
