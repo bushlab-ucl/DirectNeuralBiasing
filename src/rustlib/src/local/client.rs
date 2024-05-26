@@ -15,8 +15,9 @@ pub fn run() -> io::Result<()> {
     let mut buffer = [0u8; 4];
 
     let processor_config = SignalProcessorConfig {
-        logging: true,
-        downsampling_rate: 1,
+        verbose: true,
+        log_to_file: false,
+        downsample_rate: 1, // BAD - THIS SHOULD ONLY DEFINED ONCE - POTENTIAL SOURCE OF WEIRD BUG
     };
 
     let mut processor = SignalProcessor::new(processor_config);
@@ -25,6 +26,7 @@ pub fn run() -> io::Result<()> {
         id: "butterworth".to_string(),
         f0: 100.0,
         fs: 10000.0,
+        downsample_rate: 1, // BAD - THIS SHOULD ONLY DEFINED ONCE - POTENTIAL SOURCE OF WEIRD BUG
     };
     let butterworth_filter = BandPassFilter::new(filter_config);
     processor.add_filter(Box::new(butterworth_filter));

@@ -15,8 +15,9 @@ use std::collections::HashMap;
 // SIGNAL PROCESSOR COMPONENT --------------------------------------------------
 
 pub struct SignalProcessorConfig {
-    pub logging: bool,
-    pub downsampling_rate: usize,
+    pub verbose: bool,
+    pub log_to_file: bool,
+    pub downsample_rate: usize,
 }
 
 pub struct SignalProcessor {
@@ -62,10 +63,7 @@ impl SignalProcessor {
         let mut output = Vec::new();
 
         for sample in raw_samples {
-            self.index += 1;
-            self.sample_count += 1;
-
-            if self.sample_count % self.config.downsampling_rate != 0 {
+            if self.sample_count % self.config.downsample_rate != 0 {
                 continue;
             }
 
@@ -91,6 +89,9 @@ impl SignalProcessor {
             }
 
             output.push(self.results.clone());
+
+            self.index += 1;
+            self.sample_count += 1;
         }
 
         output

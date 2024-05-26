@@ -5,6 +5,7 @@ pub struct BandPassFilterConfig {
     pub id: String,
     pub f0: f64,
     pub fs: f64,
+    pub downsample_rate: usize,
 }
 
 pub struct BandPassFilter {
@@ -34,8 +35,10 @@ impl FilterInstance for BandPassFilter {
 impl BandPassFilter {
     // Constructor with Statistics initialization
     pub fn new(config: BandPassFilterConfig) -> Self {
+        let adjusted_fs = config.fs / config.downsample_rate as f64; // Adjust fs by downsample_rate
+
         let q = (2.0f64).sqrt() / 2.0; // Example for a Butterworth filter
-        let omega = 2.0 * std::f64::consts::PI * config.f0 / config.fs;
+        let omega = 2.0 * std::f64::consts::PI * config.f0 / adjusted_fs;
         let alpha = f64::sin(omega) / (2.0 * q);
 
         let b0 = q * alpha;
