@@ -54,12 +54,15 @@ The main submodule is `processing`, which includes:
    ```
 
 3. **Initialise, Add Components, Run**: `SignalProcessor`
+
    ```rust
    impl SignalProcessor {
     pub fn new(config: SignalProcessorConfig) -> Self { ... }
+
     pub fn add_filter(&mut self, filter: Box<dyn FilterInstance>) { ... }
     pub fn add_detector(&mut self, detector: Box<dyn DetectorInstance>) { ... }
     pub fn add_trigger(&mut self, trigger: Box<dyn TriggerInstance>) { ... }
+
     pub fn run(&mut self, raw_samples: Vec<f64>) -> Vec<HashMap<String, f64>> { ... }
    }
    ```
