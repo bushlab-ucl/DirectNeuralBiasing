@@ -22,7 +22,7 @@ Direct Neural Biasing is a Rust package developed by the Human Electrophysiology
 
 The main submodule is `processing`, which includes:
 
-- `SignalProcessor.rs`: Main module for SignalProcessor program.
+- `SignalProcessor.rs`: Main module.
 - `./filters`: Contains the signal filtering logic.
 - `./detectors`: Handles detection algorithms.
 - `./triggers`: Manages event triggering based on detections.
