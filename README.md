@@ -30,6 +30,10 @@ Currently only available for Windows: `Python 3.10` || `Python 3.11`
 
 The following instructions guide you through setting up and running the PySignalProcessor in Python.
 
+### Example Jupyter Notebook
+
+An example Jupyter Notebook demonstrating this process can be found in `src/pythonlib/direct-neural-biasing-demo-0.6.5.ipynb`.
+
 ### STEP 1 - Setup SignalProcessor
 
 #### 1.1 - Create Signal Processor
@@ -113,7 +117,7 @@ signal_processor.add_pulse_trigger(
 )
 ```
 
-#### Run the Signal Processor
+### STEP 2 - Run the Signal Processor
 
 Run the `PySignalProcessor` with your data. The data should be an array of raw signal samples.
 
@@ -122,10 +126,6 @@ data = [...]  # Your raw signal data array
 out = signal_processor.run(data)
 
 ```
-
-### Example Jupyter Notebook
-
-An example Jupyter Notebook demonstrating this process can be found in `src/pythonlib/direct-neural-biasing-demo-0.6.5.ipynb`.
 
 # Structure and Use of `SignalProcessor` in Rust
 
