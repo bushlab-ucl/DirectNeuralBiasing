@@ -20,7 +20,7 @@
 
 ## Installation
 
-Currently only available for `Windows`, `Python 3.10` || `Python 3.11`
+Currently only available for Windows: `Python 3.10` || `Python 3.11`
 
 ```sh
 pip install direct_neural_biasing
