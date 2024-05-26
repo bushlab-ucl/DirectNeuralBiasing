@@ -12,9 +12,11 @@ Direct Neural Biasing is a Rust package developed by the Human Electrophysiology
 
 ## Libraries
 
-- **src/rustlib** - Rust code for functions. This is where the business logic lives.
+- **src/rustlib** - Rust code. This is where the business logic lives.
 - **src/pythonlib** - Example Python code for importing rust dnb module functions into python projects.
 - **src/cpplib** - C++ code for interfacing with Blackrock NSP system and NPlay. Pulls 'extern c' functions from src/Rustlib (wip)
+
+# Using `PySignalProcessor` from `DirectNeuralBiasing` in Python
 
 # Structure and Use of `SignalProcessor` in Rust
 
