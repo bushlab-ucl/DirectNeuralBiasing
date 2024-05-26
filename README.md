@@ -20,6 +20,8 @@
 
 ## Installation
 
+Install the latest version using pip.
+
 ```sh
 $ pip install direct_neural_biasing
 ```
