@@ -28,7 +28,7 @@ The main submodule is `processing`, which includes:
 
 ## Signal Processor
 
-The Signal Processor is the backbone of the program. You can add filters, detectors, and triggers to it. It processes an array of samples in a structured manner.
+The `SignalProcessor` is the backbone of `DirectNeuralBiasing`. You can add filters, detectors, and triggers to it. It processes an array of samples in a structured manner.
 
 ### `SignalProcessor` Struct
 
