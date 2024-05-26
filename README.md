@@ -93,3 +93,19 @@ pub struct BandPassFilter {
   y: [f64; 2],
 }
 ```
+
+3. **BandPassFilter Methods**: `BandPassFilter `
+
+```rust
+impl FilterInstance for BandPassFilter {
+    fn id(&self) -> &str { ... }
+    fn process_sample(&mut self, results: &mut HashMap<String, f64>, filter_id: &str) { ... }
+}
+```
+
+```rust
+impl BandPassFilter {
+    pub fn new(config: BandPassFilterConfig) -> Self { ... }
+    fn calculate_output(&mut self, input: f64) -> f64 { ... }
+}
+```
