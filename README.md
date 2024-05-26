@@ -26,9 +26,9 @@ The main submodule is `processing`, which includes:
 - `detectors`: Handles detection algorithms.
 - `triggers`: Manages event triggering based on detections.
 
-### `SignalProcessor` Class in Rust
+# Rust Documentation
 
-#### Example Usage
+### `SignalProcessor` Class
 
 1. **Configuration Struct**: `SignalProcessorConfig`
 
@@ -63,3 +63,38 @@ The main submodule is `processing`, which includes:
     pub fn run(&mut self, raw_samples: Vec<f64>) -> Vec<HashMap<String, f64>> { ... }
    }
    ```
+
+### Filters
+
+Filters are used to preprocess the raw neural signals. An example filter is the `BandPassFilter`.
+
+### `BandPassFilter` Class
+
+1. **Configuration Struct**: `BandPassFilterConfig `
+
+```rust
+pub struct BandPassFilterConfig {
+pub id: String,
+pub f0: f64,
+pub fs: f64,
+pub downsample_rate: usize,
+}
+
+pub struct BandPassFilter {
+config: BandPassFilterConfig,
+a: [f64; 3],
+b: [f64; 3],
+x: [f64; 2],
+y: [f64; 2],
+}
+
+impl FilterInstance for BandPassFilter {
+fn id(&self) -> &str { ... }
+fn process_sample(&mut self, results: &mut HashMap<String, f64>, filter_id: &str) { ... }
+}
+
+impl BandPassFilter {
+pub fn new(config: BandPassFilterConfig) -> Self { ... }
+fn calculate_output(&mut self, input: f64) -> f64 { ... }
+}
+```
