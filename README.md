@@ -28,7 +28,11 @@ The main submodule is `processing`, which includes:
 
 # Rust Documentation
 
-### `SignalProcessor`
+## Signal Processor
+
+The Signal Processor is the backbone of the program. You can add filters, detectors, and triggers to it, and it manages runs them in a structured manner on an arrary of samples.
+
+### `SignalProcessor` Struct
 
 1. **Configuration Struct**: `SignalProcessorConfig`
 
@@ -58,19 +62,9 @@ pub struct SignalProcessor {
 ```rust
 impl SignalProcessor {
     pub fn new(config: SignalProcessorConfig) -> Self { ... }
-}
-```
-
-```rust
-impl SignalProcessor {
     pub fn add_filter(&mut self, filter: Box<dyn FilterInstance>) { ... }
     pub fn add_detector(&mut self, detector: Box<dyn DetectorInstance>) { ... }
     pub fn add_trigger(&mut self, trigger: Box<dyn TriggerInstance>) { ... }
-}
-```
-
-```rust
-impl SignalProcessor {
     pub fn run(&mut self, raw_samples: Vec<f64>) -> Vec<HashMap<String, f64>> { ... }
 }
 ```
@@ -79,7 +73,7 @@ impl SignalProcessor {
 
 Filters are used to preprocess the raw signals. An example filter is the `BandPassFilter`.
 
-### `BandPassFilter`
+### `BandPassFilter` Struct
 
 1. **Configuration Struct**: `BandPassFilterConfig `
 
@@ -117,5 +111,48 @@ impl FilterInstance for BandPassFilter {
 impl BandPassFilter {
     pub fn new(config: BandPassFilterConfig) -> Self { ... }
     fn calculate_output(&mut self, input: f64) -> f64 { ... }
+}
+```
+
+## Detectors
+
+Detectors analyze the filtered signals and detect specific events.
+
+### `ThresholdDetector` Struct
+
+1. **Configuration Struct**: `ThresholdDetectorConfig  `
+
+```rust
+pub struct ThresholdDetectorConfig {
+    pub id: String,
+    pub filter_id: String,
+    pub threshold: f64,
+    pub buffer_size: usize,
+    pub sensitivity: f64,
+}
+```
+
+2. **ThresholdDetector Struct**: `ThresholdDetector  `
+
+```rust
+pub struct ThresholdDetector {
+    config: ThresholdDetectorConfig,
+    buffer: RingBuffer,
+    statistics: Statistics,
+}
+```
+
+3. **ThresholdDetector Methods**: `ThresholdDetector `
+
+```rust
+impl DetectorInstance for ThresholdDetector {
+    fn id(&self) -> &str { ... }
+    fn process_sample(&mut self, results: &mut HashMap<String, f64>, index: usize, detector_id: &str) { ... }
+}
+```
+
+```rust
+impl ThresholdDetector {
+    pub fn new(config: ThresholdDetectorConfig) -> Self { ... }
 }
 ```
