@@ -43,13 +43,13 @@ pub struct SignalProcessorConfig {
 
 ```rust
 pub struct SignalProcessor {
-  pub index: usize,
-  pub sample_count: usize,
-  pub filters: HashMap<String, Box<dyn FilterInstance>>,
-  pub detectors: HashMap<String, Box<dyn DetectorInstance>>,
-  pub triggers: HashMap<String, Box<dyn TriggerInstance>>,
-  pub config: SignalProcessorConfig,
-  pub results: HashMap<String, f64>,
+    pub index: usize,
+    pub sample_count: usize,
+    pub filters: HashMap<String, Box<dyn FilterInstance>>,
+    pub detectors: HashMap<String, Box<dyn DetectorInstance>>,
+    pub triggers: HashMap<String, Box<dyn TriggerInstance>>,
+    pub config: SignalProcessorConfig,
+    pub results: HashMap<String, f64>,
 }
 ```
 
@@ -57,11 +57,11 @@ pub struct SignalProcessor {
 
 ```rust
 impl SignalProcessor {
-pub fn new(config: SignalProcessorConfig) -> Self { ... }
-pub fn add_filter(&mut self, filter: Box<dyn FilterInstance>) { ... }
-pub fn add_detector(&mut self, detector: Box<dyn DetectorInstance>) { ... }
-pub fn add_trigger(&mut self, trigger: Box<dyn TriggerInstance>) { ... }
-pub fn run(&mut self, raw_samples: Vec<f64>) -> Vec<HashMap<String, f64>> { ... }
+    pub fn new(config: SignalProcessorConfig) -> Self { ... }
+    pub fn add_filter(&mut self, filter: Box<dyn FilterInstance>) { ... }
+    pub fn add_detector(&mut self, detector: Box<dyn DetectorInstance>) { ... }
+    pub fn add_trigger(&mut self, trigger: Box<dyn TriggerInstance>) { ... }
+    pub fn run(&mut self, raw_samples: Vec<f64>) -> Vec<HashMap<String, f64>> { ... }
 }
 ```
 
@@ -75,10 +75,10 @@ Filters are used to preprocess the raw signals. An example filter is the `BandPa
 
 ```rust
 pub struct BandPassFilterConfig {
-  pub id: String,
-  pub f0: f64,
-  pub fs: f64,
-  pub downsample_rate: usize,
+    pub id: String,
+    pub f0: f64,
+    pub fs: f64,
+    pub downsample_rate: usize,
 }
 ```
 
@@ -86,11 +86,11 @@ pub struct BandPassFilterConfig {
 
 ```rust
 pub struct BandPassFilter {
-  config: BandPassFilterConfig,
-  a: [f64; 3],
-  b: [f64; 3],
-  x: [f64; 2],
-  y: [f64; 2],
+    config: BandPassFilterConfig,
+    a: [f64; 3],
+    b: [f64; 3],
+    x: [f64; 2],
+    y: [f64; 2],
 }
 ```
 
