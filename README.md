@@ -28,47 +28,48 @@ The main submodule is `processing`, which includes:
 
 # Rust Documentation
 
-### `SignalProcessor` Class
+### `SignalProcessor`
 
 1. **Configuration Struct**: `SignalProcessorConfig`
 
-   ```rust
-   pub struct SignalProcessorConfig {
-       pub verbose: bool,
-       pub downsample_rate: usize,
-   }
-   ```
+```rust
+pub struct SignalProcessorConfig {
+    pub verbose: bool,
+    pub downsample_rate: usize,
+}
+```
 
 2. **SignalProcessor Struct**: `SignalProcessor`
 
-   ```rust
-   pub struct SignalProcessor {
-      pub index: usize,
-      pub sample_count: usize,
-      pub filters: HashMap<String, Box<dyn FilterInstance>>,
-      pub detectors: HashMap<String, Box<dyn DetectorInstance>>,
-      pub triggers: HashMap<String, Box<dyn TriggerInstance>>,
-      pub config: SignalProcessorConfig,
-      pub results: HashMap<String, f64>,
-   }
-   ```
+```rust
+pub struct SignalProcessor {
+  pub index: usize,
+  pub sample_count: usize,
+  pub filters: HashMap<String, Box<dyn FilterInstance>>,
+  pub detectors: HashMap<String, Box<dyn DetectorInstance>>,
+  pub triggers: HashMap<String, Box<dyn TriggerInstance>>,
+  pub config: SignalProcessorConfig,
+  pub results: HashMap<String, f64>,
+}
+```
 
 3. **SignalProcessor Methods**: `SignalProcessor`
-   ```rust
-   impl SignalProcessor {
-    pub fn new(config: SignalProcessorConfig) -> Self { ... }
-    pub fn add_filter(&mut self, filter: Box<dyn FilterInstance>) { ... }
-    pub fn add_detector(&mut self, detector: Box<dyn DetectorInstance>) { ... }
-    pub fn add_trigger(&mut self, trigger: Box<dyn TriggerInstance>) { ... }
-    pub fn run(&mut self, raw_samples: Vec<f64>) -> Vec<HashMap<String, f64>> { ... }
-   }
-   ```
 
-### Filters
+```rust
+impl SignalProcessor {
+pub fn new(config: SignalProcessorConfig) -> Self { ... }
+pub fn add_filter(&mut self, filter: Box<dyn FilterInstance>) { ... }
+pub fn add_detector(&mut self, detector: Box<dyn DetectorInstance>) { ... }
+pub fn add_trigger(&mut self, trigger: Box<dyn TriggerInstance>) { ... }
+pub fn run(&mut self, raw_samples: Vec<f64>) -> Vec<HashMap<String, f64>> { ... }
+}
+```
 
-Filters are used to preprocess the raw neural signals. An example filter is the `BandPassFilter`.
+## Filters
 
-### `BandPassFilter` Class
+Filters are used to preprocess the raw signals. An example filter is the `BandPassFilter`.
+
+### `BandPassFilter`
 
 1. **Configuration Struct**: `BandPassFilterConfig `
 
