@@ -1,4 +1,4 @@
-# `Direct Neural Biasing`
+# `DirectNeuralBiasing`
 
 ## Overview
 
