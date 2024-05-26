@@ -195,11 +195,6 @@ impl DetectorInstance for SlowWaveDetector {
 ```rust
 impl SlowWaveDetector {
     pub fn new(config: SlowWaveDetectorConfig) -> Self { ... }
-}
-```
-
-```rust
-impl SlowWaveDetector {
     fn analyse_wave(&mut self, results: &mut HashMap<String, f64>, detector_id: &str) -> bool { ... }
     fn find_wave_minima(&self) -> usize { ... }
     fn construct_cosine_wave(&self, peak_idx: usize, wave_length: usize) -> Vec<f64> { ... }
