@@ -76,7 +76,7 @@ Filters are used to preprocess the raw signals. An example filter is the `BandPa
 
 ### `BandPassFilter` Struct
 
-1. **Configuration Struct**: `BandPassFilterConfig `
+1. **Configuration Struct**: `BandPassFilterConfig`
 
 ```rust
 pub struct BandPassFilterConfig {
@@ -87,7 +87,7 @@ pub struct BandPassFilterConfig {
 }
 ```
 
-2. **BandPassFilter Struct**: `BandPassFilter `
+2. **BandPassFilter Struct**: `BandPassFilter`
 
 ```rust
 pub struct BandPassFilter {
@@ -99,7 +99,7 @@ pub struct BandPassFilter {
 }
 ```
 
-3. **BandPassFilter Methods**: `BandPassFilter `
+3. **BandPassFilter Methods**: `BandPassFilter`
 
 ```rust
 impl FilterInstance for BandPassFilter {
@@ -121,7 +121,7 @@ Detectors analyze the filtered signals and detect specific events.
 
 ### `ThresholdDetector` Struct
 
-1. **Configuration Struct**: `ThresholdDetectorConfig  `
+1. **Configuration Struct**: `ThresholdDetectorConfig`
 
 ```rust
 pub struct ThresholdDetectorConfig {
@@ -133,7 +133,7 @@ pub struct ThresholdDetectorConfig {
 }
 ```
 
-2. **ThresholdDetector Struct**: `ThresholdDetector  `
+2. **ThresholdDetector Struct**: `ThresholdDetector`
 
 ```rust
 pub struct ThresholdDetector {
@@ -143,7 +143,7 @@ pub struct ThresholdDetector {
 }
 ```
 
-3. **ThresholdDetector Methods**: `ThresholdDetector `
+3. **ThresholdDetector Methods**: `ThresholdDetector`
 
 ```rust
 impl DetectorInstance for ThresholdDetector {
@@ -155,5 +155,54 @@ impl DetectorInstance for ThresholdDetector {
 ```rust
 impl ThresholdDetector {
     pub fn new(config: ThresholdDetectorConfig) -> Self { ... }
+}
+```
+
+### `SlowWaveDetector` Struct
+
+1. **Configuration Struct**: `SlowWaveDetectorConfig`
+
+```rust
+pub struct SlowWaveDetectorConfig {
+    pub id: String,
+    pub filter_id: String,
+    pub threshold_sinusoid: f64,
+    pub absolute_min_threshold: f64,
+    pub absolute_max_threshold: f64,
+}
+```
+
+2. **SlowWaveDetector Struct**: `SlowWaveDetector`
+
+```rust
+pub struct SlowWaveDetector {
+    config: SlowWaveDetectorConfig,
+    ongoing_wave: Vec<f64>,
+    ongoing_wave_idx: Vec<usize>,
+    last_sample: f64,
+}
+```
+
+3. **SlowWaveDetector Methods**: `SlowWaveDetector`
+
+```rust
+impl DetectorInstance for SlowWaveDetector {
+    fn id(&self) -> &str { ... }
+    fn process_sample(&mut self, results: &mut HashMap<String, f64>, index: usize, detector_id: &str) { ... }
+}
+```
+
+```rust
+impl SlowWaveDetector {
+    pub fn new(config: SlowWaveDetectorConfig) -> Self { ... }
+}
+```
+
+```rust
+impl SlowWaveDetector {
+    fn analyse_wave(&mut self, results: &mut HashMap<String, f64>, detector_id: &str) -> bool { ... }
+    fn find_wave_minima(&self) -> usize { ... }
+    fn construct_cosine_wave(&self, peak_idx: usize, wave_length: usize) -> Vec<f64> { ... }
+    fn calculate_correlation(&self, sinusoid: &Vec<f64>) -> f64 { ... }
 }
 ```
