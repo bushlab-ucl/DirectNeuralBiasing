@@ -330,3 +330,13 @@ impl PulseTrigger {
     pub fn new(config: PulseTriggerConfig) -> Self { ... }
 }
 ```
+
+# Known Bugs
+
+### summary/description build bug
+
+- Currently exporting to PyPi and Cargo require slightly different config.
+- PyPi needs `summary` in [package.metadata.maturin]
+- Cargo needs `description` in [package]
+- There's probably a way to make it work in both cases, but I haven't found it yet.
+- For now you need to comment and uncomment them to post.
