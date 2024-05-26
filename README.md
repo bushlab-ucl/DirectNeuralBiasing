@@ -127,7 +127,7 @@ out = signal_processor.run(data)
 - `src/pythonlib` - Example Python code for importing rust dnb module functions into python projects.
 - `src/cpplib` - C++ code for interfacing with Blackrock NSP system and NPlay. Pulls 'extern c' functions from src/Rustlib (wip)
 
-## Documentation
+### Documentation
 
 This README may be out of date, check out the docs at:
 **Crates.io**: https://crates.io/crates/direct-neural-biasing
