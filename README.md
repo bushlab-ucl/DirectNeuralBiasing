@@ -20,14 +20,36 @@
 
 ## Installation
 
-Currently only available for Windows: `Python 3.10` || `Python 3.11`
-
 ```sh
 pip install direct_neural_biasing
 ```
 
-// how to install from pip
-// how to setup PySignalProcessor, add filter, add threshold detector, add slowwave detector, add pulse trigger, run signalprocessor
+Currently only available for Windows: `Python 3.10` || `Python 3.11`
+
+## Running the PySignalProcessor
+
+The following instructions guide you through setting up and running the PySignalProcessor in Python.
+
+### STEP 1 - Setup SignalProcessor
+
+#### 1.1 - Create Signal Processor
+
+First, create a PySignalProcessor instance. Set the verbose flag to True for debugging output and specify the downsample_rate.
+
+```py
+import direct_neural_biasing as dnb
+
+verbose = False  # verbose = True gives verbose output in results object for debugging
+downsample_rate = 1  # 1 = full sampling rate. Higher numbers create downsampling. Useful for large files and demos
+
+signal_processor = dnb.PySignalProcessor(verbose, downsample_rate)
+```
+
+-
+-
+-
+-
+-
 
 # Structure and Use of `SignalProcessor` in Rust
 
