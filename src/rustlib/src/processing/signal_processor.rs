@@ -16,7 +16,6 @@ use std::collections::HashMap;
 
 pub struct SignalProcessorConfig {
     pub verbose: bool,
-    pub log_to_file: bool,
     pub downsample_rate: usize,
 }
 

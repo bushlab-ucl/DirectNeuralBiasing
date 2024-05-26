@@ -16,7 +16,6 @@ pub fn run() -> io::Result<()> {
 
     let processor_config = SignalProcessorConfig {
         verbose: true,
-        log_to_file: false,
         downsample_rate: 1, // BAD - THIS SHOULD ONLY DEFINED ONCE - POTENTIAL SOURCE OF WEIRD BUG
     };
 
@@ -66,8 +65,8 @@ pub fn run() -> io::Result<()> {
         id: "main_trigger".to_string(),
         activation_detector_id: "slow_wave_detector".to_string(),
         inhibition_detector_id: "ied_detector".to_string(),
-        activation_cooldown: Duration::from_secs(2),
-        inhibition_cooldown: Duration::from_secs(1),
+        activation_cooldown: Duration::from_millis(2000),
+        inhibition_cooldown: Duration::from_millis(1000),
     };
     let main_trigger = PulseTrigger::new(trigger_config);
     processor.add_trigger(Box::new(main_trigger));
