@@ -30,7 +30,7 @@ The main submodule is `processing`, which includes:
 
 #### Example Usage
 
-1. **SignalProcessorConfig Struct**: `SignalProcessorConfig`
+1. **Configuration Struct**: `SignalProcessorConfig`
 
    ```rust
    pub struct SignalProcessorConfig {
@@ -53,7 +53,7 @@ The main submodule is `processing`, which includes:
    }
    ```
 
-3. **Adding Components**: `SignalProcessor`
+3. **Initialise, Add Components, Run**: `SignalProcessor`
    ```rust
    impl SignalProcessor {
     pub fn new(config: SignalProcessorConfig) -> Self { ... }
