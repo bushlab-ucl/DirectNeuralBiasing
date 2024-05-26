@@ -72,23 +72,23 @@ Filters are used to preprocess the raw neural signals. An example filter is the 
 
 1. **Configuration Struct**: `BandPassFilterConfig `
 
-   ```rust
-   pub struct BandPassFilterConfig {
-      pub id: String,
-      pub f0: f64,
-      pub fs: f64,
-      pub downsample_rate: usize,
-   }
-   ```
+```rust
+pub struct BandPassFilterConfig {
+  pub id: String,
+  pub f0: f64,
+  pub fs: f64,
+  pub downsample_rate: usize,
+}
+```
 
-1. **BandPassFilter Struct**: `BandPassFilter `
+2. **BandPassFilter Struct**: `BandPassFilter `
 
-   ```rust
-   pub struct BandPassFilter {
-      config: BandPassFilterConfig,
-      a: [f64; 3],
-      b: [f64; 3],
-      x: [f64; 2],
-      y: [f64; 2],
-   }
-   ```
+```rust
+pub struct BandPassFilter {
+  config: BandPassFilterConfig,
+  a: [f64; 3],
+  b: [f64; 3],
+  x: [f64; 2],
+  y: [f64; 2],
+}
+```
