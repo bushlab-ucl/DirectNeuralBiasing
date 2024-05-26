@@ -2,7 +2,7 @@
 
 ## Overview
 
-`DirectNeuralBiasing` is a Rust package developed by the Human Electrophysiology lab at UCL for closed-loop stimulation of neurons in real-time. The library is designed to interface with Blackrock Microsystems devices for lab use. It is written in Rust with bindings for Python and soon for C++.
+`DirectNeuralBiasing` is a Rust package developed by the `Human Electrophysiology Lab` at `UCL` for closed-loop stimulation of neurons in real-time. The library is designed to interface with Blackrock Microsystems devices for lab use. It is written in `Rust` with bindings for `Python` and soon `C++`.
 
 ## Features
 
