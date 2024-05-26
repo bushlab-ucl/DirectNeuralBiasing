@@ -30,8 +30,6 @@ Currently only available for Windows: `Python 3.10` || `Python 3.11`
 
 The following instructions guide you through setting up and running the PySignalProcessor in Python.
 
-### Example Jupyter Notebook
-
 An example Jupyter Notebook demonstrating this process can be found in `src/pythonlib/direct-neural-biasing-demo-0.6.5.ipynb`.
 
 ### STEP 1 - Setup SignalProcessor
