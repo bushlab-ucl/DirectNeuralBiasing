@@ -14,7 +14,7 @@
 
 - `src/rustlib` - Rust code. This is where the business logic lives.
 - `src/pythonlib` - Example Python code for importing rust dnb module functions into python projects.
-- `src/cpplib` - C++ code for interfacing with Blackrock NSP system and NPlay. Pulls 'extern c' functions from src/Rustlib (wip)
+- `src/cpplib` - C++ code for interfacing with Blackrock NSP system and NPlay.
 
 # Using the `PySignalProcessor` from `DirectNeuralBiasing` in Python
 
