@@ -18,9 +18,9 @@ Direct Neural Biasing is a Rust package developed by the Human Electrophysiology
 
 # Structure and Use of `SignalProcessor` in Rust
 
-### Rust Module Overview
-
 **Crates.io**: https://crates.io/crates/direct-neural-biasing
+
+### Rust Module Overview
 
 The main submodule is `processing`, which includes:
 
