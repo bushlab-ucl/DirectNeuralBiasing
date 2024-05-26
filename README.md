@@ -109,9 +109,7 @@ impl FilterInstance for BandPassFilter {
     fn id(&self) -> &str { ... }
     fn process_sample(&mut self, results: &mut HashMap<String, f64>, filter_id: &str) { ... }
 }
-```
 
-```rust
 impl BandPassFilter {
     pub fn new(config: BandPassFilterConfig) -> Self { ... }
     fn calculate_output(&mut self, input: f64) -> f64 { ... }
@@ -153,9 +151,7 @@ impl DetectorInstance for ThresholdDetector {
     fn id(&self) -> &str { ... }
     fn process_sample(&mut self, results: &mut HashMap<String, f64>, index: usize, detector_id: &str) { ... }
 }
-```
 
-```rust
 impl ThresholdDetector {
     pub fn new(config: ThresholdDetectorConfig) -> Self { ... }
 }
@@ -193,9 +189,7 @@ impl DetectorInstance for SlowWaveDetector {
     fn id(&self) -> &str { ... }
     fn process_sample(&mut self, results: &mut HashMap<String, f64>, index: usize, detector_id: &str) { ... }
 }
-```
 
-```rust
 impl SlowWaveDetector {
     pub fn new(config: SlowWaveDetectorConfig) -> Self { ... }
     fn analyse_wave(&mut self, results: &mut HashMap<String, f64>, detector_id: &str) -> bool { ... }
@@ -240,9 +234,7 @@ impl TriggerInstance for PulseTrigger {
     fn id(&self) -> &str { ... }
     fn evaluate(&mut self, results: &mut HashMap<String, f64>, id: &str) { ... }
 }
-```
 
-```rust
 impl PulseTrigger {
     pub fn new(config: PulseTriggerConfig) -> Self { ... }
 }
