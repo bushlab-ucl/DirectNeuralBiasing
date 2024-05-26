@@ -16,7 +16,13 @@
 - `src/pythonlib` - Example Python code for importing rust dnb module functions into python projects.
 - `src/cpplib` - C++ code for interfacing with Blackrock NSP system and NPlay. Pulls 'extern c' functions from src/Rustlib (wip)
 
-# Using `PySignalProcessor` from `DirectNeuralBiasing` in Python
+# Using the `PySignalProcessor` from `DirectNeuralBiasing` in Python
+
+## Installation
+
+```sh
+pip install direct_neural_biasing # Only works for Windows, Python 3.10 || Python 3.11
+```
 
 // how to install from pip
 // how to setup PySignalProcessor, add filter, add threshold detector, add slowwave detector, add pulse trigger, run signalprocessor
