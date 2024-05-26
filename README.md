@@ -20,10 +20,10 @@
 
 ## Installation
 
-Install `DirectNeuralBiasing` using pip:
+Install and/or Upgrade `DirectNeuralBiasing` using pip:
 
 ```sh
-$ pip install direct_neural_biasing
+$ pip install direct_neural_biasing --upgrade
 ```
 
 Currently only available for Windows: `Python 3.10` || `Python 3.11`
