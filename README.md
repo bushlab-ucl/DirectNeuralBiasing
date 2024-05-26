@@ -10,6 +10,12 @@
 - Modular structure with filters, detectors, and triggers.
 - Python bindings for ease of use.
 
+## Libraries
+
+- `src/rustlib` - Rust code. This is where the business logic lives.
+- `src/pythonlib` - Example Python code for importing rust dnb module functions into python projects.
+- `src/cpplib` - C++ code for interfacing with Blackrock NSP system and NPlay. Pulls 'extern c' functions from src/Rustlib (wip)
+
 # Using the `PySignalProcessor` from `DirectNeuralBiasing` in Python
 
 ## Installation
@@ -120,12 +126,6 @@ out = signal_processor.run(data)
 ```
 
 # Structure and Use of `SignalProcessor` in Rust
-
-## Libraries
-
-- `src/rustlib` - Rust code. This is where the business logic lives.
-- `src/pythonlib` - Example Python code for importing rust dnb module functions into python projects.
-- `src/cpplib` - C++ code for interfacing with Blackrock NSP system and NPlay. Pulls 'extern c' functions from src/Rustlib (wip)
 
 ### Documentation
 
