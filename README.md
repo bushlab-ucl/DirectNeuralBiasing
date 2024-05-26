@@ -18,6 +18,9 @@
 
 # Using `PySignalProcessor` from `DirectNeuralBiasing` in Python
 
+// how to install from pip
+// how to setup PySignalProcessor, add filter, add threshold detector, add slowwave detector, add pulse trigger, run signalprocessor
+
 # Structure and Use of `SignalProcessor` in Rust
 
 ### Documentation
@@ -102,11 +105,7 @@ pub struct BandPassFilter {
     x: [f64; 2],
     y: [f64; 2],
 }
-```
 
-3. **BandPassFilter Methods**: `BandPassFilter`
-
-```rust
 impl FilterInstance for BandPassFilter {
     fn id(&self) -> &str { ... }
     fn process_sample(&mut self, results: &mut HashMap<String, f64>, filter_id: &str) { ... }
@@ -144,11 +143,7 @@ pub struct ThresholdDetector {
     buffer: RingBuffer,
     statistics: Statistics,
 }
-```
 
-3. **ThresholdDetector Methods**: `ThresholdDetector`
-
-```rust
 impl DetectorInstance for ThresholdDetector {
     fn id(&self) -> &str { ... }
     fn process_sample(&mut self, results: &mut HashMap<String, f64>, index: usize, detector_id: &str) { ... }
@@ -182,11 +177,7 @@ pub struct SlowWaveDetector {
     ongoing_wave_idx: Vec<usize>,
     last_sample: f64,
 }
-```
 
-3. **SlowWaveDetector Methods**: `SlowWaveDetector`
-
-```rust
 impl DetectorInstance for SlowWaveDetector {
     fn id(&self) -> &str { ... }
     fn process_sample(&mut self, results: &mut HashMap<String, f64>, index: usize, detector_id: &str) { ... }
@@ -227,11 +218,7 @@ pub struct PulseTrigger {
     last_activation_time: Option<Instant>,
     last_inhibition_time: Option<Instant>,
 }
-```
 
-3. **PulseTrigger Methods**: `PulseTrigger`
-
-```rust
 impl TriggerInstance for PulseTrigger {
     fn id(&self) -> &str { ... }
     fn evaluate(&mut self, results: &mut HashMap<String, f64>, id: &str) { ... }
