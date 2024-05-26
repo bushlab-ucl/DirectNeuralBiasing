@@ -20,7 +20,7 @@
 
 ## Installation
 
-Install and/or Upgrade `DirectNeuralBiasing` using pip:
+Install and/or upgrade `DirectNeuralBiasing` using pip:
 
 ```sh
 $ pip install direct_neural_biasing --upgrade
