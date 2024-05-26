@@ -58,9 +58,19 @@ pub struct SignalProcessor {
 ```rust
 impl SignalProcessor {
     pub fn new(config: SignalProcessorConfig) -> Self { ... }
+}
+```
+
+```rust
+impl SignalProcessor {
     pub fn add_filter(&mut self, filter: Box<dyn FilterInstance>) { ... }
     pub fn add_detector(&mut self, detector: Box<dyn DetectorInstance>) { ... }
     pub fn add_trigger(&mut self, trigger: Box<dyn TriggerInstance>) { ... }
+}
+```
+
+```rust
+impl SignalProcessor {
     pub fn run(&mut self, raw_samples: Vec<f64>) -> Vec<HashMap<String, f64>> { ... }
 }
 ```
