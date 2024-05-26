@@ -243,7 +243,7 @@ impl TriggerInstance for PulseTrigger {
 ```
 
 ```rust
-impl TriggerInstance for PulseTrigger {
+impl PulseTrigger {
     pub fn new(config: PulseTriggerConfig) -> Self { ... }
 }
 ```
