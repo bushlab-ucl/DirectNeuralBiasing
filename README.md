@@ -20,6 +20,8 @@
 
 ## Installation
 
+Install `DirectNeuralBiasing` locally using pip:
+
 ```sh
 $ pip install direct_neural_biasing
 ```
