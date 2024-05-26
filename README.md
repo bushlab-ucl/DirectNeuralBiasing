@@ -13,7 +13,7 @@ Direct Neural Biasing is a Rust package developed by the Human Electrophysiology
 ## Libraries
 
 - **src/rustlib** - Rust code for functions. This is where the business logic lives.
-- **src/pythonlib** - Example Python code for importing rust dnb module functions for python work.
+- **src/pythonlib** - Example Python code for importing rust dnb module functions into python projects.
 - **src/cpplib** - C++ code for interfacing with Blackrock NSP system and NPlay. Pulls 'extern c' functions from src/Rustlib (wip)
 
 ## Structure and Use of `SignalProcessor` in Rust
@@ -26,11 +26,11 @@ The main submodule is `processing`, which includes:
 - `detectors`: Handles detection algorithms.
 - `triggers`: Manages event triggering based on detections.
 
-# Rust Documentation
+# Rust Library Documentation
 
 ## Signal Processor
 
-The Signal Processor is the backbone of the program. You can add filters, detectors, and triggers to it, and it manages runs them in a structured manner on an arrary of samples.
+The Signal Processor is the backbone of the program. You can add filters, detectors, and triggers to it. It processes an array of samples in a structured manner.
 
 ### `SignalProcessor` Struct
 
