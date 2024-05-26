@@ -34,7 +34,7 @@ The following instructions guide you through setting up and running the PySignal
 
 #### 1.1 - Create Signal Processor
 
-First, create a PySignalProcessor instance. Set the verbose flag to True for debugging output and specify the downsample_rate.
+First, create a `PySignalProcessor` instance.
 
 ```py
 import direct_neural_biasing as dnb
@@ -45,11 +45,87 @@ downsample_rate = 1  # 1 = full sampling rate. Higher numbers create downsamplin
 signal_processor = dnb.PySignalProcessor(verbose, downsample_rate)
 ```
 
--
--
--
--
--
+#### 1.2 - Create Filter
+
+Create and add a `BandpassFilter` to the `PySignalProcessor`. Set the filter ID, center frequency (f0), and sample frequency (sample_freq).
+
+```py
+filter_id = 'simple_filter'
+f0 = 0.5  # bandpass filter center frequency
+sample_freq = 1000  # signal sample rate in Hz (example value)
+
+signal_processor.add_filter(filter_id, f0, sample_freq)
+```
+
+#### 1.3 - Create Slow Wave Detector
+
+Create and add a `SlowWaveDetector` to the `PySignalProcessor`. Specify the detector ID, filter ID to read from, sinusoid threshold, and absolute amplitude thresholds.
+
+```py
+activation_detector_id = 'slow_wave_detector'
+sinusoid_threshold = 0.8  # Between 0 and 1
+absolute_min_threshold = 0.0
+absolute_max_threshold = 100.0
+
+signal_processor.add_slow_wave_detector(
+    activation_detector_id,
+    filter_id,  # which filtered_signal should the detector read from
+    sinusoid_threshold,
+    absolute_min_threshold,
+    absolute_max_threshold
+)
+```
+
+#### 1.4 - Create Threshold Detector for IED detection
+
+Create and add a `ThresholdDetector` to the `PySignalProcessor`. Specify the detector ID, filter ID to read from, z-score threshold, buffer size, and sensitivity.
+
+```py
+inhibition_detector_id = 'ied_detector'
+z_score_threshold = 5.0  # threshold for candidate detection event
+buffer_size = 10  # length of buffer - to increase noise resistance
+sensitivity = 0.5  # Between 0 and 1. Ratio of values in buffer over threshold required to trigger an 'IED Detected' event.
+
+signal_processor.add_threshold_detector(
+    inhibition_detector_id,
+    filter_id,  # which filtered_signal should the detector read from
+    z_score_threshold,
+    buffer_size,
+    sensitivity
+)
+```
+
+#### 1.5 - Create Pulse Trigger
+
+Create and add a `PulseTrigger` to the `PySignalProcessor`. Specify the trigger ID, activation detector ID, inhibition detector ID, and cooldown durations in milliseconds.
+
+```py
+trigger_id = 'pulse_trigger'
+activation_cooldown_ms = 2000  # duration in milliseconds for cooldown after pulse event
+inhibition_cooldown_ms = 2000  # duration in milliseconds for cooldown after IED detection
+
+signal_processor.add_pulse_trigger(
+    trigger_id,
+    activation_detector_id,  # which detector triggers a pulse - SlowWave in this case
+    inhibition_detector_id,  # which detector triggers an inhibition cooldown - IED in this case
+    activation_cooldown_ms,
+    inhibition_cooldown_ms
+)
+```
+
+#### Run the Signal Processor
+
+Run the `PySignalProcessor` with your data. The data should be an array of raw signal samples.
+
+```py
+data = [...]  # Your raw signal data array
+out = signal_processor.run(data)
+
+```
+
+### Example Jupyter Notebook
+
+An example Jupyter Notebook demonstrating this process can be found in `src/pythonlib/direct-neural-biasing-demo-0.6.5.ipynb`.
 
 # Structure and Use of `SignalProcessor` in Rust
 
