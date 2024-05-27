@@ -54,8 +54,8 @@ impl DetectorInstance for SlowWaveDetector {
             .cloned()
             .unwrap_or(0.0);
 
-        // Detect zero-crossing from negative to positive
-        if filtered_sample > 0.0 && self.last_sample <= 0.0 {
+        // Detect zero-crossing from positive to negative
+        if filtered_sample < 0.0 && self.last_sample >= 0.0 {
             // Analyze the ongoing wave data if it is not empty
             if !self.ongoing_wave.is_empty() {
                 let detection = self.analyse_wave(results);
@@ -89,7 +89,7 @@ impl DetectorInstance for SlowWaveDetector {
                 self.ongoing_wave.clear();
                 self.ongoing_wave_idx.clear();
             }
-        } else if filtered_sample < 0.0 {
+        } else {
             // Store the ongoing wave data for analysis
             self.ongoing_wave.push(filtered_sample);
             self.ongoing_wave_idx.push(index);

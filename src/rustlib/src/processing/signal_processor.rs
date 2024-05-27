@@ -87,10 +87,10 @@ impl SignalProcessor {
 
         for sample in raw_samples {
             // Downsample the signal
-            if self.index % self.config.downsample_rate != 0 {
-                self.index += 1;
-                continue;
-            }
+            // if self.index % self.config.downsample_rate != 0 {
+            //     self.index += 1;
+            //     continue;
+            // }
 
             // Reset and update globals
             self.results.clear();
