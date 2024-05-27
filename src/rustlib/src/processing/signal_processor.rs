@@ -32,8 +32,8 @@ pub struct SignalProcessor {
 impl SignalProcessor {
     pub fn new(config: SignalProcessorConfig) -> Self {
         SignalProcessor {
-            index: -1,        // Start at -1 so that the first index is 0
-            sample_count: -1, // Start at -1 so that the first count is 0
+            index: 0,
+            sample_count: 0,
             filters: HashMap::new(),
             detectors: HashMap::new(),
             triggers: HashMap::new(),
@@ -62,11 +62,10 @@ impl SignalProcessor {
         let mut output = Vec::new();
 
         for sample in raw_samples {
-            self.index += 1;
-            self.sample_count += 1;
-
             // Downsample the signal
             if self.sample_count % self.config.downsample_rate != 0 {
+                self.index += 1;
+                self.sample_count += 1;
                 continue;
             }
 
@@ -92,6 +91,9 @@ impl SignalProcessor {
             }
 
             output.push(self.results.clone());
+
+            self.index += 1;
+            self.sample_count += 1;
         }
 
         output
