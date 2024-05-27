@@ -65,6 +65,7 @@ impl SignalProcessor {
             self.index += 1;
             self.sample_count += 1;
 
+            // Downsample the signal
             if self.sample_count % self.config.downsample_rate != 0 {
                 continue;
             }
