@@ -24,7 +24,7 @@ impl FilterInstance for BandPassFilter {
 
     fn process_sample(
         &mut self,
-        global_config: &SignalProcessorConfig,
+        _global_config: &SignalProcessorConfig,
         results: &mut HashMap<String, f64>,
     ) {
         if let Some(&raw_sample) = results.get("global:raw_sample") {
