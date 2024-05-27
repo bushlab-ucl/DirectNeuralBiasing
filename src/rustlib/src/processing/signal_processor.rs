@@ -21,7 +21,6 @@ pub struct SignalProcessorConfig {
 
 pub struct SignalProcessor {
     pub index: usize,
-    pub sample_count: usize,
     pub filters: HashMap<String, Box<dyn FilterInstance>>,
     pub detectors: HashMap<String, Box<dyn DetectorInstance>>,
     pub triggers: HashMap<String, Box<dyn TriggerInstance>>,
@@ -33,7 +32,6 @@ impl SignalProcessor {
     pub fn new(config: SignalProcessorConfig) -> Self {
         SignalProcessor {
             index: 0,
-            sample_count: 0,
             filters: HashMap::new(),
             detectors: HashMap::new(),
             triggers: HashMap::new(),
@@ -63,9 +61,8 @@ impl SignalProcessor {
 
         for sample in raw_samples {
             // Downsample the signal
-            if self.sample_count % self.config.downsample_rate != 0 {
+            if self.index % self.config.downsample_rate != 0 {
                 self.index += 1;
-                self.sample_count += 1;
                 continue;
             }
 
@@ -93,7 +90,6 @@ impl SignalProcessor {
             output.push(self.results.clone());
 
             self.index += 1;
-            self.sample_count += 1;
         }
 
         output
