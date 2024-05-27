@@ -174,7 +174,6 @@ pub struct SignalProcessorConfig {
 ```rust
 pub struct SignalProcessor {
     pub index: usize,
-    pub sample_count: usize,
     pub filters: HashMap<String, Box<dyn FilterInstance>>,
     pub detectors: HashMap<String, Box<dyn DetectorInstance>>,
     pub triggers: HashMap<String, Box<dyn TriggerInstance>>,
