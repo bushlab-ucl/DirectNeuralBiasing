@@ -47,10 +47,8 @@ import direct_neural_biasing as dnb
 First, create a `PySignalProcessor` instance.
 
 ```py
-import direct_neural_biasing as dnb
-
 verbose = False  # verbose = True gives verbose output in results object for debugging
-downsample_rate = 1  # 1 = full sampling rate. Higher numbers create downsampling. Useful for large files and demos
+downsample_rate = 1  # 1 = full sampling rate. Higher numbers create downsampling. Useful for large files and demos.
 
 signal_processor = dnb.PySignalProcessor(verbose, downsample_rate)
 ```
@@ -60,7 +58,7 @@ signal_processor = dnb.PySignalProcessor(verbose, downsample_rate)
 Create and add a `BandpassFilter` to the `PySignalProcessor`. Set the filter ID, center frequency (f0), and sample frequency (sample_freq).
 
 ```py
-filter_id = 'simple_filter'
+filter_id = 'simple_filter' # unique id
 f0 = 0.5  # bandpass filter center frequency
 sample_freq = 1000  # signal sample rate in Hz (example value)
 
@@ -72,7 +70,7 @@ signal_processor.add_filter(filter_id, f0, sample_freq)
 Create and add a `SlowWaveDetector` to the `PySignalProcessor`. Specify the detector ID, filter ID to read from, sinusoid threshold, and absolute amplitude thresholds.
 
 ```py
-activation_detector_id = 'slow_wave_detector'
+activation_detector_id = 'slow_wave_detector' # unique id
 sinusoid_threshold = 0.8  # Between 0 and 1
 absolute_min_threshold = 0.0
 absolute_max_threshold = 100.0
@@ -91,7 +89,7 @@ signal_processor.add_slow_wave_detector(
 Create and add a `ThresholdDetector` to the `PySignalProcessor`. Specify the detector ID, filter ID to read from, z-score threshold, buffer size, and sensitivity.
 
 ```py
-inhibition_detector_id = 'ied_detector'
+inhibition_detector_id = 'ied_detector' # unique id
 z_score_threshold = 5.0  # threshold for candidate detection event
 buffer_size = 10  # length of buffer - to increase noise resistance
 sensitivity = 0.5  # Between 0 and 1. Ratio of values in buffer over threshold required to trigger an 'IED Detected' event.
@@ -110,7 +108,7 @@ signal_processor.add_threshold_detector(
 Create and add a `PulseTrigger` to the `PySignalProcessor`. Specify the trigger ID, activation detector ID, inhibition detector ID, and cooldown durations in milliseconds.
 
 ```py
-trigger_id = 'pulse_trigger'
+trigger_id = 'pulse_trigger' # unique id
 activation_cooldown_ms = 2000  # duration in milliseconds for cooldown after pulse event
 inhibition_cooldown_ms = 2000  # duration in milliseconds for cooldown after inhibition event
 
