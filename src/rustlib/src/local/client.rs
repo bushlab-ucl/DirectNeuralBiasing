@@ -10,13 +10,15 @@ use crate::processing::filters::bandpass::{BandPassFilter, BandPassFilterConfig}
 use crate::processing::signal_processor::{SignalProcessor, SignalProcessorConfig};
 use crate::processing::triggers::pulse::{PulseTrigger, PulseTriggerConfig};
 
+const DOWNSAMPLE_RATE: usize = 1;
+
 pub fn run() -> io::Result<()> {
     let mut stream = TcpStream::connect("127.0.0.1:8080")?;
     let mut buffer = [0u8; 4];
 
     let processor_config = SignalProcessorConfig {
         verbose: true,
-        downsample_rate: 1, // BAD - THIS SHOULD ONLY DEFINED ONCE - POTENTIAL SOURCE OF WEIRD BUG
+        downsample_rate: DOWNSAMPLE_RATE,
     };
 
     let mut processor = SignalProcessor::new(processor_config);
@@ -25,7 +27,7 @@ pub fn run() -> io::Result<()> {
         id: "butterworth".to_string(),
         f0: 100.0,
         fs: 10000.0,
-        downsample_rate: 1, // BAD - THIS SHOULD ONLY DEFINED ONCE - POTENTIAL SOURCE OF WEIRD BUG
+        downsample_rate: DOWNSAMPLE_RATE,
     };
     let butterworth_filter = BandPassFilter::new(filter_config);
     processor.add_filter(Box::new(butterworth_filter));

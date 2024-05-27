@@ -1,3 +1,4 @@
+use crate::processing::signal_processor::SignalProcessorConfig;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
@@ -32,7 +33,19 @@ impl TriggerInstance for PulseTrigger {
         &self.config.id
     }
 
-    fn evaluate(&mut self, results: &mut HashMap<String, f64>, id: &str) {
+    fn activation_detector_id(&self) -> String {
+        self.config.activation_detector_id.clone()
+    }
+
+    fn inhibition_detector_id(&self) -> String {
+        self.config.inhibition_detector_id.clone()
+    }
+
+    fn evaluate(
+        &mut self,
+        global_config: &SignalProcessorConfig,
+        results: &mut HashMap<String, f64>,
+    ) {
         let now = Instant::now();
 
         // Check if the activation or inhibition cooldowns are active.
@@ -41,7 +54,7 @@ impl TriggerInstance for PulseTrigger {
         }) || self.last_activation_time.map_or(false, |t| {
             now.duration_since(t) < self.config.activation_cooldown
         }) {
-            results.insert(format!("triggers:{}:triggered", id), 0.0);
+            results.insert(format!("triggers:{}:triggered", self.config.id), 0.0);
             return;
         }
 
@@ -57,7 +70,7 @@ impl TriggerInstance for PulseTrigger {
 
         if inhibition_active {
             self.last_inhibition_time = Some(now);
-            results.insert(format!("triggers:{}:triggered", id), 0.0);
+            results.insert(format!("triggers:{}:triggered", self.config.id), 0.0);
             return;
         }
 
@@ -73,9 +86,21 @@ impl TriggerInstance for PulseTrigger {
 
         if activation_active {
             self.last_activation_time = Some(now);
-            results.insert(format!("triggers:{}:triggered", id), 1.0);
+            results.insert(format!("triggers:{}:triggered", self.config.id), 1.0);
         } else {
-            results.insert(format!("triggers:{}:triggered", id), 0.0);
+            results.insert(format!("triggers:{}:triggered", self.config.id), 0.0);
+        }
+
+        // If verbose, add more items to the results HashMap
+        if global_config.verbose {
+            results.insert(
+                format!("triggers:{}:activation_active", self.config.id),
+                if activation_active { 1.0 } else { 0.0 },
+            );
+            results.insert(
+                format!("triggers:{}:inhibition_active", self.config.id),
+                if inhibition_active { 1.0 } else { 0.0 },
+            );
         }
     }
 }

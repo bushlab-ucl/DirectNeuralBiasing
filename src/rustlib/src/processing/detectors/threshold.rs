@@ -1,6 +1,6 @@
-use std::collections::HashMap;
-
 use super::{DetectorInstance, RingBuffer, Statistics};
+use crate::processing::signal_processor::SignalProcessorConfig;
+use std::collections::HashMap;
 
 #[derive(Clone)]
 pub struct ThresholdDetectorConfig {
@@ -37,11 +37,15 @@ impl DetectorInstance for ThresholdDetector {
         &self.config.id
     }
 
+    fn filter_id(&self) -> String {
+        self.config.filter_id.clone()
+    }
+
     fn process_sample(
         &mut self,
+        global_config: &SignalProcessorConfig,
         results: &mut HashMap<String, f64>,
         _index: usize,
-        detector_id: &str,
     ) {
         // Construct the key to fetch the filtered sample
         let filter_key = format!("filters:{}:filtered_sample", self.config.filter_id);
@@ -81,9 +85,28 @@ impl DetectorInstance for ThresholdDetector {
 
         // Update the results HashMap with detection status and confidence
         results.insert(
-            format!("detectors:{}:detected", detector_id),
+            format!("detectors:{}:detected", self.config.id),
             detection_status,
         );
-        results.insert(format!("detectors:{}:confidence", detector_id), confidence);
+        results.insert(
+            format!("detectors:{}:confidence", self.config.id),
+            confidence,
+        );
+
+        // If verbose, add more items to the results HashMap
+        if global_config.verbose {
+            results.insert(
+                format!("detectors:{}:z_score", self.config.id),
+                self.statistics.z_score,
+            );
+            results.insert(
+                format!("detectors:{}:mean", self.config.id),
+                self.statistics.mean,
+            );
+            results.insert(
+                format!("detectors:{}:std_dev", self.config.id),
+                self.statistics.std_dev,
+            );
+        }
     }
 }

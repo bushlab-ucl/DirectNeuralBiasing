@@ -1,4 +1,5 @@
 use super::FilterInstance;
+use crate::processing::signal_processor::SignalProcessorConfig;
 use std::collections::HashMap;
 
 pub struct BandPassFilterConfig {
@@ -21,11 +22,15 @@ impl FilterInstance for BandPassFilter {
         &self.config.id
     }
 
-    fn process_sample(&mut self, results: &mut HashMap<String, f64>, filter_id: &str) {
+    fn process_sample(
+        &mut self,
+        global_config: &SignalProcessorConfig,
+        results: &mut HashMap<String, f64>,
+    ) {
         if let Some(&raw_sample) = results.get("global:raw_sample") {
             let filtered_sample = self.calculate_output(raw_sample);
             results.insert(
-                format!("filters:{}:filtered_sample", filter_id),
+                format!("filters:{}:filtered_sample", self.config.id),
                 filtered_sample,
             );
         }
@@ -35,7 +40,7 @@ impl FilterInstance for BandPassFilter {
 impl BandPassFilter {
     // Constructor with Statistics initialization
     pub fn new(config: BandPassFilterConfig) -> Self {
-        let adjusted_fs = config.fs / config.downsample_rate as f64; // Adjust fs by downsample_rate
+        let adjusted_fs = config.fs / config.downsample_rate as f64; // Adjust fs by downsample_rate // I don't love having downsample_rate defined twice, here and on the signal processor.
 
         let q = (2.0f64).sqrt() / 2.0; // Example for a Butterworth filter
         let omega = 2.0 * std::f64::consts::PI * config.f0 / adjusted_fs;

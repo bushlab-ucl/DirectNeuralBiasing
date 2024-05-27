@@ -1,16 +1,17 @@
-// pub mod slow_wave;
 pub mod slow_wave;
 pub mod threshold;
 
+use crate::processing::signal_processor::SignalProcessorConfig;
 use std::collections::HashMap;
 
 pub trait DetectorInstance: Send {
     fn id(&self) -> &str;
+    fn filter_id(&self) -> String;
     fn process_sample(
         &mut self,
+        global_config: &SignalProcessorConfig,
         results: &mut HashMap<String, f64>,
         index: usize,
-        detector_id: &str,
     );
 }
 

@@ -47,11 +47,37 @@ impl SignalProcessor {
 
     pub fn add_detector(&mut self, detector: Box<dyn DetectorInstance>) {
         let id = detector.id().to_string();
+        let filter_id = detector.filter_id().to_string();
+
+        // Check if the detector references a valid filter ID
+        if !self.filters.contains_key(&filter_id) {
+            panic!("Detector references non-existent filter ID: {}", filter_id);
+        }
+
         self.detectors.insert(id, detector);
     }
 
     pub fn add_trigger(&mut self, trigger: Box<dyn TriggerInstance>) {
         let id = trigger.id().to_string();
+        let activation_detector_id = trigger.activation_detector_id();
+        let inhibition_detector_id = trigger.inhibition_detector_id();
+
+        // Check if the activation detector ID is valid
+        if !self.detectors.contains_key(&activation_detector_id) {
+            panic!(
+                "Trigger references non-existent activation detector ID: {}",
+                activation_detector_id
+            );
+        }
+
+        // Check if the inhibition detector ID is valid
+        if !self.detectors.contains_key(&inhibition_detector_id) {
+            panic!(
+                "Trigger references non-existent inhibition detector ID: {}",
+                inhibition_detector_id
+            );
+        }
+
         self.triggers.insert(id, trigger);
     }
 
@@ -73,18 +99,18 @@ impl SignalProcessor {
             self.results.insert("global:raw_sample".to_string(), sample);
 
             // Filters process the sample
-            for (id, filter) in self.filters.iter_mut() {
-                filter.process_sample(&mut self.results, id);
+            for (_id, filter) in self.filters.iter_mut() {
+                filter.process_sample(&self.config, &mut self.results);
             }
 
             // Detectors process the filtered results
-            for (id, detector) in self.detectors.iter_mut() {
-                detector.process_sample(&mut self.results, self.index, id);
+            for (_id, detector) in self.detectors.iter_mut() {
+                detector.process_sample(&self.config, &mut self.results, self.index);
             }
 
             // Triggers evaluate based on detector outputs
-            for (id, trigger) in self.triggers.iter_mut() {
-                trigger.evaluate(&mut self.results, id);
+            for (_id, trigger) in self.triggers.iter_mut() {
+                trigger.evaluate(&self.config, &mut self.results);
             }
 
             output.push(self.results.clone());

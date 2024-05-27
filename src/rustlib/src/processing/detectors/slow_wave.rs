@@ -1,6 +1,7 @@
-use std::collections::HashMap;
-
 use super::DetectorInstance;
+use crate::processing::signal_processor::SignalProcessorConfig;
+
+use std::collections::HashMap;
 
 #[derive(Clone)]
 pub struct SlowWaveDetectorConfig {
@@ -35,11 +36,15 @@ impl DetectorInstance for SlowWaveDetector {
         &self.config.id
     }
 
+    fn filter_id(&self) -> String {
+        self.config.filter_id.clone()
+    }
+
     fn process_sample(
         &mut self,
+        global_config: &SignalProcessorConfig,
         results: &mut HashMap<String, f64>,
         index: usize,
-        detector_id: &str,
     ) {
         let filtered_sample = results
             .get(&format!(
@@ -53,10 +58,10 @@ impl DetectorInstance for SlowWaveDetector {
         if filtered_sample > 0.0 && self.last_sample <= 0.0 {
             // Analyze the ongoing wave data if it is not empty
             if !self.ongoing_wave.is_empty() {
-                let detection = self.analyse_wave(results, detector_id);
+                let detection = self.analyse_wave(results);
                 if detection {
                     // Output the detection status and increment the detected count
-                    results.insert(format!("detectors:{}:detected", detector_id), 1.0);
+                    results.insert(format!("detectors:{}:detected", self.config.id), 1.0);
 
                     // Construct a string of the detected wave indexes
                     let indexes_str = self
@@ -67,14 +72,15 @@ impl DetectorInstance for SlowWaveDetector {
                         .join(", ");
 
                     // Predict the next wave maxima
-                    let half_period = (self.ongoing_wave_idx.len() / 2) as usize;
+                    let half_period =
+                        (self.ongoing_wave_idx.len() / 2) * global_config.downsample_rate as usize; // account for downsampling
                     let next_maxima_idx = index + half_period;
 
                     // Output the detected wave indexes and the predicted next maxima
                     results.insert(
                         format!(
                             "detectors:{}:slow_wave_idx:{}:next_maxima",
-                            detector_id, indexes_str
+                            self.config.id, indexes_str
                         ),
                         next_maxima_idx as f64,
                     );
@@ -91,10 +97,10 @@ impl DetectorInstance for SlowWaveDetector {
 
         // If no detection, output the detection and confidence status as zero
         results
-            .entry(format!("detectors:{}:detected", detector_id))
+            .entry(format!("detectors:{}:detected", self.config.id))
             .or_insert(0.0);
         results
-            .entry(format!("detectors:{}:confidence", detector_id))
+            .entry(format!("detectors:{}:confidence", self.config.id))
             .or_insert(0.0);
 
         // Update the last sample for zero-crossing detection
@@ -104,7 +110,7 @@ impl DetectorInstance for SlowWaveDetector {
 
 impl SlowWaveDetector {
     /// Analyzes the collected wave data to determine if it meets the criteria for a slow wave.
-    fn analyse_wave(&mut self, results: &mut HashMap<String, f64>, detector_id: &str) -> bool {
+    fn analyse_wave(&mut self, results: &mut HashMap<String, f64>) -> bool {
         let wave_length = self.ongoing_wave.len();
 
         // Ensure there is enough data to analyze
@@ -125,17 +131,23 @@ impl SlowWaveDetector {
 
             // Check if the correlation with a sinusoidal wave exceeds the threshold
             if correlation > self.config.sinusoid_threshold {
-                results.insert(format!("detectors:{}:confidence", detector_id), correlation);
+                results.insert(
+                    format!("detectors:{}:confidence", self.config.id),
+                    correlation,
+                );
                 return true;
             }
 
             // If the correlation is below the threshold, output the confidence value
-            results.insert(format!("detectors:{}:confidence", detector_id), correlation);
+            results.insert(
+                format!("detectors:{}:confidence", self.config.id),
+                correlation,
+            );
             return false;
         }
 
         // If the amplitude is outside the specified thresholds, output a confidence of 0
-        results.insert(format!("detectors:{}:confidence", detector_id), 0.0);
+        results.insert(format!("detectors:{}:confidence", self.config.id), 0.0);
         return false;
     }
 
