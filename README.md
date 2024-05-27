@@ -18,7 +18,7 @@
 
 ## Links
 
-- `UCL HEL Lab`: https://bushlab-ucl.github.io
+- `UCL Human Electrophysiology Lab`: https://bushlab-ucl.github.io
 - `Crates.io`: https://crates.io/crates/direct-neural-biasing
 - `PyPi`: https://pypi.org/project/direct-neural-biasing
 

@@ -14,4 +14,4 @@
 
 - `GitHub`: https://github.com/bushlab-ucl/DirectNeuralBiasing
 - `PyPi`: https://pypi.org/project/direct-neural-biasing
-- `UCL HEL Lab`: https://bushlab-ucl.github.io
+- `UCL Human Electrophysiology Lab`: https://bushlab-ucl.github.io
