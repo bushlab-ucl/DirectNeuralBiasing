@@ -16,6 +16,12 @@
 - `src/pythonlib` - Example Python code for importing rust dnb module functions into python projects.
 - `src/cpplib` - C++ code for interfacing with Blackrock NSP system and NPlay.
 
+## Links
+
+- `UCL HEL Lab`: https://bushlab-ucl.github.io
+- `Crates.io`: https://crates.io/crates/direct-neural-biasing
+- `PyPi`: https://pypi.org/project/direct-neural-biasing
+
 # Using the `PySignalProcessor` from `DirectNeuralBiasing` in Python
 
 ## Installation
