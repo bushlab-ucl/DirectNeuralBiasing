@@ -17,23 +17,15 @@ pub struct PySignalProcessor {
 #[pymethods]
 impl PySignalProcessor {
     #[new]
-    pub fn new(verbose: bool, downsample_rate: usize) -> Self {
-        let config = SignalProcessorConfig {
-            verbose,
-            downsample_rate,
-        };
+    pub fn new(verbose: bool) -> Self {
+        let config = SignalProcessorConfig { verbose };
         PySignalProcessor {
             processor: SignalProcessor::new(config),
         }
     }
 
-    pub fn add_filter(&mut self, id: String, f0: f64, fs: f64, downsample_rate: usize) {
-        let config = BandPassFilterConfig {
-            id,
-            f0,
-            fs,
-            downsample_rate,
-        };
+    pub fn add_filter(&mut self, id: String, f0: f64, fs: f64) {
+        let config = BandPassFilterConfig { id, f0, fs };
         let filter = BandPassFilter::new(config);
         self.processor.add_filter(Box::new(filter));
     }
@@ -81,15 +73,15 @@ impl PySignalProcessor {
         id: String,
         activation_detector_id: String,
         inhibition_detector_id: String,
-        activation_cooldown_ms: f64,
         inhibition_cooldown_ms: f64,
+        pulse_cooldown_ms: f64,
     ) {
         let config = PulseTriggerConfig {
             id,
             activation_detector_id,
             inhibition_detector_id,
-            activation_cooldown: Duration::from_millis(activation_cooldown_ms as u64),
             inhibition_cooldown: Duration::from_millis(inhibition_cooldown_ms as u64),
+            pulse_cooldown: Duration::from_millis(activation_cooldown_ms as u64),
         };
         let trigger = PulseTrigger::new(config);
         self.processor.add_trigger(Box::new(trigger));

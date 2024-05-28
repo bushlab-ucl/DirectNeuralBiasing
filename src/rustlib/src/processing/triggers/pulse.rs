@@ -8,13 +8,13 @@ pub struct PulseTriggerConfig {
     pub id: String,
     pub activation_detector_id: String,
     pub inhibition_detector_id: String,
-    pub activation_cooldown: Duration,
     pub inhibition_cooldown: Duration,
+    pub pulse_cooldown: Duration,
 }
 
 pub struct PulseTrigger {
     config: PulseTriggerConfig,
-    last_activation_time: Option<Instant>,
+    last_pulse_time: Option<Instant>,
     last_inhibition_time: Option<Instant>,
 }
 
@@ -22,7 +22,7 @@ impl PulseTrigger {
     pub fn new(config: PulseTriggerConfig) -> Self {
         Self {
             config,
-            last_activation_time: None,
+            last_pulse_time: None,
             last_inhibition_time: None,
         }
     }
@@ -51,8 +51,8 @@ impl TriggerInstance for PulseTrigger {
         // Check if the activation or inhibition cooldowns are active.
         if self.last_inhibition_time.map_or(false, |t| {
             now.duration_since(t) < self.config.inhibition_cooldown
-        }) || self.last_activation_time.map_or(false, |t| {
-            now.duration_since(t) < self.config.activation_cooldown
+        }) || self.last_pulse_time.map_or(false, |t| {
+            now.duration_since(t) < self.config.pulse_cooldown
         }) {
             results.insert(format!("triggers:{}:triggered", self.config.id), 0.0);
             return;
@@ -85,7 +85,7 @@ impl TriggerInstance for PulseTrigger {
             > 0.0;
 
         if activation_active {
-            self.last_activation_time = Some(now);
+            self.last_pulse_time = Some(now);
             results.insert(format!("triggers:{}:triggered", self.config.id), 1.0);
         } else {
             results.insert(format!("triggers:{}:triggered", self.config.id), 0.0);

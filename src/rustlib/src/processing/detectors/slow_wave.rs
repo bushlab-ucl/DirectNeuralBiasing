@@ -72,8 +72,7 @@ impl DetectorInstance for SlowWaveDetector {
                         .join(", ");
 
                     // Predict the next wave maxima
-                    let half_period =
-                        (self.ongoing_wave_idx.len() / 2) * global_config.downsample_rate as usize; // account for downsampling
+                    let half_period = self.ongoing_wave_idx.len() / 2;
                     let next_maxima_idx = index + half_period;
 
                     // Output the detected wave indexes and the predicted next maxima
