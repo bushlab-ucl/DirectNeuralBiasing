@@ -93,17 +93,17 @@ impl DetectorInstance for SlowWaveDetector {
 
                 results.insert(
                     format!("detectors:{}:downwave_start_index", self.config.id),
-                    self.downwave_start_index.map_or(-1.0, |v| v as f64),
+                    self.downwave_start_index.map_or(-1.0, |v| v as f64), // unwrap as -1 if None (should not happen)
                 );
 
                 results.insert(
                     format!("detectors:{}:downwave_end_index", self.config.id),
-                    self.downwave_end_index.map_or(-1.0, |v| v as f64),
+                    self.downwave_end_index.map_or(-1.0, |v| v as f64), // unwrap as -1 if None (should not happen)
                 );
 
                 results.insert(
                     format!("detectors:{}:predicted_next_maxima_index", self.config.id),
-                    self.predicted_next_maxima_index.map_or(-1.0, |v| v as f64),
+                    self.predicted_next_maxima_index.map_or(-1.0, |v| v as f64), // unwrap as -1 if None (should not happen)
                 );
             } else {
                 // Output the detection status as zero
