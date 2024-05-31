@@ -89,35 +89,35 @@ impl DetectorInstance for SlowWaveDetector {
                 self.predicted_next_maxima_index = Some(index + half_period);
 
                 // Output the detection status and wave index values
-                results.insert(format!("detectors:{}::detected", self.config.id), 1.0);
+                results.insert(format!("detectors:{}:detected", self.config.id), 1.0);
 
                 results.insert(
-                    format!("detectors:{}::downwave_start_index", self.config.id),
+                    format!("detectors:{}:downwave_start_index", self.config.id),
                     self.downwave_start_index.unwrap() as f64,
                 );
 
                 results.insert(
-                    format!("detectors:{}::downwave_end_index", self.config.id),
+                    format!("detectors:{}:downwave_end_index", self.config.id),
                     self.downwave_end_index.unwrap() as f64,
                 );
 
                 results.insert(
-                    format!("detectors:{}::predicted_next_maxima_index", self.config.id),
+                    format!("detectors:{}:predicted_next_maxima_index", self.config.id),
                     self.predicted_next_maxima_index.unwrap() as f64,
                 );
             } else {
                 // Output the detection status as zero
-                results.insert(format!("detectors:{}::detected", self.config.id), 0.0);
+                results.insert(format!("detectors:{}:detected", self.config.id), 0.0);
             }
 
             // Output the peak amplitude and sinusoidness values
             results.insert(
-                format!("detectors:{}::peak_z_score_amplitude", self.config.id),
+                format!("detectors:{}:peak_z_score_amplitude", self.config.id),
                 peak_z_score_amplitude,
             );
 
             results.insert(
-                format!("detectors:{}::sinusoidness", self.config.id),
+                format!("detectors:{}:sinusoidness", self.config.id),
                 sinusoidness,
             );
 
@@ -127,7 +127,7 @@ impl DetectorInstance for SlowWaveDetector {
             self.downwave_end_index = None;
         } else {
             // Output the detection status as zero
-            results.insert(format!("detectors:{}::detected", self.config.id), 0.0);
+            results.insert(format!("detectors:{}:detected", self.config.id), 0.0);
         }
 
         // Update the last sample for zero-crossing detection

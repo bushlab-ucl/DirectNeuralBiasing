@@ -94,6 +94,17 @@ pub fn run() -> io::Result<()> {
                 }
             }
 
+            // Slow Wave detector output
+            if let Some(&slow_wave_detection) = results.get("detectors:slow_wave_detector:detected")
+            {
+                let message = format!("Slow Wave Detector Output: {:.2}", slow_wave_detection);
+                if slow_wave_detection > 0.0 {
+                    println!("{}", message.green());
+                } else {
+                    println!("{}", message.red());
+                }
+            }
+
             // IED detector output
             if let Some(&ied_detection) = results.get("detectors:ied_detector:detected") {
                 let message = format!("IED Detector Output: {:.2}", ied_detection);
