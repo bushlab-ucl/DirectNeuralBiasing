@@ -4,6 +4,8 @@ use super::triggers::TriggerInstance;
 
 use std::collections::HashMap;
 
+use std::time::{Duration, Instant};
+
 // use crate::utils::log::log_to_file;
 // use rayon::prelude::*;
 // use std::os::raw::c_void;
@@ -25,6 +27,12 @@ pub struct SignalProcessor {
     pub triggers: HashMap<String, Box<dyn TriggerInstance>>,
     pub config: SignalProcessorConfig,
     pub results: HashMap<String, f64>,
+    pub keys: Keys,
+}
+
+pub struct Keys {
+    global_index: String,
+    global_raw_sample: String,
 }
 
 impl SignalProcessor {
@@ -36,6 +44,10 @@ impl SignalProcessor {
             triggers: HashMap::new(),
             config,
             results: HashMap::new(),
+            keys: Keys {
+                global_index: "global:index".to_string(),
+                global_raw_sample: "global:raw_sample".to_string(),
+            },
         }
     }
 
@@ -83,32 +95,47 @@ impl SignalProcessor {
     // Process a Vec of raw samples
     pub fn run(&mut self, raw_samples: Vec<f64>) -> Vec<HashMap<String, f64>> {
         let mut output = Vec::new();
+        let keys = &self.keys;
 
         for sample in raw_samples {
+            // let start_time_whole = Instant::now(); // Start timer before analysis
+
             // Reset and update globals
             self.results.clear();
             self.results
-                .insert("global:index".to_string(), self.index as f64);
-            self.results.insert("global:raw_sample".to_string(), sample);
+                .insert(keys.global_index.clone(), self.index as f64);
+            self.results.insert(keys.global_raw_sample.clone(), sample);
 
             // Filters process the sample
+            // let start_time = Instant::now(); // Start timer before analysis
             for (_id, filter) in self.filters.iter_mut() {
                 filter.process_sample(&self.config, &mut self.results);
             }
+            // let duration = start_time.elapsed();
+            // println!("Filters ran  in {:?}", duration); // Timing the analysis phase only
 
             // Detectors process the filtered results
+            // let start_time = Instant::now(); // Start timer before analysis
             for (_id, detector) in self.detectors.iter_mut() {
                 detector.process_sample(&self.config, &mut self.results, self.index);
             }
+            // let duration = start_time.elapsed();
+            // println!("Detectors ran  in {:?}", duration); // Timing the analysis phase only
 
             // Triggers evaluate based on detector outputs
+            // let start_time = Instant::now(); // Start timer before analysis
             for (_id, trigger) in self.triggers.iter_mut() {
                 trigger.evaluate(&self.config, &mut self.results);
             }
+            // let duration = start_time.elapsed();
+            // println!("Triggers ran  in {:?}", duration); // Timing the analysis phase only
 
             output.push(self.results.clone());
 
             self.index += 1;
+
+            // let duration_whole = start_time_whole.elapsed();
+            // println!("Whole block ran  in {:?}", duration_whole); // Timing the analysis phase only
         }
 
         output
