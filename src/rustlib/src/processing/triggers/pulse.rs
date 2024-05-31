@@ -8,8 +8,8 @@ pub struct PulseTriggerConfig {
     pub id: String,
     pub activation_detector_id: String,
     pub inhibition_detector_id: String,
-    pub inhibition_cooldown: Duration,
-    pub pulse_cooldown: Duration,
+    pub inhibition_cooldown_ms: Duration,
+    pub pulse_cooldown_ms: Duration,
 }
 
 pub struct PulseTrigger {
@@ -50,9 +50,9 @@ impl TriggerInstance for PulseTrigger {
 
         // Check if the activation or inhibition cooldowns are active.
         if self.last_inhibition_time.map_or(false, |t| {
-            now.duration_since(t) < self.config.inhibition_cooldown
+            now.duration_since(t) < self.config.inhibition_cooldown_ms
         }) || self.last_pulse_time.map_or(false, |t| {
-            now.duration_since(t) < self.config.pulse_cooldown
+            now.duration_since(t) < self.config.pulse_cooldown_ms
         }) {
             results.insert(format!("triggers:{}:triggered", self.config.id), 0.0);
             return;

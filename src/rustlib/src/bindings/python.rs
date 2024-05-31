@@ -53,16 +53,14 @@ impl PySignalProcessor {
         &mut self,
         id: String,
         filter_id: String,
-        sinusoid_threshold: f64,
-        absolute_min_threshold: f64,
-        absolute_max_threshold: f64,
+        z_score_threshold: f64,
+        sinusoidness_threshold: f64,
     ) {
         let config = SlowWaveDetectorConfig {
             id,
             filter_id,
-            sinusoid_threshold,
-            absolute_min_threshold,
-            absolute_max_threshold,
+            z_score_threshold,
+            sinusoidness_threshold,
         };
         let detector = SlowWaveDetector::new(config);
         self.processor.add_detector(Box::new(detector));
@@ -80,8 +78,8 @@ impl PySignalProcessor {
             id,
             activation_detector_id,
             inhibition_detector_id,
-            inhibition_cooldown: Duration::from_millis(inhibition_cooldown_ms as u64),
-            pulse_cooldown: Duration::from_millis(activation_cooldown_ms as u64),
+            inhibition_cooldown_ms: Duration::from_millis(inhibition_cooldown_ms as u64),
+            pulse_cooldown_ms: Duration::from_millis(pulse_cooldown_ms as u64),
         };
         let trigger = PulseTrigger::new(config);
         self.processor.add_trigger(Box::new(trigger));
