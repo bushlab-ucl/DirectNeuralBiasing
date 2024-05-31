@@ -69,15 +69,13 @@ impl DetectorInstance for ThresholdDetector {
 
         // Calculate confidence as a percentage of samples above the threshold regardless of detection status
         let confidence = if self.buffer.buffer.len() > 0 {
-            (above_threshold_count as f64 / self.buffer.buffer.len() as f64) * 100.0
+            above_threshold_count as f64 / self.buffer.buffer.len() as f64
         } else {
             0.0 // Prevent division by zero if buffer is empty
         };
 
         // Determine the detection status based on the count and sensitivity
-        let detection_status = if (above_threshold_count as f64 / self.buffer.buffer.len() as f64)
-            > self.config.sensitivity
-        {
+        let detection_status = if confidence > self.config.sensitivity {
             1.0
         } else {
             0.0

@@ -139,8 +139,8 @@ impl SlowWaveDetector {
     /// Analyzes the collected wave data to determine if it meets the criteria for a slow wave.
     fn analyse_wave(
         &mut self,
-        _global_config: &SignalProcessorConfig, // maybe remove
-        _results: &mut HashMap<String, f64>,    // maybe remove
+        global_config: &SignalProcessorConfig, // maybe remove
+        results: &mut HashMap<String, f64>,    // maybe remove
     ) -> (bool, f64, f64) {
         let wave_length = self.ongoing_wave_z_scores.len();
         if wave_length < 4 {
@@ -159,7 +159,7 @@ impl SlowWaveDetector {
 
         // Check the wave for sinusoidal pattern
         let sinusoid = self.construct_cosine_wave(minima_idx, wave_length);
-        let sinusoidness = self.calculate_correlation(&sinusoid);
+        let sinusoidness = self.calculate_correlation(&sinusoid, global_config, results);
 
         if sinusoidness < self.config.sinusoidness_threshold {
             return (false, peak_z_score_amplitude, sinusoidness);
@@ -189,11 +189,18 @@ impl SlowWaveDetector {
     }
 
     /// Calculates the correlation between the ongoing_wave_z_scores and a generated sinusoid to check for pattern match.
-    fn calculate_correlation(&self, sinusoid: &Vec<f64>) -> f64 {
+    fn calculate_correlation(
+        &self,
+        sinusoid: &Vec<f64>,
+        global_config: &SignalProcessorConfig,
+        results: &mut HashMap<String, f64>,
+    ) -> f64 {
+        // Calculate means
         let mean_wave = self.ongoing_wave_z_scores.iter().sum::<f64>()
             / self.ongoing_wave_z_scores.len() as f64;
         let mean_sinusoid = sinusoid.iter().sum::<f64>() / sinusoid.len() as f64;
 
+        // Calculate covariance
         let covariance: f64 = self
             .ongoing_wave_z_scores
             .iter()
@@ -201,6 +208,7 @@ impl SlowWaveDetector {
             .map(|(&x, &y)| (x - mean_wave) * (y - mean_sinusoid))
             .sum();
 
+        // Calculate standard deviations
         let std_dev_wave = (self
             .ongoing_wave_z_scores
             .iter()
@@ -216,6 +224,33 @@ impl SlowWaveDetector {
             / sinusoid.len() as f64)
             .sqrt();
 
+        // Avoid division by zero
+        if std_dev_wave == 0.0 || std_dev_sinusoid == 0.0 {
+            return 0.0;
+        }
+
+        // Optionally log detailed statistics if verbose mode is enabled
+        if global_config.verbose {
+            results.insert(
+                format!("detectors:{}:covariance", self.config.id),
+                covariance,
+            );
+            results.insert(format!("detectors:{}:mean_wave", self.config.id), mean_wave);
+            results.insert(
+                format!("detectors:{}:mean_sinusoid", self.config.id),
+                mean_sinusoid,
+            );
+            results.insert(
+                format!("detectors:{}:std_dev_wave", self.config.id),
+                std_dev_wave,
+            );
+            results.insert(
+                format!("detectors:{}:std_dev_sinusoid", self.config.id),
+                std_dev_sinusoid,
+            );
+        }
+
+        // Calculate and return the correlation
         covariance / (std_dev_wave * std_dev_sinusoid)
     }
 }
