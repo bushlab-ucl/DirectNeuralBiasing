@@ -31,9 +31,9 @@ impl SlowWaveDetector {
             last_sample: 0.0,
             is_downwave: false,
             ongoing_wave_z_scores: Vec::new(),
-            downwave_start_index: Some(0),
-            downwave_end_index: Some(0),
-            predicted_next_maxima_index: Some(0),
+            downwave_start_index: None,
+            downwave_end_index: None,
+            predicted_next_maxima_index: None,
         }
     }
 }
@@ -174,7 +174,7 @@ impl SlowWaveDetector {
         self.ongoing_wave_z_scores
             .iter()
             .enumerate()
-            .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+            .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
             .map(|(idx, _)| idx)
             .unwrap_or(0)
     }
