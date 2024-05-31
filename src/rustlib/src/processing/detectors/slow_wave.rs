@@ -143,6 +143,10 @@ impl SlowWaveDetector {
         _results: &mut HashMap<String, f64>,    // maybe remove
     ) -> (bool, f64, f64) {
         let wave_length = self.ongoing_wave_z_scores.len();
+        if wave_length < 4 {
+            // Minimum wave length for analysis - 4 samples is arbitrary
+            return (false, -1.0, -1.0); // -1 indicates no sinusoidal pattern
+        }
 
         // Find the minimum amplitude within the wave to define the peak
         let minima_idx = self.find_wave_minima();
