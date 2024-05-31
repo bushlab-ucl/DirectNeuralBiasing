@@ -4,56 +4,51 @@ use std::collections::HashMap;
 
 pub struct BandPassFilterConfig {
     pub id: String,
-    pub f0: f64,
+    pub f_low: f64,
+    pub f_high: f64,
     pub fs: f64,
 }
 
 pub struct BandPassFilter {
     config: BandPassFilterConfig,
+    high_pass: SecondOrderFilter,
+    low_pass: SecondOrderFilter,
+}
+
+struct SecondOrderFilter {
     a: [f64; 3],
     b: [f64; 3],
     x: [f64; 2],
     y: [f64; 2],
 }
 
-impl FilterInstance for BandPassFilter {
-    fn id(&self) -> &str {
-        &self.config.id
-    }
-
-    fn process_sample(
-        &mut self,
-        _global_config: &SignalProcessorConfig,
-        results: &mut HashMap<String, f64>,
-    ) {
-        if let Some(&raw_sample) = results.get("global:raw_sample") {
-            let filtered_sample = self.calculate_output(raw_sample);
-            results.insert(
-                format!("filters:{}:filtered_sample", self.config.id),
-                filtered_sample,
-            );
-        }
-    }
-}
-
-impl BandPassFilter {
-    // Constructor with Statistics initialization
-    pub fn new(config: BandPassFilterConfig) -> Self {
-        let adjusted_fs = config.fs;
-
+impl SecondOrderFilter {
+    pub fn new(f0: f64, fs: f64, filter_type: &str) -> Self {
         let q = (2.0f64).sqrt() / 2.0; // Example for a Butterworth filter
-        let omega = 2.0 * std::f64::consts::PI * config.f0 / adjusted_fs;
+        let omega = 2.0 * std::f64::consts::PI * f0 / fs;
         let alpha = f64::sin(omega) / (2.0 * q);
 
-        let b0 = q * alpha;
-        let b1 = 0.0;
-        let b2 = -q * alpha;
-        let a0 = 1.0 + alpha;
-        let a1 = -2.0 * f64::cos(omega);
-        let a2 = 1.0 - alpha;
+        let (b0, b1, b2, a0, a1, a2) = match filter_type {
+            "high" => (
+                (1.0 + f64::cos(omega)) / 2.0,
+                -(1.0 + f64::cos(omega)),
+                (1.0 + f64::cos(omega)) / 2.0,
+                1.0 + alpha,
+                -2.0 * f64::cos(omega),
+                1.0 - alpha,
+            ),
+            "low" => (
+                (1.0 - f64::cos(omega)) / 2.0,
+                1.0 - f64::cos(omega),
+                (1.0 - f64::cos(omega)) / 2.0,
+                1.0 + alpha,
+                -2.0 * f64::cos(omega),
+                1.0 - alpha,
+            ),
+            _ => panic!("Unsupported filter type"),
+        };
 
-        BandPassFilter {
-            config,
+        SecondOrderFilter {
             a: [a0, a1, a2],
             b: [b0, b1, b2],
             x: [0.0, 0.0],
@@ -61,7 +56,6 @@ impl BandPassFilter {
         }
     }
 
-    // Calculating output based on the input and updating the filter's internal state
     fn calculate_output(&mut self, input: f64) -> f64 {
         let output = (self.b[0] / self.a[0]) * input
             + (self.b[1] / self.a[0]) * self.x[0]
@@ -76,5 +70,43 @@ impl BandPassFilter {
         self.y[0] = output;
 
         output
+    }
+}
+
+impl BandPassFilter {
+    // Constructor with initialization for high-pass and low-pass filters
+    pub fn new(config: BandPassFilterConfig) -> Self {
+        let high_pass = SecondOrderFilter::new(config.f_low, config.fs, "high");
+        let low_pass = SecondOrderFilter::new(config.f_high, config.fs, "low");
+
+        BandPassFilter {
+            config,
+            high_pass,
+            low_pass,
+        }
+    }
+}
+
+impl FilterInstance for BandPassFilter {
+    fn id(&self) -> &str {
+        &self.config.id
+    }
+
+    fn process_sample(
+        &mut self,
+        _global_config: &SignalProcessorConfig,
+        results: &mut HashMap<String, f64>,
+    ) {
+        if let Some(&raw_sample) = results.get("global:raw_sample") {
+            // Apply high-pass filter first
+            let high_pass_output = self.high_pass.calculate_output(raw_sample);
+            // Apply low-pass filter to the output of the high-pass filter
+            let filtered_sample = self.low_pass.calculate_output(high_pass_output);
+
+            results.insert(
+                format!("filters:{}:filtered_sample", self.config.id),
+                filtered_sample,
+            );
+        }
     }
 }

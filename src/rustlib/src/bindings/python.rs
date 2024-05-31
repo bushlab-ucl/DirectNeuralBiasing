@@ -24,8 +24,13 @@ impl PySignalProcessor {
         }
     }
 
-    pub fn add_filter(&mut self, id: String, f0: f64, fs: f64) {
-        let config = BandPassFilterConfig { id, f0, fs };
+    pub fn add_filter(&mut self, id: String, f_low: f64, f_high: f64, fs: f64) {
+        let config = BandPassFilterConfig {
+            id,
+            f_low,
+            f_high,
+            fs,
+        };
         let filter = BandPassFilter::new(config);
         self.processor.add_filter(Box::new(filter));
     }

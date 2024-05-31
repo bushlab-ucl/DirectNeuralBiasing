@@ -20,7 +20,8 @@ pub fn run() -> io::Result<()> {
 
     let filter_config = BandPassFilterConfig {
         id: "butterworth".to_string(),
-        f0: 100.0,
+        f_low: 0.5,
+        f_high: 4.0,
         fs: 10000.0,
     };
     let butterworth_filter = BandPassFilter::new(filter_config);
