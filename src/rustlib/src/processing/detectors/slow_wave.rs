@@ -125,6 +125,9 @@ impl DetectorInstance for SlowWaveDetector {
             self.ongoing_wave_z_scores.clear();
             self.downwave_start_index = None;
             self.downwave_end_index = None;
+        } else {
+            // Output the detection status as zero
+            results.insert(format!("detectors:{}::detected", self.config.id), 0.0);
         }
 
         // Update the last sample for zero-crossing detection
