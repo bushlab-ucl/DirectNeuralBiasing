@@ -55,9 +55,7 @@ First, create a `PySignalProcessor` instance.
 
 ```py
 verbose = False  # verbose = True gives verbose output in results object for debugging
-downsample_rate = 1  # 1 = full sampling rate. Higher numbers create downsampling. Useful for large files and demos.
-
-signal_processor = dnb.PySignalProcessor(verbose, downsample_rate)
+signal_processor = dnb.PySignalProcessor(verbose)
 ```
 
 #### 2.2 - Create Filter
