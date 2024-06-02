@@ -63,11 +63,12 @@ signal_processor = dnb.PySignalProcessor(verbose)
 Create and add a `BandpassFilter` to the `PySignalProcessor`. Set the filter ID, center frequency (f0), and sample frequency (sample_freq).
 
 ```py
-filter_id = 'simple_filter' # unique id
-f0 = 0.5  # bandpass filter center frequency
-sample_freq = 1000  # signal sample rate in Hz (example value)
+filter_id = 'bandpass_filter_slow_wave'
+f_low = 0.5 # cutoff_low
+f_high = 4.0 # cutoff_high
+sample_freq = sample_freq # signal sample rate
 
-signal_processor.add_filter(filter_id, f0, sample_freq)
+signal_processor.add_filter(slow_wave_filter_id, f_low, f_high, sample_freq)
 ```
 
 #### 2.3 - Create Slow Wave Detector
@@ -75,17 +76,15 @@ signal_processor.add_filter(filter_id, f0, sample_freq)
 Create and add a `SlowWaveDetector` to the `PySignalProcessor`. Specify the detector ID, filter ID to read from, sinusoid threshold, and absolute amplitude thresholds.
 
 ```py
-activation_detector_id = 'slow_wave_detector' # unique id
-sinusoid_threshold = 0.8  # Between 0 and 1
-absolute_min_threshold = 0.0
-absolute_max_threshold = 100.0
+slow_wave_detector_id = 'slow_wave_detector'
+z_score_threshold = 1.0 # candidate wave amplitude threhsold
+sinusoidness_threshold = 0.5 # cosine wave correlation, between 0 and 1.
 
 signal_processor.add_slow_wave_detector(
-    activation_detector_id,
-    filter_id,  # which filtered_signal should the detector read from
-    sinusoid_threshold,
-    absolute_min_threshold,
-    absolute_max_threshold
+    slow_wave_detector_id,
+    slow_wave_filter_id, # which filtered_signal should the detector read from
+    z_score_threshold,
+    sinusoidness_threshold,
 )
 ```
 
@@ -177,6 +176,7 @@ pub struct SignalProcessor {
     pub triggers: HashMap<String, Box<dyn TriggerInstance>>,
     pub config: SignalProcessorConfig,
     pub results: HashMap<String, f64>,
+    pub keys: Keys,
 }
 
 impl SignalProcessor {
@@ -199,9 +199,9 @@ Filters are used to preprocess the raw signals. An example filter is the `BandPa
 ```rust
 pub struct BandPassFilterConfig {
     pub id: String,
-    pub f0: f64,
+    pub f_low: f64,
+    pub f_high: f64,
     pub fs: f64,
-    pub downsample_rate: usize,
 }
 ```
 
@@ -272,9 +272,8 @@ impl ThresholdDetector {
 pub struct SlowWaveDetectorConfig {
     pub id: String,
     pub filter_id: String,
-    pub threshold_sinusoid: f64,
-    pub absolute_min_threshold: f64,
-    pub absolute_max_threshold: f64,
+    pub z_score_threshold: f64,
+    pub sinusoidness_threshold: f64,
 }
 ```
 
@@ -283,9 +282,13 @@ pub struct SlowWaveDetectorConfig {
 ```rust
 pub struct SlowWaveDetector {
     config: SlowWaveDetectorConfig,
-    ongoing_wave: Vec<f64>,
-    ongoing_wave_idx: Vec<usize>,
+    statistics: Statistics,
     last_sample: f64,
+    is_downwave: bool,
+    ongoing_wave_z_scores: Vec<f64>,
+    downwave_start_index: Option<usize>,
+    downwave_end_index: Option<usize>,
+    predicted_next_maxima_index: Option<usize>,
 }
 
 impl DetectorInstance for SlowWaveDetector {
