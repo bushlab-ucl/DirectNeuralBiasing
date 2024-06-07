@@ -34,7 +34,7 @@ $ pip install direct_neural_biasing --upgrade
 
 Currently only available for Windows: `Python 3.10` || `Python 3.11`
 
-(also, install other modules needed for example python script if you don't have them).
+(also, install other modules if you don't have them)
 
 ```sh
 $ pip install direct_neural_biasing scipy matplotlib numpy pandas mne
