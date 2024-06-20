@@ -51,7 +51,7 @@ pub fn run() -> std::io::Result<()> {
 
     // read data
     let signal_data = if USE_DATA {
-        Arc::new(read_signals_from_csv("../../../data/signals.csv").unwrap())
+        Arc::new(read_signals_from_csv("../data/signals.csv").unwrap())
     } else {
         Arc::new(Vec::new()) // Use an empty vector when not using CSV data
     };
