@@ -18,18 +18,27 @@ pub fn run() -> io::Result<()> {
 
     let mut processor = SignalProcessor::new(processor_config);
 
-    let filter_config = BandPassFilterConfig {
-        id: "butterworth".to_string(),
+    let ied_filter_config = BandPassFilterConfig {
+        id: "ied_filter".to_string(),
+        f_low: 80.0,
+        f_high: 120.0,
+        fs: 512.0,
+    };
+    let ied_filter = BandPassFilter::new(ied_filter_config);
+    processor.add_filter(Box::new(ied_filter));
+
+    let slow_wave_filter_config = BandPassFilterConfig {
+        id: "slow_wave_filter".to_string(),
         f_low: 0.5,
         f_high: 4.0,
-        fs: 10000.0,
+        fs: 512.0,
     };
-    let butterworth_filter = BandPassFilter::new(filter_config);
-    processor.add_filter(Box::new(butterworth_filter));
+    let slow_wave_filter = BandPassFilter::new(slow_wave_filter_config);
+    processor.add_filter(Box::new(slow_wave_filter));
 
     let ied_detector_config = ThresholdDetectorConfig {
         id: "ied_detector".to_string(),
-        filter_id: "butterworth".to_string(),
+        filter_id: "ied_filter".to_string(),
         z_score_threshold: 5.0,
         buffer_size: 100,
         sensitivity: 0.2,
@@ -49,7 +58,7 @@ pub fn run() -> io::Result<()> {
 
     let slow_wave_detector_config = SlowWaveDetectorConfig {
         id: "slow_wave_detector".to_string(),
-        filter_id: "butterworth".to_string(),
+        filter_id: "slow_wave_filter".to_string(),
         z_score_threshold: 3.0,
         sinusoidness_threshold: 0.6,
     };
@@ -68,7 +77,8 @@ pub fn run() -> io::Result<()> {
     processor.add_trigger(Box::new(main_trigger));
 
     while let Ok(_) = stream.read_exact(&mut buffer) {
-        let raw_sample = i32::from_be_bytes(buffer).abs() as f64;
+        let raw_sample = f32::from_be_bytes(buffer).abs() as f64;
+        println!("Received sample: {}", raw_sample);
 
         let start_time = Instant::now(); // Start timer before analysis
         let output = processor.run(vec![raw_sample]);

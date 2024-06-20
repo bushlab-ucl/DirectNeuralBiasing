@@ -51,10 +51,13 @@ pub fn run() -> std::io::Result<()> {
 
     // read data
     let signal_data = if USE_DATA {
-        Arc::new(read_signals_from_csv("../data/signals.csv").unwrap())
+        Arc::new(read_signals_from_csv("../data/data.csv").unwrap())
     } else {
         Arc::new(Vec::new()) // Use an empty vector when not using CSV data
     };
+
+    // print data ready
+    println!("Data ready");
 
     for stream in listener.incoming() {
         let stream = stream?;
@@ -91,22 +94,10 @@ fn send_csv_data(
     loop {
         let mut locked_stream = stream_mutex.lock().unwrap();
         if let Some(stream) = locked_stream.as_mut() {
-            // Assume data is structured such that each Vec<f32> is one signal channel
-            // and time_index iterates over each time step
             if time_index < data[0].len() {
-                // all channels
-                // for channel_data in data.iter() {
-                //     let signal_value = channel_data[time_index] as i32;
-                //     // print value type = [u8; 4]
-                //     println!("{:?}", signal_value.to_be_bytes());
-
-                //     stream.write(&signal_value.to_be_bytes())?;
-                // }
-
-                // only last channel
-                let signal_value = data[NUM_SIGNALS - 1][time_index] as i32;
+                // Only last channel
+                let signal_value = data[NUM_SIGNALS - 1][time_index];
                 stream.write(&signal_value.to_be_bytes())?;
-
                 time_index += 1;
             } else {
                 break; // Stop the loop when the end of the data is reached
@@ -116,6 +107,40 @@ fn send_csv_data(
     }
     Ok(())
 }
+
+// fn send_csv_data(
+//     stream_mutex: Arc<Mutex<Option<TcpStream>>>,
+//     data: Arc<Vec<Vec<f32>>>,
+// ) -> std::io::Result<()> {
+//     let mut time_index = 0;
+//     loop {
+//         let mut locked_stream = stream_mutex.lock().unwrap();
+//         if let Some(stream) = locked_stream.as_mut() {
+//             // Assume data is structured such that each Vec<f32> is one signal channel
+//             // and time_index iterates over each time step
+//             if time_index < data[0].len() {
+//                 // all channels
+//                 // for channel_data in data.iter() {
+//                 //     let signal_value = channel_data[time_index] as i32;
+//                 //     // print value type = [u8; 4]
+//                 //     println!("{:?}", signal_value.to_be_bytes());
+
+//                 //     stream.write(&signal_value.to_be_bytes())?;
+//                 // }
+
+//                 // only last channel
+//                 let signal_value = data[NUM_SIGNALS - 1][time_index] as i32;
+//                 stream.write(&signal_value.to_be_bytes())?;
+
+//                 time_index += 1;
+//             } else {
+//                 break; // Stop the loop when the end of the data is reached
+//             }
+//         }
+//         std::thread::sleep(std::time::Duration::from_millis(SLEEP_TIME));
+//     }
+//     Ok(())
+// }
 
 // -----------------------------------------------------------------------------
 // SETUP FOR THE SIMULATED SIGNALS
