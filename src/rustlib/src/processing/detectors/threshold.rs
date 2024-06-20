@@ -94,15 +94,27 @@ impl DetectorInstance for ThresholdDetector {
         // If verbose, add more items to the results HashMap
         if global_config.verbose {
             results.insert(
-                format!("detectors:{}:z_score", self.config.id),
-                self.statistics.z_score,
+                format!("detectors:{}:statistics:sum", self.config.id),
+                self.statistics.sum,
             );
             results.insert(
-                format!("detectors:{}:mean", self.config.id),
+                format!("detectors:{}:statistics:sum_of_squares", self.config.id),
+                self.statistics.sum_of_squares,
+            );
+            results.insert(
+                format!("detectors:{}:statistics:count", self.config.id),
+                self.statistics.count as f64,
+            );
+            results.insert(
+                format!("detectors:{}:statistics:mean", self.config.id),
                 self.statistics.mean,
             );
             results.insert(
-                format!("detectors:{}:std_dev", self.config.id),
+                format!("detectors:{}:statistics:z_score", self.config.id),
+                self.statistics.z_score,
+            );
+            results.insert(
+                format!("detectors:{}:statistics:std_dev", self.config.id),
                 self.statistics.std_dev,
             );
         }

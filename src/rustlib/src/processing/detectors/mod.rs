@@ -56,18 +56,20 @@ impl RingBuffer {
 // STATISTICS COMPONENT --------------------------------------------------------
 
 #[derive(Clone)]
-pub struct Statistics {
-    pub sum: f64,
-    pub count: usize,
-    pub mean: f64,
-    pub std_dev: f64,
-    pub z_score: f64,
+struct Statistics {
+    sum: f64,
+    sum_of_squares: f64,
+    count: usize,
+    mean: f64,
+    std_dev: f64,
+    z_score: f64,
 }
 
 impl Statistics {
     fn new() -> Self {
         Self {
             sum: 0.0,
+            sum_of_squares: 0.0,
             count: 0,
             mean: 0.0,
             std_dev: 0.0,
@@ -77,10 +79,24 @@ impl Statistics {
 
     fn update_statistics(&mut self, sample: f64) {
         self.sum += sample;
+        self.sum_of_squares += sample * sample;
         self.count += 1;
         self.mean = self.sum / self.count as f64;
-        // Update standard deviation calculation to correctly reflect population/std sample deviation as needed
-        self.std_dev = ((self.sum / self.count as f64) - self.mean.powi(2)).sqrt();
-        self.z_score = (sample - self.mean) / self.std_dev;
+
+        if self.count > 1 {
+            let mean_of_squares = self.sum_of_squares / self.count as f64;
+            let square_of_mean = self.mean * self.mean;
+            let variance = mean_of_squares - square_of_mean;
+            self.std_dev = variance.sqrt();
+
+            if self.std_dev != 0.0 {
+                self.z_score = (sample - self.mean) / self.std_dev;
+            } else {
+                self.z_score = 0.0;
+            }
+        } else {
+            self.std_dev = 0.0;
+            self.z_score = 0.0;
+        }
     }
 }
