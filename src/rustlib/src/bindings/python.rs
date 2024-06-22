@@ -91,6 +91,7 @@ impl PySignalProcessor {
     }
 
     pub fn run(&mut self, data: Vec<f64>) -> Vec<HashMap<String, f64>> {
+        self.processor.index = 0; // reset the index
         self.processor.run(data)
     }
 }

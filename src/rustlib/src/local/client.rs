@@ -39,9 +39,9 @@ pub fn run() -> io::Result<()> {
     let ied_detector_config = ThresholdDetectorConfig {
         id: "ied_detector".to_string(),
         filter_id: "ied_filter".to_string(),
-        z_score_threshold: 5.0,
-        buffer_size: 100,
-        sensitivity: 0.2,
+        z_score_threshold: 3.0,
+        buffer_size: 10,
+        sensitivity: 0.5,
     };
     let ied_detector = ThresholdDetector::new(ied_detector_config);
     processor.add_detector(Box::new(ied_detector));
@@ -59,8 +59,8 @@ pub fn run() -> io::Result<()> {
     let slow_wave_detector_config = SlowWaveDetectorConfig {
         id: "slow_wave_detector".to_string(),
         filter_id: "slow_wave_filter".to_string(),
-        z_score_threshold: 3.0,
-        sinusoidness_threshold: 0.6,
+        z_score_threshold: 1.0,
+        sinusoidness_threshold: 0.5,
     };
 
     let slow_wave_detector = SlowWaveDetector::new(slow_wave_detector_config);
@@ -70,7 +70,7 @@ pub fn run() -> io::Result<()> {
         id: "main_trigger".to_string(),
         activation_detector_id: "slow_wave_detector".to_string(),
         inhibition_detector_id: "ied_detector".to_string(),
-        inhibition_cooldown_ms: Duration::from_millis(1000),
+        inhibition_cooldown_ms: Duration::from_millis(2000),
         pulse_cooldown_ms: Duration::from_millis(2000),
     };
     let main_trigger = PulseTrigger::new(trigger_config);
@@ -78,64 +78,85 @@ pub fn run() -> io::Result<()> {
 
     while let Ok(_) = stream.read_exact(&mut buffer) {
         let raw_sample = f32::from_be_bytes(buffer).abs() as f64;
-        println!("Received sample: {}", raw_sample);
-
-        let start_time = Instant::now(); // Start timer before analysis
         let output = processor.run(vec![raw_sample]);
-        let duration = start_time.elapsed();
-
-        println!("Processed sample in {:?}", duration); // Timing the analysis phase only
 
         if let Some(results) = output.last() {
-            println!("Complete Results: {:#?}", results);
+            // println!("Complete Results: {:#?}", results);
 
-            // Display the filtered signal
-            if let Some(&filtered_signal) = results.get("filters:butterworth:filtered_signal") {
-                println!("Filtered signal: {:.2}", filtered_signal);
-            }
-
-            // SWR detector output
-            if let Some(&swr_detection) = results.get("detectors:swr_detector:detected") {
-                let message = format!("SWR Detector Output: {:.2}", swr_detection);
-                if swr_detection > 0.0 {
-                    println!("{}", message.green());
-                } else {
-                    println!("{}", message.red());
+            if let Some(&index) = results.get("global:index") {
+                if index as i32 % 100 == 0 {
+                    println!("Index: {}", index);
                 }
             }
 
-            // Slow Wave detector output
-            if let Some(&slow_wave_detection) = results.get("detectors:slow_wave_detector:detected")
-            {
-                let message = format!("Slow Wave Detector Output: {:.2}", slow_wave_detection);
-                if slow_wave_detection > 0.0 {
-                    println!("{}", message.green());
-                } else {
-                    println!("{}", message.red());
-                }
-            }
-
-            // IED detector output
-            if let Some(&ied_detection) = results.get("detectors:ied_detector:detected") {
-                let message = format!("IED Detector Output: {:.2}", ied_detection);
-                if ied_detection > 0.0 {
-                    println!("{}", message.green());
-                } else {
-                    println!("{}", message.red());
-                }
-            }
-
-            // Trigger result
             if let Some(&triggered) = results.get("triggers:main_trigger:triggered") {
-                let message = format!("Trigger Result: {:.2}", triggered);
-                if triggered > 0.0 {
-                    println!("{}", message.blue()); // Keeping trigger blue for activation
-                } else {
-                    println!("{}", message.red()); // Red to indicate no trigger
+                if triggered == 1.0 {
+                    println!("Complete Results: {:#?}", results);
                 }
             }
         }
     }
+
+    // while let Ok(_) = stream.read_exact(&mut buffer) {
+    //     let raw_sample = f32::from_be_bytes(buffer).abs() as f64;
+    //     println!("Received sample: {}", raw_sample);
+
+    //     let start_time = Instant::now(); // Start timer before analysis
+    //     let output = processor.run(vec![raw_sample]);
+    //     let duration = start_time.elapsed();
+
+    //     println!("Processed sample in {:?}", duration); // Timing the analysis phase only
+
+    //     if let Some(results) = output.last() {
+    //         println!("Complete Results: {:#?}", results);
+
+    //         // Display the filtered signal
+    //         if let Some(&filtered_signal) = results.get("filters:butterworth:filtered_signal") {
+    //             println!("Filtered signal: {:.2}", filtered_signal);
+    //         }
+
+    //         // SWR detector output
+    //         if let Some(&swr_detection) = results.get("detectors:swr_detector:detected") {
+    //             let message = format!("SWR Detector Output: {:.2}", swr_detection);
+    //             if swr_detection > 0.0 {
+    //                 println!("{}", message.green());
+    //             } else {
+    //                 println!("{}", message.red());
+    //             }
+    //         }
+
+    //         // Slow Wave detector output
+    //         if let Some(&slow_wave_detection) = results.get("detectors:slow_wave_detector:detected")
+    //         {
+    //             let message = format!("Slow Wave Detector Output: {:.2}", slow_wave_detection);
+    //             if slow_wave_detection > 0.0 {
+    //                 println!("{}", message.green());
+    //             } else {
+    //                 println!("{}", message.red());
+    //             }
+    //         }
+
+    //         // IED detector output
+    //         if let Some(&ied_detection) = results.get("detectors:ied_detector:detected") {
+    //             let message = format!("IED Detector Output: {:.2}", ied_detection);
+    //             if ied_detection > 0.0 {
+    //                 println!("{}", message.green());
+    //             } else {
+    //                 println!("{}", message.red());
+    //             }
+    //         }
+
+    //         // Trigger result
+    //         if let Some(&triggered) = results.get("triggers:main_trigger:triggered") {
+    //             let message = format!("Trigger Result: {:.2}", triggered);
+    //             if triggered > 0.0 {
+    //                 println!("{}", message.blue()); // Keeping trigger blue for activation
+    //             } else {
+    //                 println!("{}", message.red()); // Red to indicate no trigger
+    //             }
+    //         }
+    //     }
+    // }
 
     Ok(())
 }

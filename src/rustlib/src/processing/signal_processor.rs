@@ -94,7 +94,6 @@ impl SignalProcessor {
 
     // Process a Vec of raw samples
     pub fn run(&mut self, raw_samples: Vec<f64>) -> Vec<HashMap<String, f64>> {
-        self.index = 0; // reset index
         let mut output = Vec::new();
         let keys = &self.keys;
 

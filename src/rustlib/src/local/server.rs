@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 const USE_DATA: bool = true;
+const SLEEP_TIME: u64 = 1;
 
 // -----------------------------------------------------------------------------
 // SETUP FOR INPORTING SIGNALS FROM CSV
@@ -147,7 +148,6 @@ fn send_csv_data(
 // -----------------------------------------------------------------------------
 
 const BASELINE_AMPLITUDE: f64 = 70.0;
-const SLEEP_TIME: u64 = 10;
 const INCREMENT_TIME: f64 = 0.1;
 
 const BACKGROUND_I_FREQ: f64 = 0.5;
