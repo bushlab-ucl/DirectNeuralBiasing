@@ -5,7 +5,6 @@ use crate::processing::signal_processor::{SignalProcessor, SignalProcessorConfig
 use crate::processing::triggers::pulse::{PulseTrigger, PulseTriggerConfig};
 
 use std::collections::HashMap;
-use std::time::Duration;
 
 use pyo3::prelude::*;
 
@@ -83,8 +82,8 @@ impl PySignalProcessor {
             id,
             activation_detector_id,
             inhibition_detector_id,
-            inhibition_cooldown_ms: 2000.0,
-            pulse_cooldown_ms: 2000.0,
+            inhibition_cooldown_ms,
+            pulse_cooldown_ms,
         };
         let trigger = PulseTrigger::new(config);
         self.processor.add_trigger(Box::new(trigger));
