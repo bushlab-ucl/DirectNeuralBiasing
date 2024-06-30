@@ -206,7 +206,8 @@ impl SlowWaveDetector {
             .iter()
             .zip(sinusoid.iter())
             .map(|(&x, &y)| (x - mean_wave) * (y - mean_sinusoid))
-            .sum();
+            .sum::<f64>()
+            / self.ongoing_wave_z_scores.len() as f64;
 
         // Calculate standard deviations
         let std_dev_wave = (self
