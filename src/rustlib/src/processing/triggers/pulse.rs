@@ -1,6 +1,6 @@
 use crate::processing::signal_processor::SignalProcessorConfig;
 use std::collections::HashMap;
-use std::time::{Duration, Instant};
+// use std::time::{Duration, Instant};
 
 use super::TriggerInstance;
 
@@ -8,23 +8,27 @@ pub struct PulseTriggerConfig {
     pub id: String,
     pub activation_detector_id: String,
     pub inhibition_detector_id: String,
-    pub inhibition_cooldown_ms: Duration,
-    pub pulse_cooldown_ms: Duration,
+    pub inhibition_cooldown_ms: f64,
+    pub pulse_cooldown_ms: f64,
 }
 
 pub struct PulseTrigger {
     config: PulseTriggerConfig,
-    last_pulse_time: Option<Instant>,
-    last_inhibition_time: Option<Instant>,
+    last_pulse_sample: Option<usize>,
+    last_inhibition_sample: Option<usize>,
 }
 
 impl PulseTrigger {
     pub fn new(config: PulseTriggerConfig) -> Self {
         Self {
             config,
-            last_pulse_time: None,
-            last_inhibition_time: None,
+            last_pulse_sample: None,
+            last_inhibition_sample: None,
         }
+    }
+
+    fn cooldown_samples(&self, cooldown_ms: f64, fs: f64) -> usize {
+        ((cooldown_ms / 1000.0) * fs) as usize
     }
 }
 
@@ -46,17 +50,11 @@ impl TriggerInstance for PulseTrigger {
         global_config: &SignalProcessorConfig,
         results: &mut HashMap<String, f64>,
     ) {
-        let now = Instant::now();
-
-        // Check if the activation or inhibition cooldowns are active.
-        if self.last_inhibition_time.map_or(false, |t| {
-            now.duration_since(t) < self.config.inhibition_cooldown_ms
-        }) || self.last_pulse_time.map_or(false, |t| {
-            now.duration_since(t) < self.config.pulse_cooldown_ms
-        }) {
-            results.insert(format!("triggers:{}:triggered", self.config.id), 0.0);
-            return;
-        }
+        let current_sample = results.get("global:index").cloned().unwrap_or(0.0) as usize;
+        let inhibition_cooldown_samples =
+            self.cooldown_samples(self.config.inhibition_cooldown_ms, global_config.fs);
+        let pulse_cooldown_samples =
+            self.cooldown_samples(self.config.pulse_cooldown_ms, global_config.fs);
 
         // Determine if the inhibition is active; if so, reset the trigger.
         let inhibition_active = results
@@ -69,7 +67,7 @@ impl TriggerInstance for PulseTrigger {
             > 0.0;
 
         if inhibition_active {
-            self.last_inhibition_time = Some(now);
+            self.last_inhibition_sample = Some(current_sample);
             results.insert(format!("triggers:{}:triggered", self.config.id), 0.0);
             return;
         }
@@ -85,7 +83,7 @@ impl TriggerInstance for PulseTrigger {
             > 0.0;
 
         if activation_active {
-            self.last_pulse_time = Some(now);
+            self.last_pulse_sample = Some(current_sample);
             results.insert(format!("triggers:{}:triggered", self.config.id), 1.0);
         } else {
             results.insert(format!("triggers:{}:triggered", self.config.id), 0.0);
@@ -100,6 +98,29 @@ impl TriggerInstance for PulseTrigger {
             results.insert(
                 format!("triggers:{}:inhibition_active", self.config.id),
                 if inhibition_active { 1.0 } else { 0.0 },
+            );
+            results.insert(
+                format!(
+                    "triggers:{}:activation_cooldown_samples_remaining",
+                    self.config.id
+                ),
+                if let Some(last_pulse_sample) = self.last_pulse_sample {
+                    (last_pulse_sample + pulse_cooldown_samples) as f64 - current_sample as f64
+                } else {
+                    0.0
+                },
+            );
+            results.insert(
+                format!(
+                    "triggers:{}:inhibition_cooldown_samples_remaining",
+                    self.config.id
+                ),
+                if let Some(last_inhibition_sample) = self.last_inhibition_sample {
+                    (last_inhibition_sample + inhibition_cooldown_samples) as f64
+                        - current_sample as f64
+                } else {
+                    0.0
+                },
             );
         }
     }

@@ -17,8 +17,8 @@ pub struct PySignalProcessor {
 #[pymethods]
 impl PySignalProcessor {
     #[new]
-    pub fn new(verbose: bool) -> Self {
-        let config = SignalProcessorConfig { verbose };
+    pub fn new(verbose: bool, fs: f64) -> Self {
+        let config = SignalProcessorConfig { verbose, fs };
         PySignalProcessor {
             processor: SignalProcessor::new(config),
         }
@@ -83,8 +83,8 @@ impl PySignalProcessor {
             id,
             activation_detector_id,
             inhibition_detector_id,
-            inhibition_cooldown_ms: Duration::from_millis(inhibition_cooldown_ms as u64),
-            pulse_cooldown_ms: Duration::from_millis(pulse_cooldown_ms as u64),
+            inhibition_cooldown_ms: 2000.0,
+            pulse_cooldown_ms: 2000.0,
         };
         let trigger = PulseTrigger::new(config);
         self.processor.add_trigger(Box::new(trigger));

@@ -18,6 +18,7 @@ use std::collections::HashMap;
 
 pub struct SignalProcessorConfig {
     pub verbose: bool,
+    pub fs: f64,
 }
 
 pub struct SignalProcessor {

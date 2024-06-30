@@ -1,8 +1,7 @@
 use std::io::{self, Read};
 use std::net::TcpStream;
-use std::time::{Duration, Instant};
 
-use colored::Colorize; // Ensure the 'colored' crate is included in your dependencies
+// use colored::Colorize; // Ensure the 'colored' crate is included in your dependencies
 
 use crate::processing::detectors::slow_wave::{SlowWaveDetector, SlowWaveDetectorConfig};
 use crate::processing::detectors::threshold::{ThresholdDetector, ThresholdDetectorConfig};
@@ -14,7 +13,10 @@ pub fn run() -> io::Result<()> {
     let mut stream = TcpStream::connect("127.0.0.1:8080")?;
     let mut buffer = [0u8; 4];
 
-    let processor_config = SignalProcessorConfig { verbose: true };
+    let processor_config = SignalProcessorConfig {
+        verbose: true,
+        fs: 512.0,
+    };
 
     let mut processor = SignalProcessor::new(processor_config);
 
@@ -70,32 +72,73 @@ pub fn run() -> io::Result<()> {
         id: "main_trigger".to_string(),
         activation_detector_id: "slow_wave_detector".to_string(),
         inhibition_detector_id: "ied_detector".to_string(),
-        inhibition_cooldown_ms: Duration::from_millis(2000),
-        pulse_cooldown_ms: Duration::from_millis(2000),
+        inhibition_cooldown_ms: 2000.0,
+        pulse_cooldown_ms: 2000.0,
     };
     let main_trigger = PulseTrigger::new(trigger_config);
     processor.add_trigger(Box::new(main_trigger));
 
+    // working code
+    // while let Ok(_) = stream.read_exact(&mut buffer) {
+    //     let raw_sample = f32::from_be_bytes(buffer).abs() as f64;
+    //     let output = processor.run(vec![raw_sample]);
+
+    //     if let Some(results) = output.last() {
+    //         // println!("Complete Results: {:#?}", results);
+
+    //         if let Some(&index) = results.get("global:index") {
+    //             if index as i32 % 100 == 0 {
+    //                 println!("Index: {}", index);
+    //             }
+    //         }
+
+    //         // println!("Complete Results: {:#?}", results);
+
+    //         if let Some(&triggered) = results.get("triggers:main_trigger:triggered") {
+    //             if triggered == 1.0 {
+    //                 println!("Complete Results: {:#?}", results);
+    //             }
+    //         }
+    //     }
+    // }
+
+    let mut counter = 0;
+    let mut samples = Vec::new();
+
     while let Ok(_) = stream.read_exact(&mut buffer) {
-        let raw_sample = f32::from_be_bytes(buffer).abs() as f64;
-        let output = processor.run(vec![raw_sample]);
+        // Collect samples until counter reaches the limit
+        while counter < 10000000 {
+            let raw_sample = f32::from_be_bytes(buffer).abs() as f64;
+            samples.push(raw_sample);
 
-        if let Some(results) = output.last() {
-            // println!("Complete Results: {:#?}", results);
+            counter += 1;
 
-            if let Some(&index) = results.get("global:index") {
-                if index as i32 % 100 == 0 {
-                    println!("Index: {}", index);
-                }
-            }
-
-            if let Some(&triggered) = results.get("triggers:main_trigger:triggered") {
-                if triggered == 1.0 {
-                    println!("Complete Results: {:#?}", results);
-                }
+            // Read the next buffer
+            if let Err(_) = stream.read_exact(&mut buffer) {
+                break;
             }
         }
+
+        // Run the processor on the collected samples
+        if !samples.is_empty() {
+            let output = processor.run(samples.clone());
+
+            // Iterate through the output and print results when triggered
+            for results in &output {
+                if let Some(&triggered) = results.get("triggers:main_trigger:triggered") {
+                    if triggered == 1.0 {
+                        println!("Complete Results: {:#?}", results);
+                    }
+                }
+            }
+
+            // Clear the samples and reset the counter after processing
+            samples.clear();
+            counter = 0;
+        }
     }
+
+    println!("Finished processing samples");
 
     // while let Ok(_) = stream.read_exact(&mut buffer) {
     //     let raw_sample = f32::from_be_bytes(buffer).abs() as f64;
