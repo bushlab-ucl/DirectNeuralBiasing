@@ -121,7 +121,7 @@ pub fn run() -> io::Result<()> {
 
         // Run the processor on the collected samples
         if !samples.is_empty() {
-            let output = processor.run(samples.clone());
+            let output = processor.run_chunk(samples.clone());
 
             // Iterate through the output and print results when triggered
             for results in &output {
