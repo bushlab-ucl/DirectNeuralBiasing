@@ -93,9 +93,9 @@ impl SignalProcessor {
         self.triggers.insert(id, trigger);
     }
 
-    // Process a Vec of raw samples
-    pub fn run(&mut self, raw_samples: Vec<f64>) -> Vec<HashMap<String, f64>> {
-        let mut output = Vec::new();
+    // Process a Vec of raw samples - chunk with defined length
+    pub fn run_chunk(&mut self, raw_samples: Vec<f64>) -> Vec<HashMap<String, f64>> {
+        let mut output = Vec::with_capacity(raw_samples.len());
         let keys = &self.keys;
 
         for sample in raw_samples {

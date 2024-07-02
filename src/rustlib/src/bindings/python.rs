@@ -89,17 +89,17 @@ impl PySignalProcessor {
         self.processor.add_trigger(Box::new(trigger));
     }
 
-    pub fn run(&mut self, data: Vec<f64>) -> Vec<HashMap<String, f64>> {
-        self.processor.index = 0; // reset the index
-        self.processor.run(data)
-    }
+    // pub fn run(&mut self, data: Vec<f64>) -> Vec<HashMap<String, f64>> {
+    //     self.processor.index = 0; // reset the index
+    //     self.processor.run(data)
+    // }
 
     pub fn reset_index(&mut self) {
         self.processor.index = 0; // reset the index
     }
 
     pub fn run_chunk(&mut self, data: Vec<f64>) -> Vec<HashMap<String, f64>> {
-        self.processor.run(data)
+        self.processor.run_chunk(data)
     }
 }
 
