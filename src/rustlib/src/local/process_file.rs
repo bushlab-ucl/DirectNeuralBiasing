@@ -99,7 +99,7 @@ pub fn run() -> io::Result<()> {
     processor.add_detector(Box::new(slow_wave_detector));
 
     let trigger_config = PulseTriggerConfig {
-        id: "main_trigger".to_string(),
+        id: "pulse_trigger".to_string(),
         activation_detector_id: "slow_wave_detector".to_string(),
         inhibition_detector_id: "ied_detector".to_string(),
         inhibition_cooldown_ms: 1000.0,
@@ -139,7 +139,8 @@ pub fn run() -> io::Result<()> {
                     let middle_sample = sample_buffer.get(context_size).unwrap();
 
                     // If the middle sample is an event, write the context to the file
-                    if let Some(&triggered) = middle_sample.get("triggers:main_trigger:triggered") {
+                    if let Some(&triggered) = middle_sample.get("triggers:pulse_trigger:triggered")
+                    {
                         if triggered == 1.0 {
                             detected_events += 1;
                             println!("Detected event: {:?}", middle_sample);
