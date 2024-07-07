@@ -61,7 +61,7 @@ First, create a `PySignalProcessor` instance.
 
 ```py
 verbose = False  # verbose = True gives verbose output in results object for debugging
-signal_processor = dnb.PySignalProcessor(verbose)
+signal_processor = dnb.PySignalProcessor(verbose, sample_freq)
 ```
 
 #### 2.2 - Create Filter
@@ -72,7 +72,6 @@ Create and add a `BandpassFilter` to the `PySignalProcessor`. Set the filter ID,
 filter_id = 'bandpass_filter_slow_wave'
 f_low = 0.5 # cutoff_low
 f_high = 4.0 # cutoff_high
-sample_freq = sample_freq # signal sample rate
 
 signal_processor.add_filter(slow_wave_filter_id, f_low, f_high, sample_freq)
 ```
@@ -100,7 +99,7 @@ Create and add a `ThresholdDetector` to the `PySignalProcessor`. Specify the det
 
 ```py
 inhibition_detector_id = 'ied_detector' # unique id
-z_score_threshold = 5.0  # threshold for candidate detection event
+z_score_threshold = 2.0  # threshold for candidate detection event
 buffer_size = 10  # length of buffer - to increase noise resistance
 sensitivity = 0.5  # Between 0 and 1. Ratio of values in buffer over threshold required to trigger an 'IED Detected' event.
 
@@ -137,8 +136,73 @@ Run the `PySignalProcessor` with your data. The data should be an array of raw s
 
 ```py
 data = [...]  # Your raw signal data array
-out = signal_processor.run(data)
+out = signal_processor.run_chunk(data) # run data in chunks
+```
 
+Example file for iterating through data and reading events with context to a list.
+
+```py
+from collections import deque
+import time
+
+def data_generator(data, chunk_size):
+    for i in range(0, len(data), chunk_size):
+        print(f'processing chunk {i // chunk_size + 1} of size: {chunk_size}')
+        yield data[i:i + chunk_size]
+
+def process_chunk(signal_processor, data_chunk):
+    return signal_processor.run_chunk(data_chunk)
+
+def run_in_series(processor, data_generator, chunk_size, context_size):
+    buffer_size = (context_size * 2) + 1
+    event_buffer = deque(maxlen=buffer_size)  # Ring buffer with context samples
+    results = []  # List to hold the final output arrays
+    
+    # Reset index to zero each time you re-analyse the data
+    processor.reset_index()
+    
+    chunk_count = 0
+    detected_events = 0
+    
+    for chunk in data_generator:
+        if len(chunk) > 0:
+            chunk_count += 1
+            start_time = time.time()  # Start timer before analysis
+            chunk_output = process_chunk(processor, chunk)
+            duration = time.time() - start_time
+
+            print(f"Processed chunk {chunk_count} in {duration:.4f}s")
+
+            for sample_result in chunk_output:
+                event_buffer.append(sample_result)
+
+                # If the buffer is full, analyze the middle sample and remove the oldest sample
+                if len(event_buffer) >= buffer_size:
+                    # Check if the sample in the middle of the buffer is an event
+                    middle_sample = event_buffer[context_size]
+                    
+                    # If the middle sample is an event, store the context
+                    if middle_sample.get("triggers:pulse_trigger:triggered", 0.0) == 1.0:
+                        detected_events += 1
+                        print(f"Detected event {detected_events} at buffer index {context_size}")
+
+                        # Append the entire buffer to results
+                        results.append(list(event_buffer))
+
+                    # Pop the oldest sample
+                    event_buffer.popleft()
+
+    return results
+
+# Example usage
+chunk_size = int(1e5)  # Chunk size for processing
+context_size = 2000  # Number of samples to include as context around events
+data_gen = data_generator(data, chunk_size)
+results = run_in_series(signal_processor, data_gen, chunk_size, context_size)
+
+# The results object now contains the final output - a list of lists
+# Each list contains <context_size> samples either side of an event
+# i.e. if context_size is 2e4 (2000), each list will be 4001 samples long, and the event will be at sample index 2000
 ```
 
 # Structure and Use of `SignalProcessor` in Rust
