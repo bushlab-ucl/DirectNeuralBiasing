@@ -44,7 +44,7 @@ impl SignalProcessor {
             detectors: HashMap::new(),
             triggers: HashMap::new(),
             config,
-            results: HashMap::new(),
+            results: HashMap::with_capacity(100),
             keys: Keys {
                 global_index: "global:index".to_string(),
                 global_raw_sample: "global:raw_sample".to_string(),

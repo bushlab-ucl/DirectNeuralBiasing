@@ -11,7 +11,8 @@ pub fn main() {
         match args[1].as_str() {
             "client" => local::client::run().unwrap(),
             "server" => local::server::run().unwrap(),
-            _ => println!("Invalid argument, please use 'client' or 'server'"),
+            "local" => local::process_file::run().unwrap(), // true to process whole file
+            _ => println!("Invalid argument, please use 'client', 'server', or 'local'"),
         }
     } else {
         println!("Please specify 'client' or 'server' as argument");

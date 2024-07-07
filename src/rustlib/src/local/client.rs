@@ -1,7 +1,8 @@
 use std::io::{self, Read};
 use std::net::TcpStream;
 
-// use colored::Colorize; // Ensure the 'colored' crate is included in your dependencies
+use colored::Colorize;
+use std::time::Instant;
 
 use crate::processing::detectors::slow_wave::{SlowWaveDetector, SlowWaveDetectorConfig};
 use crate::processing::detectors::threshold::{ThresholdDetector, ThresholdDetectorConfig};
@@ -78,7 +79,7 @@ pub fn run() -> io::Result<()> {
     let main_trigger = PulseTrigger::new(trigger_config);
     processor.add_trigger(Box::new(main_trigger));
 
-    // working code
+    // working code - counts indexes
     // while let Ok(_) = stream.read_exact(&mut buffer) {
     //     let raw_sample = f32::from_be_bytes(buffer).abs() as f64;
     //     let output = processor.run(vec![raw_sample]);
@@ -102,104 +103,104 @@ pub fn run() -> io::Result<()> {
     //     }
     // }
 
-    let mut counter = 0;
-    let mut samples = Vec::new();
+    // let mut counter = 0;
+    // let mut samples = Vec::new();
+
+    // while let Ok(_) = stream.read_exact(&mut buffer) {
+    //     // Collect samples until counter reaches the limit
+    //     while counter < 10000000 {
+    //         let raw_sample = f32::from_be_bytes(buffer).abs() as f64;
+    //         samples.push(raw_sample);
+
+    //         counter += 1;
+
+    //         // Read the next buffer
+    //         if let Err(_) = stream.read_exact(&mut buffer) {
+    //             break;
+    //         }
+    //     }
+
+    //     // Run the processor on the collected samples
+    //     if !samples.is_empty() {
+    //         let output = processor.run_chunk(samples.clone());
+
+    //         // Iterate through the output and print results when triggered
+    //         for results in &output {
+    //             if let Some(&triggered) = results.get("triggers:main_trigger:triggered") {
+    //                 if triggered == 1.0 {
+    //                     println!("Complete Results: {:#?}", results);
+    //                 }
+    //             }
+    //         }
+
+    //         // Clear the samples and reset the counter after processing
+    //         samples.clear();
+    //         counter = 0;
+    //     }
+    // }
+
+    // println!("Finished processing samples");
 
     while let Ok(_) = stream.read_exact(&mut buffer) {
-        // Collect samples until counter reaches the limit
-        while counter < 10000000 {
-            let raw_sample = f32::from_be_bytes(buffer).abs() as f64;
-            samples.push(raw_sample);
+        let raw_sample = f32::from_be_bytes(buffer).abs() as f64;
+        println!("Received sample: {}", raw_sample);
 
-            counter += 1;
+        let start_time = Instant::now(); // Start timer before analysis
+        let output = processor.run_chunk(vec![raw_sample]);
+        let duration = start_time.elapsed();
 
-            // Read the next buffer
-            if let Err(_) = stream.read_exact(&mut buffer) {
-                break;
+        println!("Processed sample in {:?}", duration); // Timing the analysis phase only
+
+        if let Some(results) = output.last() {
+            println!("Complete Results: {:#?}", results);
+
+            // Display the filtered signal
+            if let Some(&filtered_signal) = results.get("filters:butterworth:filtered_signal") {
+                println!("Filtered signal: {:.2}", filtered_signal);
             }
-        }
 
-        // Run the processor on the collected samples
-        if !samples.is_empty() {
-            let output = processor.run_chunk(samples.clone());
-
-            // Iterate through the output and print results when triggered
-            for results in &output {
-                if let Some(&triggered) = results.get("triggers:main_trigger:triggered") {
-                    if triggered == 1.0 {
-                        println!("Complete Results: {:#?}", results);
-                    }
+            // SWR detector output
+            if let Some(&swr_detection) = results.get("detectors:swr_detector:detected") {
+                let message = format!("SWR Detector Output: {:.2}", swr_detection);
+                if swr_detection > 0.0 {
+                    println!("{}", message.green());
+                } else {
+                    println!("{}", message.red());
                 }
             }
 
-            // Clear the samples and reset the counter after processing
-            samples.clear();
-            counter = 0;
+            // Slow Wave detector output
+            if let Some(&slow_wave_detection) = results.get("detectors:slow_wave_detector:detected")
+            {
+                let message = format!("Slow Wave Detector Output: {:.2}", slow_wave_detection);
+                if slow_wave_detection > 0.0 {
+                    println!("{}", message.green());
+                } else {
+                    println!("{}", message.red());
+                }
+            }
+
+            // IED detector output
+            if let Some(&ied_detection) = results.get("detectors:ied_detector:detected") {
+                let message = format!("IED Detector Output: {:.2}", ied_detection);
+                if ied_detection > 0.0 {
+                    println!("{}", message.green());
+                } else {
+                    println!("{}", message.red());
+                }
+            }
+
+            // Trigger result
+            if let Some(&triggered) = results.get("triggers:main_trigger:triggered") {
+                let message = format!("Trigger Result: {:.2}", triggered);
+                if triggered > 0.0 {
+                    println!("{}", message.blue()); // Keeping trigger blue for activation
+                } else {
+                    println!("{}", message.red()); // Red to indicate no trigger
+                }
+            }
         }
     }
-
-    println!("Finished processing samples");
-
-    // while let Ok(_) = stream.read_exact(&mut buffer) {
-    //     let raw_sample = f32::from_be_bytes(buffer).abs() as f64;
-    //     println!("Received sample: {}", raw_sample);
-
-    //     let start_time = Instant::now(); // Start timer before analysis
-    //     let output = processor.run(vec![raw_sample]);
-    //     let duration = start_time.elapsed();
-
-    //     println!("Processed sample in {:?}", duration); // Timing the analysis phase only
-
-    //     if let Some(results) = output.last() {
-    //         println!("Complete Results: {:#?}", results);
-
-    //         // Display the filtered signal
-    //         if let Some(&filtered_signal) = results.get("filters:butterworth:filtered_signal") {
-    //             println!("Filtered signal: {:.2}", filtered_signal);
-    //         }
-
-    //         // SWR detector output
-    //         if let Some(&swr_detection) = results.get("detectors:swr_detector:detected") {
-    //             let message = format!("SWR Detector Output: {:.2}", swr_detection);
-    //             if swr_detection > 0.0 {
-    //                 println!("{}", message.green());
-    //             } else {
-    //                 println!("{}", message.red());
-    //             }
-    //         }
-
-    //         // Slow Wave detector output
-    //         if let Some(&slow_wave_detection) = results.get("detectors:slow_wave_detector:detected")
-    //         {
-    //             let message = format!("Slow Wave Detector Output: {:.2}", slow_wave_detection);
-    //             if slow_wave_detection > 0.0 {
-    //                 println!("{}", message.green());
-    //             } else {
-    //                 println!("{}", message.red());
-    //             }
-    //         }
-
-    //         // IED detector output
-    //         if let Some(&ied_detection) = results.get("detectors:ied_detector:detected") {
-    //             let message = format!("IED Detector Output: {:.2}", ied_detection);
-    //             if ied_detection > 0.0 {
-    //                 println!("{}", message.green());
-    //             } else {
-    //                 println!("{}", message.red());
-    //             }
-    //         }
-
-    //         // Trigger result
-    //         if let Some(&triggered) = results.get("triggers:main_trigger:triggered") {
-    //             let message = format!("Trigger Result: {:.2}", triggered);
-    //             if triggered > 0.0 {
-    //                 println!("{}", message.blue()); // Keeping trigger blue for activation
-    //             } else {
-    //                 println!("{}", message.red()); // Red to indicate no trigger
-    //             }
-    //         }
-    //     }
-    // }
 
     Ok(())
 }

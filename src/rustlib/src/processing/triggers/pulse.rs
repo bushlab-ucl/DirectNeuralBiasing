@@ -1,6 +1,5 @@
 use crate::processing::signal_processor::SignalProcessorConfig;
 use std::collections::HashMap;
-// use std::time::{Duration, Instant};
 
 use super::TriggerInstance;
 
@@ -14,16 +13,16 @@ pub struct PulseTriggerConfig {
 
 pub struct PulseTrigger {
     config: PulseTriggerConfig,
-    last_pulse_sample: Option<usize>,
-    last_inhibition_sample: Option<usize>,
+    pulse_cooldown_remaining: usize,
+    inhibition_cooldown_remaining: usize,
 }
 
 impl PulseTrigger {
     pub fn new(config: PulseTriggerConfig) -> Self {
         Self {
             config,
-            last_pulse_sample: None,
-            last_inhibition_sample: None,
+            pulse_cooldown_remaining: 0,
+            inhibition_cooldown_remaining: 0,
         }
     }
 
@@ -50,13 +49,20 @@ impl TriggerInstance for PulseTrigger {
         global_config: &SignalProcessorConfig,
         results: &mut HashMap<String, f64>,
     ) {
-        let current_sample = results.get("global:index").cloned().unwrap_or(0.0) as usize;
-        let inhibition_cooldown_samples =
-            self.cooldown_samples(self.config.inhibition_cooldown_ms, global_config.fs);
-        let pulse_cooldown_samples =
-            self.cooldown_samples(self.config.pulse_cooldown_ms, global_config.fs);
+        // let inhibition_cooldown_samples =
+        //     self.cooldown_samples(self.config.inhibition_cooldown_ms, global_config.fs);
+        // let pulse_cooldown_samples =
+        //     self.cooldown_samples(self.config.pulse_cooldown_ms, global_config.fs);
 
-        // Determine if the inhibition is active; if so, reset the trigger.
+        // Decrement the cooldown counters if they are greater than zero
+        if self.inhibition_cooldown_remaining > 0 {
+            self.inhibition_cooldown_remaining -= 1;
+        }
+        if self.pulse_cooldown_remaining > 0 {
+            self.pulse_cooldown_remaining -= 1;
+        }
+
+        // Determine if the inhibition is active; if so, reset the trigger and set the cooldown
         let inhibition_active = results
             .get(&format!(
                 "detectors:{}:detected",
@@ -67,12 +73,13 @@ impl TriggerInstance for PulseTrigger {
             > 0.0;
 
         if inhibition_active {
-            self.last_inhibition_sample = Some(current_sample);
+            self.inhibition_cooldown_remaining =
+                self.cooldown_samples(self.config.inhibition_cooldown_ms, global_config.fs);
             results.insert(format!("triggers:{}:triggered", self.config.id), 0.0);
             return;
         }
 
-        // Determine if the activation is active; if so, set the trigger.
+        // Determine if the activation is active; if so, set the trigger and set the cooldown
         let activation_active = results
             .get(&format!(
                 "detectors:{}:detected",
@@ -82,8 +89,9 @@ impl TriggerInstance for PulseTrigger {
             .unwrap_or(0.0)
             > 0.0;
 
-        if activation_active {
-            self.last_pulse_sample = Some(current_sample);
+        if activation_active && self.pulse_cooldown_remaining == 0 {
+            self.pulse_cooldown_remaining =
+                self.cooldown_samples(self.config.pulse_cooldown_ms, global_config.fs);
             results.insert(format!("triggers:{}:triggered", self.config.id), 1.0);
         } else {
             results.insert(format!("triggers:{}:triggered", self.config.id), 0.0);
@@ -104,23 +112,14 @@ impl TriggerInstance for PulseTrigger {
                     "triggers:{}:activation_cooldown_samples_remaining",
                     self.config.id
                 ),
-                if let Some(last_pulse_sample) = self.last_pulse_sample {
-                    (last_pulse_sample + pulse_cooldown_samples) as f64 - current_sample as f64
-                } else {
-                    0.0
-                },
+                self.pulse_cooldown_remaining as f64,
             );
             results.insert(
                 format!(
                     "triggers:{}:inhibition_cooldown_samples_remaining",
                     self.config.id
                 ),
-                if let Some(last_inhibition_sample) = self.last_inhibition_sample {
-                    (last_inhibition_sample + inhibition_cooldown_samples) as f64
-                        - current_sample as f64
-                } else {
-                    0.0
-                },
+                self.inhibition_cooldown_remaining as f64,
             );
         }
     }
