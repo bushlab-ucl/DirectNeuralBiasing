@@ -139,6 +139,8 @@ data = [...]  # Your raw signal data array
 out = signal_processor.run_chunk(data) # run data in chunks
 ```
 
+Example file for iterating through data and reading events with context to a list.
+
 ```py
 from collections import deque
 import time
@@ -189,8 +191,6 @@ def run_in_series(processor, data_generator, chunk_size, context_size):
 
                     # Pop the oldest sample
                     event_buffer.popleft()
-
-            # gc.collect()  # Trigger garbage collection to free up memory
 
     return results
 
