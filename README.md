@@ -61,7 +61,9 @@ First, create a `PySignalProcessor` instance.
 
 ```py
 verbose = False  # verbose = True gives verbose output in results object for debugging
-signal_processor = dnb.PySignalProcessor(verbose, sample_freq)
+sample_freq = fs # Read from file
+channel = channel # Read from file, will support multiple channels in the future.
+signal_processor = dnb.PySignalProcessor(verbose, sample_freq, channel)
 ```
 
 #### 2.2 - Create Filter
