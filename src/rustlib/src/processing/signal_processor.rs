@@ -19,6 +19,7 @@ use std::collections::HashMap;
 pub struct SignalProcessorConfig {
     pub verbose: bool,
     pub fs: f64,
+    pub channel: usize,
 }
 
 pub struct SignalProcessor {
@@ -34,6 +35,8 @@ pub struct SignalProcessor {
 pub struct Keys {
     global_index: String,
     global_raw_sample: String,
+    global_channel: String,
+    global_timestamp: String,
 }
 
 impl SignalProcessor {
@@ -48,6 +51,8 @@ impl SignalProcessor {
             keys: Keys {
                 global_index: "global:index".to_string(),
                 global_raw_sample: "global:raw_sample".to_string(),
+                global_channel: "global:channel".to_string(),
+                global_timestamp: "global:timestamp".to_string(),
             },
         }
     }
@@ -106,6 +111,12 @@ impl SignalProcessor {
             self.results
                 .insert(keys.global_index.clone(), self.index as f64);
             self.results.insert(keys.global_raw_sample.clone(), sample);
+            self.results
+                .insert(keys.global_channel.clone(), self.config.channel as f64);
+            self.results.insert(
+                keys.global_timestamp.clone(),
+                self.index as f64 / self.config.fs,
+            );
 
             // Filters process the sample
             // let start_time = Instant::now(); // Start timer before analysis

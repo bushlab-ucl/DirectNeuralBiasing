@@ -17,6 +17,7 @@ pub fn run() -> io::Result<()> {
     let processor_config = SignalProcessorConfig {
         verbose: true,
         fs: 512.0,
+        channel: 1,
     };
 
     let mut processor = SignalProcessor::new(processor_config);
