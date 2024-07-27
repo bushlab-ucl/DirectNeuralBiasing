@@ -92,8 +92,8 @@ pub fn run() -> io::Result<()> {
     let slow_wave_detector_config = SlowWaveDetectorConfig {
         id: "slow_wave_detector".to_string(),
         filter_id: "slow_wave_filter".to_string(),
-        z_score_threshold: 0.5,
-        sinusoidness_threshold: 0.25,
+        z_score_threshold: 2.0,
+        sinusoidness_threshold: 0.6,
     };
 
     let slow_wave_detector = SlowWaveDetector::new(slow_wave_detector_config);

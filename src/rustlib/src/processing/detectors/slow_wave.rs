@@ -181,10 +181,14 @@ impl SlowWaveDetector {
 
     /// Constructs a cosine wave that matches the frequency and amplitude of the detected wave.
     fn construct_cosine_wave(&self, peak_idx: usize, wave_length: usize) -> Vec<f64> {
-        let frequency = 1.0 / (wave_length as f64 / 2.0); // Calculate the frequency based on the wave length
+        let frequency = 1.0 / (wave_length as f64); // Calculate the frequency based on the wave length
         let amplitude = self.ongoing_wave_z_scores[peak_idx]; // Use the amplitude at the peak index
         (0..wave_length)
-            .map(|i| amplitude * (i as f64 * 2.0 * std::f64::consts::PI * frequency).cos())
+            .map(|i| {
+                let phase_shift = std::f64::consts::PI / 2.0; // Phase shift to start from pi/2
+                amplitude
+                    * ((i as f64 * 2.0 * std::f64::consts::PI * frequency) + phase_shift).cos()
+            })
             .collect()
     }
 
@@ -236,19 +240,19 @@ impl SlowWaveDetector {
                 format!("detectors:{}:covariance", self.config.id),
                 covariance,
             );
-            results.insert(format!("detectors:{}:mean_wave", self.config.id), mean_wave);
-            results.insert(
-                format!("detectors:{}:mean_sinusoid", self.config.id),
-                mean_sinusoid,
-            );
-            results.insert(
-                format!("detectors:{}:std_dev_wave", self.config.id),
-                std_dev_wave,
-            );
-            results.insert(
-                format!("detectors:{}:std_dev_sinusoid", self.config.id),
-                std_dev_sinusoid,
-            );
+            // results.insert(format!("detectors:{}:mean_wave", self.config.id), mean_wave);
+            // results.insert(
+            //     format!("detectors:{}:mean_sinusoid", self.config.id),
+            //     mean_sinusoid,
+            // );
+            // results.insert(
+            //     format!("detectors:{}:std_dev_wave", self.config.id),
+            //     std_dev_wave,
+            // );
+            // results.insert(
+            //     format!("detectors:{}:std_dev_sinusoid", self.config.id),
+            //     std_dev_sinusoid,
+            // );
         }
 
         // Calculate and return the correlation
