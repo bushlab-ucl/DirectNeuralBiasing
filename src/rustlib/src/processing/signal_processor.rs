@@ -36,7 +36,7 @@ pub struct Keys {
     global_index: String,
     global_raw_sample: String,
     global_channel: String,
-    global_timestamp: String,
+    global_timestamp_ms: String,
 }
 
 impl SignalProcessor {
@@ -52,7 +52,7 @@ impl SignalProcessor {
                 global_index: "global:index".to_string(),
                 global_raw_sample: "global:raw_sample".to_string(),
                 global_channel: "global:channel".to_string(),
-                global_timestamp: "global:timestamp".to_string(),
+                global_timestamp_ms: "global:timestamp_ms".to_string(),
             },
         }
     }
@@ -114,8 +114,8 @@ impl SignalProcessor {
             self.results
                 .insert(keys.global_channel.clone(), self.config.channel as f64);
             self.results.insert(
-                keys.global_timestamp.clone(),
-                self.index as f64 / self.config.fs,
+                keys.global_timestamp_ms.clone(),
+                self.index as f64 / self.config.fs * 10.0, // convert from index to ms
             );
 
             // Filters process the sample

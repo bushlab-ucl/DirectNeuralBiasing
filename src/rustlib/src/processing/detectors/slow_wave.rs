@@ -15,7 +15,7 @@ pub struct SlowWaveDetectorConfig {
 pub struct SlowWaveDetector {
     config: SlowWaveDetectorConfig,
     statistics: Statistics,
-    last_sample: f64,
+    last_z_score: f64,
     is_downwave: bool,
     ongoing_wave_z_scores: Vec<f64>,
     downwave_start_index: Option<usize>,
@@ -28,7 +28,7 @@ impl SlowWaveDetector {
         SlowWaveDetector {
             config,
             statistics: Statistics::new(),
-            last_sample: 0.0,
+            last_z_score: 0.0,
             is_downwave: false,
             ongoing_wave_z_scores: Vec::new(),
             downwave_start_index: None,
@@ -63,7 +63,7 @@ impl DetectorInstance for SlowWaveDetector {
         self.statistics.update_statistics(filtered_sample);
 
         // Detect start of downwave (zero-crossing from positive to negative)
-        if self.last_sample >= 0.0 && filtered_sample < 0.0 {
+        if self.last_z_score >= 0.0 && self.statistics.z_score < 0.0 {
             self.is_downwave = true;
             self.downwave_start_index = Some(index);
         }
@@ -74,7 +74,7 @@ impl DetectorInstance for SlowWaveDetector {
         }
 
         // Detect end of ongoing downwave and analyse (zero-crossing from negative to positive)
-        if self.is_downwave && self.last_sample <= 0.0 && filtered_sample > 0.0 {
+        if self.is_downwave && self.last_z_score <= 0.0 && self.statistics.z_score > 0.0 {
             self.is_downwave = false;
             self.downwave_end_index = Some(index);
 
@@ -131,7 +131,7 @@ impl DetectorInstance for SlowWaveDetector {
         }
 
         // Update the last sample for zero-crossing detection
-        self.last_sample = filtered_sample;
+        self.last_z_score = self.statistics.z_score;
     }
 }
 

@@ -26,7 +26,7 @@ where
 }
 
 pub fn run() -> io::Result<()> {
-    let data_file_path = "./data/data.csv";
+    let data_file_path = "./data/data_channel1.csv";
     if !Path::new(data_file_path).exists() {
         eprintln!("Error: Data file not found at path: {}", data_file_path);
         return Err(io::Error::new(
@@ -92,8 +92,8 @@ pub fn run() -> io::Result<()> {
     let slow_wave_detector_config = SlowWaveDetectorConfig {
         id: "slow_wave_detector".to_string(),
         filter_id: "slow_wave_filter".to_string(),
-        z_score_threshold: 1.0,
-        sinusoidness_threshold: 0.5,
+        z_score_threshold: 0.5,
+        sinusoidness_threshold: 0.25,
     };
 
     let slow_wave_detector = SlowWaveDetector::new(slow_wave_detector_config);
