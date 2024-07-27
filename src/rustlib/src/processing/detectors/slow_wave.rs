@@ -130,6 +130,12 @@ impl DetectorInstance for SlowWaveDetector {
             results.insert(format!("detectors:{}:detected", self.config.id), 0.0);
         }
 
+        // Output the z_score value to the results HashMap
+        results.insert(
+            format!("detectors:{}:statistics:z_score", self.config.id),
+            self.statistics.z_score,
+        );
+
         // Update the last sample for zero-crossing detection
         self.last_z_score = self.statistics.z_score;
     }
