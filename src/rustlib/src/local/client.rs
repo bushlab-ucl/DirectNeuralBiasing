@@ -2,7 +2,7 @@ use std::io::{self, Read};
 use std::net::TcpStream;
 
 use colored::Colorize;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use crate::processing::detectors::slow_wave::{SlowWaveDetector, SlowWaveDetectorConfig};
 use crate::processing::detectors::threshold::{ThresholdDetector, ThresholdDetectorConfig};
@@ -80,77 +80,26 @@ pub fn run() -> io::Result<()> {
     let main_trigger = PulseTrigger::new(trigger_config);
     processor.add_trigger(Box::new(main_trigger));
 
-    // working code - counts indexes
-    // while let Ok(_) = stream.read_exact(&mut buffer) {
-    //     let raw_sample = f32::from_be_bytes(buffer).abs() as f64;
-    //     let output = processor.run(vec![raw_sample]);
-
-    //     if let Some(results) = output.last() {
-    //         // println!("Complete Results: {:#?}", results);
-
-    //         if let Some(&index) = results.get("global:index") {
-    //             if index as i32 % 100 == 0 {
-    //                 println!("Index: {}", index);
-    //             }
-    //         }
-
-    //         // println!("Complete Results: {:#?}", results);
-
-    //         if let Some(&triggered) = results.get("triggers:main_trigger:triggered") {
-    //             if triggered == 1.0 {
-    //                 println!("Complete Results: {:#?}", results);
-    //             }
-    //         }
-    //     }
-    // }
-
-    // let mut counter = 0;
-    // let mut samples = Vec::new();
-
-    // while let Ok(_) = stream.read_exact(&mut buffer) {
-    //     // Collect samples until counter reaches the limit
-    //     while counter < 10000000 {
-    //         let raw_sample = f32::from_be_bytes(buffer).abs() as f64;
-    //         samples.push(raw_sample);
-
-    //         counter += 1;
-
-    //         // Read the next buffer
-    //         if let Err(_) = stream.read_exact(&mut buffer) {
-    //             break;
-    //         }
-    //     }
-
-    //     // Run the processor on the collected samples
-    //     if !samples.is_empty() {
-    //         let output = processor.run_chunk(samples.clone());
-
-    //         // Iterate through the output and print results when triggered
-    //         for results in &output {
-    //             if let Some(&triggered) = results.get("triggers:main_trigger:triggered") {
-    //                 if triggered == 1.0 {
-    //                     println!("Complete Results: {:#?}", results);
-    //                 }
-    //             }
-    //         }
-
-    //         // Clear the samples and reset the counter after processing
-    //         samples.clear();
-    //         counter = 0;
-    //     }
-    // }
-
-    // println!("Finished processing samples");
+    let mut total_processing_time = Duration::new(0, 0);
+    let mut sample_count = 0;
 
     while let Ok(_) = stream.read_exact(&mut buffer) {
         let raw_sample = f32::from_be_bytes(buffer).abs() as f64;
         println!("Received sample: {}", raw_sample);
 
-        let start_time = Instant::now(); // Start timer before analysis
+        let start_time = Instant::now();
         let output = processor.run_chunk(vec![raw_sample]);
         let duration = start_time.elapsed();
 
-        println!("Processed sample in {:?}", duration); // Timing the analysis phase only
+        total_processing_time += duration;
+        sample_count += 1;
+        let average_processing_time = total_processing_time / sample_count;
+
+        println!("Processed sample in {:?}", duration);
+        println!(
+            "Average processing time per sample: {:?}",
+            average_processing_time
+        );
 
         if let Some(results) = output.last() {
             println!("Complete Results: {:#?}", results);
@@ -195,9 +144,9 @@ pub fn run() -> io::Result<()> {
             if let Some(&triggered) = results.get("triggers:main_trigger:triggered") {
                 let message = format!("Trigger Result: {:.2}", triggered);
                 if triggered > 0.0 {
-                    println!("{}", message.blue()); // Keeping trigger blue for activation
+                    println!("{}", message.blue());
                 } else {
-                    println!("{}", message.red()); // Red to indicate no trigger
+                    println!("{}", message.red());
                 }
             }
         }

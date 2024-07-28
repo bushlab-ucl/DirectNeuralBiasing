@@ -9,6 +9,6 @@ pub trait TriggerInstance: Send {
     fn evaluate(
         &mut self,
         global_config: &SignalProcessorConfig,
-        results: &mut HashMap<String, f64>,
+        results: &mut HashMap<&'static str, f64>,
     );
 }

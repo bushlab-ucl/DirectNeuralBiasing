@@ -3,7 +3,6 @@ use crate::processing::signal_processor::SignalProcessorConfig;
 
 use std::collections::HashMap;
 
-#[derive(Clone)]
 pub struct SlowWaveDetectorConfig {
     pub id: String,
     pub filter_id: String,
@@ -11,7 +10,17 @@ pub struct SlowWaveDetectorConfig {
     pub sinusoidness_threshold: f64,
 }
 
-#[derive(Clone)]
+pub struct Keys {
+    filter_key: &'static str,
+    detected: &'static str,
+    downwave_start_index: &'static str,
+    downwave_end_index: &'static str,
+    predicted_next_maxima_index: &'static str,
+    peak_z_score_amplitude: &'static str,
+    sinusoidness: &'static str,
+    statistics_z_score: &'static str,
+}
+
 pub struct SlowWaveDetector {
     config: SlowWaveDetectorConfig,
     statistics: Statistics,
@@ -21,10 +30,36 @@ pub struct SlowWaveDetector {
     downwave_start_index: Option<usize>,
     downwave_end_index: Option<usize>,
     predicted_next_maxima_index: Option<usize>,
+    keys: Keys,
 }
 
 impl SlowWaveDetector {
     pub fn new(config: SlowWaveDetectorConfig) -> Self {
+        let keys = Keys {
+            filter_key: Box::leak(
+                format!("filters:{}:filtered_sample", config.filter_id).into_boxed_str(),
+            ),
+            detected: Box::leak(format!("detectors:{}:detected", config.id).into_boxed_str()),
+            downwave_start_index: Box::leak(
+                format!("detectors:{}:downwave_start_index", config.id).into_boxed_str(),
+            ),
+            downwave_end_index: Box::leak(
+                format!("detectors:{}:downwave_end_index", config.id).into_boxed_str(),
+            ),
+            predicted_next_maxima_index: Box::leak(
+                format!("detectors:{}:predicted_next_maxima_index", config.id).into_boxed_str(),
+            ),
+            peak_z_score_amplitude: Box::leak(
+                format!("detectors:{}:peak_z_score_amplitude", config.id).into_boxed_str(),
+            ),
+            sinusoidness: Box::leak(
+                format!("detectors:{}:sinusoidness", config.id).into_boxed_str(),
+            ),
+            statistics_z_score: Box::leak(
+                format!("detectors:{}:statistics:z_score", config.id).into_boxed_str(),
+            ),
+        };
+
         SlowWaveDetector {
             config,
             statistics: Statistics::new(),
@@ -34,6 +69,7 @@ impl SlowWaveDetector {
             downwave_start_index: None,
             downwave_end_index: None,
             predicted_next_maxima_index: None,
+            keys,
         }
     }
 }
@@ -49,15 +85,12 @@ impl DetectorInstance for SlowWaveDetector {
 
     fn process_sample(
         &mut self,
-        global_config: &SignalProcessorConfig,
-        results: &mut HashMap<String, f64>,
+        _global_config: &SignalProcessorConfig,
+        results: &mut HashMap<&'static str, f64>,
         index: usize,
     ) {
-        // Construct the key to fetch the filtered sample
-        let filter_key = format!("filters:{}:filtered_sample", self.config.filter_id);
-
         // Fetch the filtered sample using a cloned unwrap_or to handle the absence gracefully
-        let filtered_sample = results.get(&filter_key).cloned().unwrap_or(0.0);
+        let filtered_sample = results.get(self.keys.filter_key).cloned().unwrap();
 
         // Update statistics with the new filtered sample
         self.statistics.update_statistics(filtered_sample);
@@ -79,8 +112,7 @@ impl DetectorInstance for SlowWaveDetector {
             self.downwave_end_index = Some(index);
 
             // Analyze the wave
-            let (detected, peak_z_score_amplitude, sinusoidness) =
-                self.analyse_wave(global_config, results);
+            let (detected, peak_z_score_amplitude, sinusoidness) = self.analyse_wave();
 
             // Predict next maxima and output to results
             if detected {
@@ -89,37 +121,31 @@ impl DetectorInstance for SlowWaveDetector {
                 self.predicted_next_maxima_index = Some(index + half_period);
 
                 // Output the detection status and wave index values
-                results.insert(format!("detectors:{}:detected", self.config.id), 1.0);
+                results.insert(self.keys.detected, 1.0);
 
                 results.insert(
-                    format!("detectors:{}:downwave_start_index", self.config.id),
+                    self.keys.downwave_start_index,
                     self.downwave_start_index.map_or(-1.0, |v| v as f64), // unwrap as -1 if None (should not happen)
                 );
 
                 results.insert(
-                    format!("detectors:{}:downwave_end_index", self.config.id),
+                    self.keys.downwave_end_index,
                     self.downwave_end_index.map_or(-1.0, |v| v as f64), // unwrap as -1 if None (should not happen)
                 );
 
                 results.insert(
-                    format!("detectors:{}:predicted_next_maxima_index", self.config.id),
+                    self.keys.predicted_next_maxima_index,
                     self.predicted_next_maxima_index.map_or(-1.0, |v| v as f64), // unwrap as -1 if None (should not happen)
                 );
             } else {
                 // Output the detection status as zero
-                results.insert(format!("detectors:{}:detected", self.config.id), 0.0);
+                results.insert(self.keys.detected, 0.0);
             }
 
             // Output the peak amplitude and sinusoidness values
-            results.insert(
-                format!("detectors:{}:peak_z_score_amplitude", self.config.id),
-                peak_z_score_amplitude,
-            );
+            results.insert(self.keys.peak_z_score_amplitude, peak_z_score_amplitude);
 
-            results.insert(
-                format!("detectors:{}:sinusoidness", self.config.id),
-                sinusoidness,
-            );
+            results.insert(self.keys.sinusoidness, sinusoidness);
 
             // Clear the ongoing wave data after analysis
             self.ongoing_wave_z_scores.clear();
@@ -127,14 +153,11 @@ impl DetectorInstance for SlowWaveDetector {
             self.downwave_end_index = None;
         } else {
             // Output the detection status as zero
-            results.insert(format!("detectors:{}:detected", self.config.id), 0.0);
+            results.insert(self.keys.detected, 0.0);
         }
 
         // Output the z_score value to the results HashMap
-        results.insert(
-            format!("detectors:{}:statistics:z_score", self.config.id),
-            self.statistics.z_score,
-        );
+        results.insert(self.keys.statistics_z_score, self.statistics.z_score);
 
         // Update the last sample for zero-crossing detection
         self.last_z_score = self.statistics.z_score;
@@ -143,11 +166,7 @@ impl DetectorInstance for SlowWaveDetector {
 
 impl SlowWaveDetector {
     /// Analyzes the collected wave data to determine if it meets the criteria for a slow wave.
-    fn analyse_wave(
-        &mut self,
-        global_config: &SignalProcessorConfig, // maybe remove
-        results: &mut HashMap<String, f64>,    // maybe remove
-    ) -> (bool, f64, f64) {
+    fn analyse_wave(&mut self) -> (bool, f64, f64) {
         let wave_length = self.ongoing_wave_z_scores.len();
         if wave_length < 4 {
             // Minimum wave length for analysis - 4 samples is arbitrary
@@ -165,7 +184,7 @@ impl SlowWaveDetector {
 
         // Check the wave for sinusoidal pattern
         let sinusoid = self.construct_cosine_wave(minima_idx, wave_length);
-        let sinusoidness = self.calculate_correlation(&sinusoid, global_config, results);
+        let sinusoidness = self.calculate_correlation(&sinusoid);
 
         if sinusoidness < self.config.sinusoidness_threshold {
             return (false, peak_z_score_amplitude, sinusoidness);
@@ -199,12 +218,7 @@ impl SlowWaveDetector {
     }
 
     /// Calculates the correlation between the ongoing_wave_z_scores and a generated sinusoid to check for pattern match.
-    fn calculate_correlation(
-        &self,
-        sinusoid: &Vec<f64>,
-        global_config: &SignalProcessorConfig,
-        results: &mut HashMap<String, f64>,
-    ) -> f64 {
+    fn calculate_correlation(&self, sinusoid: &Vec<f64>) -> f64 {
         // Calculate means
         let mean_wave = self.ongoing_wave_z_scores.iter().sum::<f64>()
             / self.ongoing_wave_z_scores.len() as f64;
@@ -238,27 +252,6 @@ impl SlowWaveDetector {
         // Avoid division by zero
         if std_dev_wave == 0.0 || std_dev_sinusoid == 0.0 {
             return 0.0;
-        }
-
-        // Optionally log detailed statistics if verbose mode is enabled
-        if global_config.verbose {
-            results.insert(
-                format!("detectors:{}:covariance", self.config.id),
-                covariance,
-            );
-            // results.insert(format!("detectors:{}:mean_wave", self.config.id), mean_wave);
-            // results.insert(
-            //     format!("detectors:{}:mean_sinusoid", self.config.id),
-            //     mean_sinusoid,
-            // );
-            // results.insert(
-            //     format!("detectors:{}:std_dev_wave", self.config.id),
-            //     std_dev_wave,
-            // );
-            // results.insert(
-            //     format!("detectors:{}:std_dev_sinusoid", self.config.id),
-            //     std_dev_sinusoid,
-            // );
         }
 
         // Calculate and return the correlation

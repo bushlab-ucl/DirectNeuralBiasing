@@ -2,7 +2,6 @@ use super::{DetectorInstance, RingBuffer, Statistics};
 use crate::processing::signal_processor::SignalProcessorConfig;
 use std::collections::HashMap;
 
-#[derive(Clone)]
 pub struct ThresholdDetectorConfig {
     pub id: String,
     pub filter_id: String,
@@ -11,11 +10,23 @@ pub struct ThresholdDetectorConfig {
     pub sensitivity: f64,
 }
 
-#[derive(Clone)]
+pub struct Keys {
+    filter_key: &'static str,
+    detected: &'static str,
+    confidence: &'static str,
+    statistics_sum: &'static str,
+    statistics_sum_of_squares: &'static str,
+    statistics_count: &'static str,
+    statistics_mean: &'static str,
+    statistics_z_score: &'static str,
+    statistics_std_dev: &'static str,
+}
+
 pub struct ThresholdDetector {
     config: ThresholdDetectorConfig,
     buffer: RingBuffer,
     statistics: Statistics,
+    keys: Keys,
 }
 
 impl ThresholdDetector {
@@ -24,10 +35,36 @@ impl ThresholdDetector {
             panic!("Sensitivity must be between 0 and 1.");
         }
         let buffer_size = config.buffer_size;
+        let keys = Keys {
+            filter_key: Box::leak(
+                format!("filters:{}:filtered_sample", config.filter_id).into_boxed_str(),
+            ),
+            detected: Box::leak(format!("detectors:{}:detected", config.id).into_boxed_str()),
+            confidence: Box::leak(format!("detectors:{}:confidence", config.id).into_boxed_str()),
+            statistics_sum: Box::leak(
+                format!("detectors:{}:statistics:sum", config.id).into_boxed_str(),
+            ),
+            statistics_sum_of_squares: Box::leak(
+                format!("detectors:{}:statistics:sum_of_squares", config.id).into_boxed_str(),
+            ),
+            statistics_count: Box::leak(
+                format!("detectors:{}:statistics:count", config.id).into_boxed_str(),
+            ),
+            statistics_mean: Box::leak(
+                format!("detectors:{}:statistics:mean", config.id).into_boxed_str(),
+            ),
+            statistics_z_score: Box::leak(
+                format!("detectors:{}:statistics:z_score", config.id).into_boxed_str(),
+            ),
+            statistics_std_dev: Box::leak(
+                format!("detectors:{}:statistics:std_dev", config.id).into_boxed_str(),
+            ),
+        };
         Self {
             config,
             buffer: RingBuffer::new(buffer_size),
             statistics: Statistics::new(),
+            keys,
         }
     }
 }
@@ -44,14 +81,11 @@ impl DetectorInstance for ThresholdDetector {
     fn process_sample(
         &mut self,
         global_config: &SignalProcessorConfig,
-        results: &mut HashMap<String, f64>,
+        results: &mut HashMap<&'static str, f64>,
         _index: usize,
     ) {
-        // Construct the key to fetch the filtered sample
-        let filter_key = format!("filters:{}:filtered_sample", self.config.filter_id);
-
         // Fetch the filtered sample using a cloned unwrap_or to handle the absence gracefully
-        let filtered_sample = results.get(&filter_key).cloned().unwrap_or(0.0);
+        let filtered_sample = results.get(&self.keys.filter_key as &str).cloned().unwrap();
 
         // Update statistics with the new filtered sample
         self.statistics.update_statistics(filtered_sample);
@@ -82,41 +116,20 @@ impl DetectorInstance for ThresholdDetector {
         };
 
         // Update the results HashMap with detection status and confidence
-        results.insert(
-            format!("detectors:{}:detected", self.config.id),
-            detection_status,
-        );
-        results.insert(
-            format!("detectors:{}:confidence", self.config.id),
-            confidence,
-        );
+        results.insert(self.keys.detected, detection_status);
+        results.insert(self.keys.confidence, confidence);
 
         // If verbose, add more items to the results HashMap
         if global_config.verbose {
+            results.insert(self.keys.statistics_sum, self.statistics.sum);
             results.insert(
-                format!("detectors:{}:statistics:sum", self.config.id),
-                self.statistics.sum,
-            );
-            results.insert(
-                format!("detectors:{}:statistics:sum_of_squares", self.config.id),
+                self.keys.statistics_sum_of_squares,
                 self.statistics.sum_of_squares,
             );
-            results.insert(
-                format!("detectors:{}:statistics:count", self.config.id),
-                self.statistics.count as f64,
-            );
-            results.insert(
-                format!("detectors:{}:statistics:mean", self.config.id),
-                self.statistics.mean,
-            );
-            results.insert(
-                format!("detectors:{}:statistics:z_score", self.config.id),
-                self.statistics.z_score,
-            );
-            results.insert(
-                format!("detectors:{}:statistics:std_dev", self.config.id),
-                self.statistics.std_dev,
-            );
+            results.insert(self.keys.statistics_count, self.statistics.count as f64);
+            results.insert(self.keys.statistics_mean, self.statistics.mean);
+            results.insert(self.keys.statistics_z_score, self.statistics.z_score);
+            results.insert(self.keys.statistics_std_dev, self.statistics.std_dev);
         }
     }
 }

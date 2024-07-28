@@ -28,15 +28,15 @@ pub struct SignalProcessor {
     pub detectors: HashMap<String, Box<dyn DetectorInstance>>,
     pub triggers: HashMap<String, Box<dyn TriggerInstance>>,
     pub config: SignalProcessorConfig,
-    pub results: HashMap<String, f64>,
+    pub results: HashMap<&'static str, f64>,
     pub keys: Keys,
 }
 
 pub struct Keys {
-    global_index: String,
-    global_raw_sample: String,
-    global_channel: String,
-    global_timestamp_ms: String,
+    global_index: &'static str,
+    global_raw_sample: &'static str,
+    global_channel: &'static str,
+    global_timestamp_ms: &'static str,
 }
 
 impl SignalProcessor {
@@ -49,10 +49,10 @@ impl SignalProcessor {
             config,
             results: HashMap::with_capacity(100),
             keys: Keys {
-                global_index: "global:index".to_string(),
-                global_raw_sample: "global:raw_sample".to_string(),
-                global_channel: "global:channel".to_string(),
-                global_timestamp_ms: "global:timestamp_ms".to_string(),
+                global_index: "global:index",
+                global_raw_sample: "global:raw_sample",
+                global_channel: "global:channel",
+                global_timestamp_ms: "global:timestamp_ms",
             },
         }
     }
@@ -99,9 +99,8 @@ impl SignalProcessor {
     }
 
     // Process a Vec of raw samples - chunk with defined length
-    pub fn run_chunk(&mut self, raw_samples: Vec<f64>) -> Vec<HashMap<String, f64>> {
+    pub fn run_chunk(&mut self, raw_samples: Vec<f64>) -> Vec<HashMap<&'static str, f64>> {
         let mut output = Vec::with_capacity(raw_samples.len());
-        let keys = &self.keys;
 
         for sample in raw_samples {
             // let start_time_whole = Instant::now(); // Start timer before analysis
@@ -109,12 +108,12 @@ impl SignalProcessor {
             // Reset and update globals
             self.results.clear();
             self.results
-                .insert(keys.global_index.clone(), self.index as f64);
-            self.results.insert(keys.global_raw_sample.clone(), sample);
+                .insert(&self.keys.global_index, self.index as f64);
+            self.results.insert(&self.keys.global_raw_sample, sample);
             self.results
-                .insert(keys.global_channel.clone(), self.config.channel as f64);
+                .insert(&self.keys.global_channel, self.config.channel as f64);
             self.results.insert(
-                keys.global_timestamp_ms.clone(),
+                &self.keys.global_timestamp_ms,
                 self.index as f64 / self.config.fs * 10.0, // convert from index to ms
             );
 

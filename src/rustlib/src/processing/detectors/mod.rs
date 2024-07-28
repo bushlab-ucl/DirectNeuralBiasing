@@ -10,7 +10,7 @@ pub trait DetectorInstance: Send {
     fn process_sample(
         &mut self,
         global_config: &SignalProcessorConfig,
-        results: &mut HashMap<String, f64>,
+        results: &mut HashMap<&'static str, f64>,
         index: usize,
     );
 }

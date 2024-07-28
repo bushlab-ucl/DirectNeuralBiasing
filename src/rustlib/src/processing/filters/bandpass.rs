@@ -13,6 +13,7 @@ pub struct BandPassFilter {
     config: BandPassFilterConfig,
     high_pass: SecondOrderFilter,
     low_pass: SecondOrderFilter,
+    keys: Keys,
 }
 
 struct SecondOrderFilter {
@@ -73,16 +74,26 @@ impl SecondOrderFilter {
     }
 }
 
+pub struct Keys {
+    filtered_sample: &'static str,
+}
+
 impl BandPassFilter {
     // Constructor with initialization for high-pass and low-pass filters
     pub fn new(config: BandPassFilterConfig) -> Self {
         let high_pass = SecondOrderFilter::new(config.f_low, config.fs, "high");
         let low_pass = SecondOrderFilter::new(config.f_high, config.fs, "low");
+        let keys = Keys {
+            filtered_sample: Box::leak(
+                format!("filters:{}:filtered_sample", config.id).into_boxed_str(),
+            ),
+        };
 
         BandPassFilter {
             config,
             high_pass,
             low_pass,
+            keys,
         }
     }
 }
@@ -95,7 +106,7 @@ impl FilterInstance for BandPassFilter {
     fn process_sample(
         &mut self,
         _global_config: &SignalProcessorConfig,
-        results: &mut HashMap<String, f64>,
+        results: &mut HashMap<&'static str, f64>,
     ) {
         if let Some(&raw_sample) = results.get("global:raw_sample") {
             // Apply high-pass filter first
@@ -103,10 +114,7 @@ impl FilterInstance for BandPassFilter {
             // Apply low-pass filter to the output of the high-pass filter
             let filtered_sample = self.low_pass.calculate_output(high_pass_output);
 
-            results.insert(
-                format!("filters:{}:filtered_sample", self.config.id),
-                filtered_sample,
-            );
+            results.insert(self.keys.filtered_sample, filtered_sample);
         }
     }
 }

@@ -11,18 +11,60 @@ pub struct PulseTriggerConfig {
     pub pulse_cooldown_ms: f64,
 }
 
+pub struct Keys {
+    triggered: &'static str,
+    activation_active: &'static str,
+    inhibition_active: &'static str,
+    activation_cooldown_samples_remaining: &'static str,
+    inhibition_cooldown_samples_remaining: &'static str,
+    activation_detector: &'static str,
+    inhibition_detector: &'static str,
+}
+
 pub struct PulseTrigger {
     config: PulseTriggerConfig,
     pulse_cooldown_remaining: usize,
     inhibition_cooldown_remaining: usize,
+    keys: Keys,
 }
 
 impl PulseTrigger {
     pub fn new(config: PulseTriggerConfig) -> Self {
+        let keys = Keys {
+            triggered: Box::leak(format!("triggers:{}:triggered", config.id).into_boxed_str()),
+            activation_active: Box::leak(
+                format!("triggers:{}:activation_active", config.id).into_boxed_str(),
+            ),
+            inhibition_active: Box::leak(
+                format!("triggers:{}:inhibition_active", config.id).into_boxed_str(),
+            ),
+            activation_cooldown_samples_remaining: Box::leak(
+                format!(
+                    "triggers:{}:activation_cooldown_samples_remaining",
+                    config.id
+                )
+                .into_boxed_str(),
+            ),
+            inhibition_cooldown_samples_remaining: Box::leak(
+                format!(
+                    "triggers:{}:inhibition_cooldown_samples_remaining",
+                    config.id
+                )
+                .into_boxed_str(),
+            ),
+            activation_detector: Box::leak(
+                format!("detectors:{}:detected", config.activation_detector_id).into_boxed_str(),
+            ),
+            inhibition_detector: Box::leak(
+                format!("detectors:{}:detected", config.inhibition_detector_id).into_boxed_str(),
+            ),
+        };
+
         Self {
             config,
             pulse_cooldown_remaining: 0,
             inhibition_cooldown_remaining: 0,
+            keys,
         }
     }
 
@@ -47,7 +89,7 @@ impl TriggerInstance for PulseTrigger {
     fn evaluate(
         &mut self,
         global_config: &SignalProcessorConfig,
-        results: &mut HashMap<String, f64>,
+        results: &mut HashMap<&'static str, f64>,
     ) {
         // let inhibition_cooldown_samples =
         //     self.cooldown_samples(self.config.inhibition_cooldown_ms, global_config.fs);
@@ -64,10 +106,7 @@ impl TriggerInstance for PulseTrigger {
 
         // Determine if the inhibition is active; if so, reset the trigger and set the cooldown
         let inhibition_active = results
-            .get(&format!(
-                "detectors:{}:detected",
-                self.config.inhibition_detector_id
-            ))
+            .get(self.keys.inhibition_detector)
             .cloned()
             .unwrap_or(0.0)
             > 0.0;
@@ -75,16 +114,13 @@ impl TriggerInstance for PulseTrigger {
         if inhibition_active {
             self.inhibition_cooldown_remaining =
                 self.cooldown_samples(self.config.inhibition_cooldown_ms, global_config.fs);
-            results.insert(format!("triggers:{}:triggered", self.config.id), 0.0);
+            results.insert(self.keys.triggered, 0.0);
             return;
         }
 
         // Determine if the activation is active; if so, set the trigger and set the cooldown
         let activation_active = results
-            .get(&format!(
-                "detectors:{}:detected",
-                self.config.activation_detector_id
-            ))
+            .get(self.keys.activation_detector)
             .cloned()
             .unwrap_or(0.0)
             > 0.0;
@@ -92,33 +128,27 @@ impl TriggerInstance for PulseTrigger {
         if activation_active && self.pulse_cooldown_remaining == 0 {
             self.pulse_cooldown_remaining =
                 self.cooldown_samples(self.config.pulse_cooldown_ms, global_config.fs);
-            results.insert(format!("triggers:{}:triggered", self.config.id), 1.0);
+            results.insert(self.keys.triggered, 1.0);
         } else {
-            results.insert(format!("triggers:{}:triggered", self.config.id), 0.0);
+            results.insert(self.keys.triggered, 0.0);
         }
 
         // If verbose, add more items to the results HashMap
         if global_config.verbose {
             results.insert(
-                format!("triggers:{}:activation_active", self.config.id),
+                self.keys.activation_active,
                 if activation_active { 1.0 } else { 0.0 },
             );
             results.insert(
-                format!("triggers:{}:inhibition_active", self.config.id),
+                self.keys.inhibition_active,
                 if inhibition_active { 1.0 } else { 0.0 },
             );
             results.insert(
-                format!(
-                    "triggers:{}:activation_cooldown_samples_remaining",
-                    self.config.id
-                ),
+                self.keys.activation_cooldown_samples_remaining,
                 self.pulse_cooldown_remaining as f64,
             );
             results.insert(
-                format!(
-                    "triggers:{}:inhibition_cooldown_samples_remaining",
-                    self.config.id
-                ),
+                self.keys.inhibition_cooldown_samples_remaining,
                 self.inhibition_cooldown_remaining as f64,
             );
         }
