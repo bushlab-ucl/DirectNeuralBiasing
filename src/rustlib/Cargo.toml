@@ -2,7 +2,7 @@
 name = "direct-neural-biasing"
 version = "0.8.6"
 authors = ["Daniel Humphries <d.humphries@ucl.ac.uk>"]
-# description = "A Rust library with Python and C++ bindings for low-latency, closed-loop neuroscience research."
+description = "A Rust library with Python and C++ bindings for low-latency, closed-loop neuroscience research."
 license = "CC-BY-NC-4.0"
 edition = "2021"
 
@@ -27,5 +27,5 @@ crate-type = ["cdylib"]
 
 [package.metadata.maturin]
 name = "direct-neural-biasing"
-summary = "A Rust library with Python and C++ bindings for low-latency, closed-loop neuroscience research."
+# summary = "A Rust library with Python and C++ bindings for low-latency, closed-loop neuroscience research."
 rustc-extra-args = ["--cfg", "feature=\"python-extension\""]
