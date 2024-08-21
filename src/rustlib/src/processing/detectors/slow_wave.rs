@@ -183,7 +183,7 @@ impl SlowWaveDetector {
         }
 
         // Check the wave for sinusoidal pattern
-        let sinusoid = self.construct_cosine_wave(minima_idx, wave_length);
+        let sinusoid = self.construct_adjusted_cosine_wave(minima_idx, wave_length);
         let sinusoidness = self.calculate_correlation(&sinusoid);
 
         if sinusoidness < self.config.sinusoidness_threshold {
@@ -205,17 +205,46 @@ impl SlowWaveDetector {
             .unwrap_or(0)
     }
 
+    // /// Constructs a cosine wave that matches the frequency and amplitude of the detected wave.
+    // fn construct_cosine_wave(&self, peak_idx: usize, wave_length: usize) -> Vec<f64> {
+    //     let frequency = 1.0 / (wave_length as f64); // Calculate the frequency based on the wave length
+    //     let amplitude = self.ongoing_wave_z_scores[peak_idx]; // Use the amplitude at the peak index
+    //     (0..wave_length)
+    //         .map(|i| {
+    //             let phase_shift = std::f64::consts::PI / 2.0; // Phase shift to start from pi/2
+    //             amplitude
+    //                 * ((i as f64 * 2.0 * std::f64::consts::PI * frequency) + phase_shift).cos()
+    //         })
+    //         .collect()
+    // }
+
     /// Constructs a cosine wave that matches the frequency and amplitude of the detected wave.
-    fn construct_cosine_wave(&self, peak_idx: usize, wave_length: usize) -> Vec<f64> {
-        let frequency = 1.0 / (wave_length as f64); // Calculate the frequency based on the wave length
+    fn construct_adjusted_cosine_wave(&self, peak_idx: usize, wave_length: usize) -> Vec<f64> {
         let amplitude = self.ongoing_wave_z_scores[peak_idx]; // Use the amplitude at the peak index
-        (0..wave_length)
+
+        let first_half_length = peak_idx + 1; // Length from start to minimum
+        let second_half_length = wave_length - peak_idx; // Length from minimum to end
+
+        // Construct the first half-wave (pi/2 to pi)
+        let first_half_wave: Vec<f64> = (0..first_half_length)
             .map(|i| {
-                let phase_shift = std::f64::consts::PI / 2.0; // Phase shift to start from pi/2
-                amplitude
-                    * ((i as f64 * 2.0 * std::f64::consts::PI * frequency) + phase_shift).cos()
+                let t = std::f64::consts::PI / 2.0
+                    + (i as f64 / (first_half_length as f64)) * (std::f64::consts::PI / 2.0);
+                -amplitude * t.cos() // Flipping the cosine to match the downwave
             })
-            .collect()
+            .collect();
+
+        // Construct the second half-wave (pi to 3pi/2)
+        let second_half_wave: Vec<f64> = (0..second_half_length)
+            .map(|i| {
+                let t = std::f64::consts::PI
+                    + (i as f64 / (second_half_length as f64)) * (std::f64::consts::PI / 2.0);
+                -amplitude * t.cos() // Flipping the cosine to match the upwave
+            })
+            .collect();
+
+        // Combine the two half-waves
+        [first_half_wave, second_half_wave].concat()
     }
 
     /// Calculates the correlation between the ongoing_wave_z_scores and a generated sinusoid to check for pattern match.
@@ -255,10 +284,10 @@ impl SlowWaveDetector {
             return 0.0;
         }
 
-        // // debug prints
-        // // Print the cosine wave
+        // debug prints
+        // Print the cosine wave
         // println!("Cosine wave values: {:?}", sinusoid);
-        // // Print the z-score waveform
+        // Print the z-score waveform
         // println!("Z-score waveform values: {:?}", self.ongoing_wave_z_scores);
 
         // Calculate and return the correlation
