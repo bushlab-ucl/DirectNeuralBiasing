@@ -222,8 +222,9 @@ impl SlowWaveDetector {
     fn construct_adjusted_cosine_wave(&self, peak_idx: usize, wave_length: usize) -> Vec<f64> {
         let amplitude = self.ongoing_wave_z_scores[peak_idx]; // Use the amplitude at the peak index
 
-        let first_half_length = peak_idx + 1; // Length from start to minimum
-        let second_half_length = wave_length - peak_idx; // Length from minimum to end
+        // Ensure the total length matches the wave_length
+        let first_half_length = peak_idx + 1;
+        let second_half_length = wave_length - first_half_length;
 
         // Construct the first half-wave (pi/2 to pi)
         let first_half_wave: Vec<f64> = (0..first_half_length)
