@@ -189,6 +189,7 @@ impl SlowWaveDetector {
         if sinusoidness < self.config.sinusoidness_threshold {
             return (false, peak_z_score_amplitude, sinusoidness);
         }
+        // println!("Detected slow wave!");
 
         // If the wave meets the criteria, output the confidence value
         return (true, peak_z_score_amplitude, sinusoidness);
@@ -253,6 +254,12 @@ impl SlowWaveDetector {
         if std_dev_wave == 0.0 || std_dev_sinusoid == 0.0 {
             return 0.0;
         }
+
+        // // debug prints
+        // // Print the cosine wave
+        // println!("Cosine wave values: {:?}", sinusoid);
+        // // Print the z-score waveform
+        // println!("Z-score waveform values: {:?}", self.ongoing_wave_z_scores);
 
         // Calculate and return the correlation
         covariance / (std_dev_wave * std_dev_sinusoid)
