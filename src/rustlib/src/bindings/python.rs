@@ -57,7 +57,7 @@ impl PySignalProcessor {
         self.processor.add_detector(Box::new(detector));
     }
 
-    pub fn add_slow_wave_detector(
+    pub fn add_wave_peak_detector(
         &mut self,
         id: String,
         filter_id: String,
