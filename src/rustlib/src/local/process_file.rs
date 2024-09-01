@@ -4,8 +4,8 @@ use std::io::{self, BufRead, BufReader, Write};
 use std::path::Path;
 use std::time::Instant;
 
-use crate::processing::detectors::slow_wave::{SlowWaveDetector, SlowWaveDetectorConfig};
 use crate::processing::detectors::threshold::{ThresholdDetector, ThresholdDetectorConfig};
+use crate::processing::detectors::wave_peak::{WavePeakDetector, WavePeakDetectorConfig};
 use crate::processing::filters::bandpass::{BandPassFilter, BandPassFilterConfig};
 use crate::processing::signal_processor::{SignalProcessor, SignalProcessorConfig};
 use crate::processing::triggers::pulse::{PulseTrigger, PulseTriggerConfig};
@@ -89,14 +89,16 @@ pub fn run() -> io::Result<()> {
     let ied_detector = ThresholdDetector::new(ied_detector_config);
     processor.add_detector(Box::new(ied_detector));
 
-    let slow_wave_detector_config = SlowWaveDetectorConfig {
+    let slow_wave_detector_config = WavePeakDetectorConfig {
         id: "slow_wave_detector".to_string(),
         filter_id: "slow_wave_filter".to_string(),
         z_score_threshold: 2.0,
         sinusoidness_threshold: 0.6,
+        check_sinusoidness: true,
+        wave_polarity: "downwave".to_string(),
     };
 
-    let slow_wave_detector = SlowWaveDetector::new(slow_wave_detector_config);
+    let slow_wave_detector = WavePeakDetector::new(slow_wave_detector_config);
     processor.add_detector(Box::new(slow_wave_detector));
 
     let trigger_config = PulseTriggerConfig {

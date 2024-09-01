@@ -7,14 +7,14 @@
 //! It's primarily written in Rust, but has bindings for Python and (soon) C++, to interface with Blackrock Microsystems devices for lab use.
 
 /// - Local is a test module for Rust users, to debug the processing module.
-#[cfg(not(feature = "python-extension"))]
+// #[cfg(not(feature = "python-extension"))]
 pub mod local;
 
 /// - Main rust source code. Contains code for the signal processor, which itself is split up into filters, detectors, and triggers (for now).
 pub mod processing;
 
 /// - Tests contains some tests for the Blackrock C++ bindings.
-#[cfg(not(feature = "python-extension"))]
+// #[cfg(not(feature = "python-extension"))]
 pub mod tests;
 
 /// - Utility functions, such as reading and writing files.

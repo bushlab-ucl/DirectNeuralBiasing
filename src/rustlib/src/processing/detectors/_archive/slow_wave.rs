@@ -11,6 +11,7 @@ pub struct SlowWaveDetectorConfig {
 }
 
 pub struct Keys {
+    raw_key: &'static str,
     filter_key: &'static str,
     detected: &'static str,
     downwave_start_index: &'static str,
@@ -36,6 +37,7 @@ pub struct SlowWaveDetector {
 impl SlowWaveDetector {
     pub fn new(config: SlowWaveDetectorConfig) -> Self {
         let keys = Keys {
+            raw_key: Box::leak(format!("global:raw_sample", config.filter_id).into_boxed_str()),
             filter_key: Box::leak(
                 format!("filters:{}:filtered_sample", config.filter_id).into_boxed_str(),
             ),
@@ -89,7 +91,8 @@ impl DetectorInstance for SlowWaveDetector {
         results: &mut HashMap<&'static str, f64>,
         index: usize,
     ) {
-        // Fetch the filtered sample using a cloned unwrap_or to handle the absence gracefully
+        // Fetch the raw and filtered samples using a cloned unwrap_or to handle the absence gracefully
+        let _raw_sample = results.get(self.keys.raw_key).cloned().unwrap();
         let filtered_sample = results.get(self.keys.filter_key).cloned().unwrap();
 
         // Update statistics with the new filtered sample

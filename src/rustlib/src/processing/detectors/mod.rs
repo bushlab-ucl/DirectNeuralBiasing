@@ -1,5 +1,5 @@
-pub mod slow_wave;
 pub mod threshold;
+pub mod wave_peak;
 
 use crate::processing::signal_processor::SignalProcessorConfig;
 use std::collections::HashMap;

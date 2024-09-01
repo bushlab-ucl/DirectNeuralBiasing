@@ -4,7 +4,7 @@ mod tests;
 mod utils;
 
 /// - For running the local debug.
-#[cfg(not(feature = "python-extension"))]
+// #[cfg(not(feature = "python-extension"))]
 pub fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() > 1 {
