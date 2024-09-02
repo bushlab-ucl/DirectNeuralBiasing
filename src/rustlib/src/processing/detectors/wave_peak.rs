@@ -69,7 +69,7 @@ impl WavePeakDetector {
         let wave_direction = match config.wave_polarity.as_str() {
             "upwave" => 1,
             "downwave" => -1,
-            _ => 0, // error
+            _ => 0, // should give error
         };
 
         WavePeakDetector {
@@ -118,7 +118,7 @@ impl DetectorInstance for WavePeakDetector {
             self.handle_wave_transition(index);
         }
 
-        // Store the ongoing wave's z-scores if currently tracking a wave
+        // Store the ongoing wave's raw vals and z-scores if currently tracking a wave
         if self.is_wave {
             self.ongoing_wave_z_scores.push(self.statistics.z_score);
             self.ongoing_wave_raw.push(raw_sample);
@@ -130,7 +130,7 @@ impl DetectorInstance for WavePeakDetector {
             self.clear_wave_data();
         }
 
-        // Always update the last z-score
+        // Always update the last sample
         self.last_sample = filtered_sample;
     }
 }
@@ -156,6 +156,20 @@ impl WavePeakDetector {
             self.is_wave = true;
             self.wave_start_index = Some(index);
         }
+    }
+
+    // Clears the collected data after wave analysis
+    fn clear_wave_data(&mut self) {
+        self.ongoing_wave_z_scores.clear();
+        self.ongoing_wave_raw.clear();
+        self.wave_start_index = None;
+        self.wave_end_index = None;
+    }
+
+    // Predicts the next wave maxima based on the current wave's length
+    fn predict_next_maxima(&mut self, index: usize) {
+        let half_period = self.ongoing_wave_z_scores.len() / 2;
+        self.predicted_next_maxima_index = Some(index + half_period);
     }
 
     // Analyzes the wave data, outputs to results, and predicts next maxima
@@ -193,20 +207,6 @@ impl WavePeakDetector {
         if self.config.check_sinusoidness {
             results.insert(self.keys.sinusoidness, sinusoidness);
         }
-    }
-
-    // Clears the collected data after wave analysis
-    fn clear_wave_data(&mut self) {
-        self.ongoing_wave_z_scores.clear();
-        self.ongoing_wave_raw.clear();
-        self.wave_start_index = None;
-        self.wave_end_index = None;
-    }
-
-    // Predicts the next wave maxima based on the current wave's length
-    fn predict_next_maxima(&mut self, index: usize) {
-        let half_period = self.ongoing_wave_z_scores.len() / 2;
-        self.predicted_next_maxima_index = Some(index + half_period);
     }
 
     /// Analyzes the collected wave data to determine if it meets the criteria for a slow wave.
@@ -286,26 +286,26 @@ impl WavePeakDetector {
     /// Calculates the correlation between the ongoing_wave_z_scores and a generated sinusoid to check for pattern match.
     fn calculate_correlation(&self, sinusoid: &Vec<f64>) -> f64 {
         // Calculate means
-        let mean_wave = self.ongoing_wave_z_scores.iter().sum::<f64>()
-            / self.ongoing_wave_z_scores.len() as f64;
+        let mean_wave =
+            self.ongoing_wave_raw.iter().sum::<f64>() / self.ongoing_wave_raw.len() as f64;
         let mean_sinusoid = sinusoid.iter().sum::<f64>() / sinusoid.len() as f64;
 
         // Calculate covariance
         let covariance: f64 = self
-            .ongoing_wave_z_scores
+            .ongoing_wave_raw
             .iter()
             .zip(sinusoid.iter())
             .map(|(&x, &y)| (x - mean_wave) * (y - mean_sinusoid))
             .sum::<f64>()
-            / self.ongoing_wave_z_scores.len() as f64;
+            / self.ongoing_wave_raw.len() as f64;
 
         // Calculate standard deviations
         let std_dev_wave = (self
-            .ongoing_wave_z_scores
+            .ongoing_wave_raw
             .iter()
             .map(|&x| (x - mean_wave).powi(2))
             .sum::<f64>()
-            / self.ongoing_wave_z_scores.len() as f64)
+            / self.ongoing_wave_raw.len() as f64)
             .sqrt();
 
         let std_dev_sinusoid = (sinusoid
