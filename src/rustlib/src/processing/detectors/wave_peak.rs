@@ -69,7 +69,10 @@ impl WavePeakDetector {
         let wave_direction = match config.wave_polarity.as_str() {
             "upwave" => 1,
             "downwave" => -1,
-            _ => 0, // should give error
+            _ => panic!(
+                "Invalid wave_polarity value: '{}'. Expected 'upwave' or 'downwave'.",
+                config.wave_polarity
+            ),
         };
 
         WavePeakDetector {
