@@ -130,6 +130,9 @@ impl DetectorInstance for WavePeakDetector {
             self.clear_wave_data();
         }
 
+        // Always return z score
+        results.insert(self.keys.statistics_z_score, self.statistics.z_score);
+
         // Always update the last sample
         self.last_sample = filtered_sample;
     }
@@ -164,6 +167,7 @@ impl WavePeakDetector {
         self.ongoing_wave_raw.clear();
         self.wave_start_index = None;
         self.wave_end_index = None;
+        self.predicted_next_maxima_index = None;
     }
 
     // Predicts the next wave maxima based on the current wave's length
@@ -203,7 +207,6 @@ impl WavePeakDetector {
 
         // Output additional wave information
         results.insert(self.keys.peak_z_score_amplitude, peak_z_score_amplitude);
-        results.insert(self.keys.statistics_z_score, self.statistics.z_score);
         if self.config.check_sinusoidness {
             results.insert(self.keys.sinusoidness, sinusoidness);
         }
