@@ -113,8 +113,8 @@ impl DetectorInstance for WavePeakDetector {
         // Update statistics with the new filtered sample
         self.statistics.update_statistics(filtered_sample);
 
-        // Check if a zero-crossing has occurred based on wave polarity
-        if self.check_zero_crossing(self.last_sample, filtered_sample) {
+        // Check if a directed zero-crossing has occurred based on wave polarity
+        if self.check_directed_zero_crossing(self.last_sample, filtered_sample) {
             self.handle_wave_transition(index);
         }
 
@@ -139,11 +139,26 @@ impl DetectorInstance for WavePeakDetector {
 }
 
 impl WavePeakDetector {
-    // Checks for zero-crossing based on configured wave polarity
-    fn check_zero_crossing(&self, last_sample: f64, current_sample: f64) -> bool {
+    // Check if a zero-crossing has occurred based on wave polarity
+    fn check_directed_zero_crossing(&self, last_sample: f64, current_sample: f64) -> bool {
+        let is_upcrossing = last_sample <= 0.0 && current_sample > 0.0;
+        let is_downcrossing = last_sample >= 0.0 && current_sample < 0.0;
+
         match self.config.wave_polarity.as_ref() {
-            "upwave" => last_sample <= 0.0 && current_sample > 0.0,
-            "downwave" => last_sample >= 0.0 && current_sample < 0.0,
+            "upwave" => {
+                if self.is_wave {
+                    is_downcrossing // End of upwave detected
+                } else {
+                    is_upcrossing // Start of upwave detected
+                }
+            }
+            "downwave" => {
+                if self.is_wave {
+                    is_upcrossing // End of downwave detected
+                } else {
+                    is_downcrossing // Start of downwave detected
+                }
+            }
             _ => false,
         }
     }
