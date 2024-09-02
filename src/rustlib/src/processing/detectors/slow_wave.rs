@@ -37,7 +37,7 @@ pub struct SlowWaveDetector {
 impl SlowWaveDetector {
     pub fn new(config: SlowWaveDetectorConfig) -> Self {
         let keys = Keys {
-            raw_key: Box::leak(format!("global:raw_sample", config.filter_id).into_boxed_str()),
+            raw_key: Box::leak(format!("global:raw_sample").into_boxed_str()),
             filter_key: Box::leak(
                 format!("filters:{}:filtered_sample", config.filter_id).into_boxed_str(),
             ),
@@ -207,19 +207,6 @@ impl SlowWaveDetector {
             .map(|(idx, _)| idx)
             .unwrap_or(0)
     }
-
-    // /// Constructs a cosine wave that matches the frequency and amplitude of the detected wave.
-    // fn construct_cosine_wave(&self, peak_idx: usize, wave_length: usize) -> Vec<f64> {
-    //     let frequency = 1.0 / (wave_length as f64); // Calculate the frequency based on the wave length
-    //     let amplitude = self.ongoing_wave_z_scores[peak_idx]; // Use the amplitude at the peak index
-    //     (0..wave_length)
-    //         .map(|i| {
-    //             let phase_shift = std::f64::consts::PI / 2.0; // Phase shift to start from pi/2
-    //             amplitude
-    //                 * ((i as f64 * 2.0 * std::f64::consts::PI * frequency) + phase_shift).cos()
-    //         })
-    //         .collect()
-    // }
 
     /// Constructs a cosine wave that matches the frequency and amplitude of the detected wave.
     fn construct_adjusted_cosine_wave(&self, peak_idx: usize, wave_length: usize) -> Vec<f64> {
