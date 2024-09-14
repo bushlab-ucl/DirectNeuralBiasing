@@ -10,6 +10,8 @@ pub struct WavePeakDetectorConfig {
     pub sinusoidness_threshold: f64,
     pub check_sinusoidness: bool,
     pub wave_polarity: String, // "upwave" or "downwave"
+    pub min_wave_length_ms: f64,
+    pub max_wave_length_ms: f64,
 }
 
 pub struct Keys {
@@ -102,7 +104,7 @@ impl DetectorInstance for WavePeakDetector {
 
     fn process_sample(
         &mut self,
-        _global_config: &SignalProcessorConfig,
+        global_config: &SignalProcessorConfig,
         results: &mut HashMap<&'static str, f64>,
         index: usize,
     ) {
@@ -129,7 +131,7 @@ impl DetectorInstance for WavePeakDetector {
 
         // If end of wave is detected, process the collected wave data
         if !self.is_wave && !self.ongoing_wave_z_scores.is_empty() {
-            self.analyze_and_output_wave_data(results, index);
+            self.analyze_and_output_wave_data(global_config, results, index);
             self.clear_wave_data();
         }
 
@@ -197,10 +199,11 @@ impl WavePeakDetector {
     // Analyzes the wave data, outputs to results, and predicts next maxima
     fn analyze_and_output_wave_data(
         &mut self,
+        global_config: &SignalProcessorConfig,
         results: &mut HashMap<&'static str, f64>,
         index: usize,
     ) {
-        let (detected, peak_z_score_amplitude, sinusoidness) = self.analyze_wave();
+        let (detected, peak_z_score_amplitude, sinusoidness) = self.analyze_wave(global_config);
         if detected {
             self.predict_next_maxima(index);
             results.insert(self.keys.detected, 1.0);
@@ -231,11 +234,24 @@ impl WavePeakDetector {
     }
 
     /// Analyzes the collected wave data to determine if it meets the criteria for a slow wave.
-    fn analyze_wave(&mut self) -> (bool, f64, f64) {
+    fn analyze_wave(&mut self, global_config: &SignalProcessorConfig) -> (bool, f64, f64) {
         let wave_length = self.ongoing_wave_z_scores.len();
-        if wave_length < 4 {
-            // Minimum wave length for analysis - 4 samples is arbitrary
-            return (false, -1.0, -1.0); // -1 indicates no sinusoidal pattern
+        // if wave_length < 4 {
+        //     // Minimum wave length for analysis - 4 samples is arbitrary
+        //     return (false, -1.0, -1.0); // -1 indicates no sinusoidal pattern
+        // }
+        let min_wave_length_idx =
+            ((self.config.min_wave_length_ms / 1000.0) * global_config.fs) as usize;
+        let max_wave_length_idx =
+            ((self.config.max_wave_length_ms / 1000.0) * global_config.fs) as usize;
+
+        if wave_length < min_wave_length_idx {
+            // !! i should add something to the results object here. !!
+            return (false, -1.0, -1.0); // Wave is too short
+        }
+        if wave_length > max_wave_length_idx {
+            // !! i should add something to the results object here. !!
+            return (false, -1.0, -1.0); // Wave is too long
         }
 
         // Find the minimum amplitude within the wave to define the peak

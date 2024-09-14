@@ -83,6 +83,8 @@ impl PySignalProcessor {
         sinusoidness_threshold: f64,
         check_sinusoidness: bool,
         wave_polarity: String,
+        min_wave_length_ms: f64,
+        max_wave_length_ms: f64,
     ) {
         let config = WavePeakDetectorConfig {
             id,
@@ -91,6 +93,8 @@ impl PySignalProcessor {
             sinusoidness_threshold,
             check_sinusoidness,
             wave_polarity,
+            min_wave_length_ms,
+            max_wave_length_ms,
         };
         let detector = WavePeakDetector::new(config);
         self.processor.add_detector(Box::new(detector));
