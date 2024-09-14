@@ -45,7 +45,7 @@ $ pip install direct_neural_biasing scipy matplotlib numpy pandas mne
 The following instructions guide you through setting up and running the PySignalProcessor in Python.
 
 An example Jupyter Notebook demonstrating this process can be found in: \
-[`src/pythonlib/direct-neural-biasing-demo-0.9.x.ipynb`](https://github.com/bushlab-ucl/DirectNeuralBiasing/blob/main/src/pythonlib/direct-neural-biasing-demo-0.9.x.ipynb)
+[`src/pythonlib/direct-neural-biasing-demo-0.10.x.ipynb`](https://github.com/bushlab-ucl/DirectNeuralBiasing/blob/main/src/pythonlib/direct-neural-biasing-demo-0.10.x.ipynb)
 
 ### STEP 1 - Import `direct_neural_biasing`
 
