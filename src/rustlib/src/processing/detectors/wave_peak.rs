@@ -10,8 +10,8 @@ pub struct WavePeakDetectorConfig {
     pub sinusoidness_threshold: f64,
     pub check_sinusoidness: bool,
     pub wave_polarity: String, // "upwave" or "downwave"
-    pub min_wave_length_ms: f64,
-    pub max_wave_length_ms: f64,
+    pub min_wave_length_ms: Option<f64>,
+    pub max_wave_length_ms: Option<f64>,
 }
 
 pub struct Keys {
@@ -236,22 +236,21 @@ impl WavePeakDetector {
     /// Analyzes the collected wave data to determine if it meets the criteria for a slow wave.
     fn analyze_wave(&mut self, global_config: &SignalProcessorConfig) -> (bool, f64, f64) {
         let wave_length = self.ongoing_wave_z_scores.len();
-        // if wave_length < 4 {
-        //     // Minimum wave length for analysis - 4 samples is arbitrary
-        //     return (false, -1.0, -1.0); // -1 indicates no sinusoidal pattern
-        // }
-        let min_wave_length_idx =
-            ((self.config.min_wave_length_ms / 1000.0) * global_config.fs) as usize;
-        let max_wave_length_idx =
-            ((self.config.max_wave_length_ms / 1000.0) * global_config.fs) as usize;
 
-        if wave_length < min_wave_length_idx {
-            // !! i should add something to the results object here. !!
-            return (false, -1.0, -1.0); // Wave is too short
+        // Only check min_wave_length if it is provided
+        if let Some(min_wave_length_ms) = self.config.min_wave_length_ms {
+            let min_wave_length_idx = ((min_wave_length_ms / 1000.0) * global_config.fs) as usize;
+            if wave_length < min_wave_length_idx {
+                return (false, -1.0, -1.0); // Wave is too short
+            }
         }
-        if wave_length > max_wave_length_idx {
-            // !! i should add something to the results object here. !!
-            return (false, -1.0, -1.0); // Wave is too long
+
+        // Only check max_wave_length if it is provided
+        if let Some(max_wave_length_ms) = self.config.max_wave_length_ms {
+            let max_wave_length_idx = ((max_wave_length_ms / 1000.0) * global_config.fs) as usize;
+            if wave_length > max_wave_length_idx {
+                return (false, -1.0, -1.0); // Wave is too long
+            }
         }
 
         // Find the minimum amplitude within the wave to define the peak

@@ -120,8 +120,8 @@ pub extern "C" fn add_wave_peak_detector(
     sinusoidness_threshold: f64,
     check_sinusoidness: bool,
     wave_polarity: *const c_char,
-    min_wave_length_ms: f64,
-    max_wave_length_ms: f64,
+    min_wave_length_ms: Option<f64>,
+    max_wave_length_ms: Option<f64>,
 ) {
     let processor = unsafe { &mut *(processor_ptr as *mut SignalProcessorFFI) };
     let id_str = unsafe { CString::from_raw(id as *mut c_char) }

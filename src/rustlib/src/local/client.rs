@@ -67,8 +67,8 @@ pub fn run() -> io::Result<()> {
         sinusoidness_threshold: 0.5,
         check_sinusoidness: true,
         wave_polarity: "downwave".to_string(),
-        min_wave_length_ms: 500.0,
-        max_wave_length_ms: 2000.0,
+        min_wave_length_ms: Some(500.0),
+        max_wave_length_ms: Some(2000.0),
     };
 
     let slow_wave_detector = WavePeakDetector::new(slow_wave_detector_config);
