@@ -1,4 +1,3 @@
-pub mod slow_wave;
 pub mod threshold;
 pub mod wave_peak;
 

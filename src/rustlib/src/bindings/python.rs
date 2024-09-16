@@ -1,4 +1,3 @@
-use crate::processing::detectors::slow_wave::{SlowWaveDetector, SlowWaveDetectorConfig};
 use crate::processing::detectors::threshold::{ThresholdDetector, ThresholdDetectorConfig};
 use crate::processing::detectors::wave_peak::{WavePeakDetector, WavePeakDetectorConfig};
 use crate::processing::filters::bandpass::{BandPassFilter, BandPassFilterConfig};
@@ -55,23 +54,6 @@ impl PySignalProcessor {
             sensitivity,
         };
         let detector = ThresholdDetector::new(config);
-        self.processor.add_detector(Box::new(detector));
-    }
-
-    pub fn add_slow_wave_detector(
-        &mut self,
-        id: String,
-        filter_id: String,
-        z_score_threshold: f64,
-        sinusoidness_threshold: f64,
-    ) {
-        let config = SlowWaveDetectorConfig {
-            id,
-            filter_id,
-            z_score_threshold,
-            sinusoidness_threshold,
-        };
-        let detector = SlowWaveDetector::new(config);
         self.processor.add_detector(Box::new(detector));
     }
 

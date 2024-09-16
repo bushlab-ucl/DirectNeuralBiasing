@@ -1,4 +1,3 @@
-use crate::processing::detectors::slow_wave::{SlowWaveDetector, SlowWaveDetectorConfig};
 use crate::processing::detectors::threshold::{ThresholdDetector, ThresholdDetectorConfig};
 use crate::processing::detectors::wave_peak::{WavePeakDetector, WavePeakDetectorConfig};
 use crate::processing::filters::bandpass::{BandPassFilter, BandPassFilterConfig};
@@ -9,7 +8,7 @@ use std::collections::HashMap;
 use std::ffi::CString;
 use std::os::raw::c_char;
 use std::os::raw::c_void;
-use std::ptr;
+// use std::ptr;
 
 #[repr(C)]
 pub struct SignalProcessorFFI {
@@ -87,31 +86,6 @@ pub extern "C" fn add_threshold_detector(
 }
 
 #[no_mangle]
-pub extern "C" fn add_slow_wave_detector(
-    processor_ptr: *mut c_void,
-    id: *const c_char,
-    filter_id: *const c_char,
-    z_score_threshold: f64,
-    sinusoidness_threshold: f64,
-) {
-    let processor = unsafe { &mut *(processor_ptr as *mut SignalProcessorFFI) };
-    let id_str = unsafe { CString::from_raw(id as *mut c_char) }
-        .into_string()
-        .unwrap();
-    let filter_id_str = unsafe { CString::from_raw(filter_id as *mut c_char) }
-        .into_string()
-        .unwrap();
-    let config = SlowWaveDetectorConfig {
-        id: id_str,
-        filter_id: filter_id_str,
-        z_score_threshold,
-        sinusoidness_threshold,
-    };
-    let detector = SlowWaveDetector::new(config);
-    processor.processor.add_detector(Box::new(detector));
-}
-
-#[no_mangle]
 pub extern "C" fn add_wave_peak_detector(
     processor_ptr: *mut c_void,
     id: *const c_char,
@@ -120,8 +94,8 @@ pub extern "C" fn add_wave_peak_detector(
     sinusoidness_threshold: f64,
     check_sinusoidness: bool,
     wave_polarity: *const c_char,
-    min_wave_length_ms: Option<f64>,
-    max_wave_length_ms: Option<f64>,
+    min_wave_length_ms: f64, // Use f64 directly instead of Option<f64> for C compatibility
+    max_wave_length_ms: f64, // Use f64 directly instead of Option<f64> for C compatibility
 ) {
     let processor = unsafe { &mut *(processor_ptr as *mut SignalProcessorFFI) };
     let id_str = unsafe { CString::from_raw(id as *mut c_char) }
@@ -133,6 +107,19 @@ pub extern "C" fn add_wave_peak_detector(
     let wave_polarity_str = unsafe { CString::from_raw(wave_polarity as *mut c_char) }
         .into_string()
         .unwrap();
+
+    // Use sentinel values (-1.0 or NAN) to indicate the absence of a value instead of Option<f64>
+    let min_wave_length_ms = if min_wave_length_ms < 0.0 {
+        None
+    } else {
+        Some(min_wave_length_ms)
+    };
+    let max_wave_length_ms = if max_wave_length_ms < 0.0 {
+        None
+    } else {
+        Some(max_wave_length_ms)
+    };
+
     let config = WavePeakDetectorConfig {
         id: id_str,
         filter_id: filter_id_str,
@@ -140,8 +127,8 @@ pub extern "C" fn add_wave_peak_detector(
         sinusoidness_threshold,
         check_sinusoidness,
         wave_polarity: wave_polarity_str,
-        min_wave_length_ms: min_wave_length_ms,
-        max_wave_length_ms: max_wave_length_ms,
+        min_wave_length_ms,
+        max_wave_length_ms,
     };
     let detector = WavePeakDetector::new(config);
     processor.processor.add_detector(Box::new(detector));
