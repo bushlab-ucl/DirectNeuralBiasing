@@ -20,5 +20,5 @@ add_executable(DNB src/main.cpp)
 # Link the CBSDK library (this assumes the CBSDK library is named libcbsdk.a for MinGW)
 target_link_libraries(DNB PRIVATE cbsdk)  # Adjust if necessary
 
-# Bugfix
+# Bugfix from CereLink wiki
 target_compile_definitions(DNB PRIVATE NO_AFX)
