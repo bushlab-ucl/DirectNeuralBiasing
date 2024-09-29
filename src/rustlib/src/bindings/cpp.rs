@@ -4,10 +4,12 @@ use crate::processing::filters::bandpass::{BandPassFilter, BandPassFilterConfig}
 use crate::processing::signal_processor::{SignalProcessor, SignalProcessorConfig};
 use crate::processing::triggers::pulse::{PulseTrigger, PulseTriggerConfig};
 
-use std::collections::HashMap;
+// use std::collections::HashMap;
+use rand::Rng;
 use std::ffi::CString;
 use std::os::raw::c_char;
 use std::os::raw::c_void;
+use std::time::{SystemTime, UNIX_EPOCH};
 // use std::ptr;
 
 #[repr(C)]
@@ -178,20 +180,58 @@ pub extern "C" fn run_chunk(
     data: *const f64,
     length: usize,
 ) -> *mut c_void {
+    // Access the processor from the pointer
     let processor = unsafe { &mut *(processor_ptr as *mut SignalProcessorFFI) };
     let data_slice = unsafe { std::slice::from_raw_parts(data, length) };
-    let result = processor.processor.run_chunk(data_slice.to_vec());
 
-    // Serialize the result into a vector of HashMaps
-    let mut output = Vec::new();
-    for item in result {
-        let mut map = HashMap::new();
-        for (key, value) in item {
-            map.insert(key.to_string(), value);
-        }
-        output.push(map);
+    // Run the actual signal processing logic
+    let _result = processor.processor.run_chunk(data_slice.to_vec());
+    // println!("{:?}", result); // Print the result (can be removed later)
+
+    // Random trigger condition with a small probability
+    let mut rng = rand::thread_rng();
+    let probability = 0.005; // Small probability (0.5% chance to trigger)
+    let trigger_condition = rng.gen_bool(probability); // Random boolean based on probability
+
+    if trigger_condition {
+        // Get the current system time (UNIX timestamp in seconds)
+        let start = SystemTime::now();
+        let since_the_epoch = start
+            .duration_since(UNIX_EPOCH)
+            .expect("Time went backwards");
+        let timestamp = since_the_epoch.as_secs_f64(); // Convert to seconds as a double
+
+        // Allocate memory to return the result to C++
+        let result_ptr = Box::into_raw(Box::new(timestamp));
+
+        println!("Trigger event at timestamp: {}", timestamp); // Print when a trigger occurs
+        return result_ptr as *mut c_void; // Return pointer to timestamp
+    } else {
+        // println!("No trigger event"); // Print when no trigger occurs
+        return std::ptr::null_mut(); // Return null if no event
     }
-
-    let boxed_output = Box::new(output);
-    Box::into_raw(boxed_output) as *mut c_void
 }
+
+// #[no_mangle]
+// pub extern "C" fn run_chunk(
+//     processor_ptr: *mut c_void,
+//     data: *const f64,
+//     length: usize,
+// ) -> *mut c_void {
+//     let processor = unsafe { &mut *(processor_ptr as *mut SignalProcessorFFI) };
+//     let data_slice = unsafe { std::slice::from_raw_parts(data, length) };
+//     let result = processor.processor.run_chunk(data_slice.to_vec());
+
+//     // Serialize the result into a vector of HashMaps
+//     let mut output = Vec::new();
+//     for item in result {
+//         let mut map = HashMap::new();
+//         for (key, value) in item {
+//             map.insert(key.to_string(), value);
+//         }
+//         output.push(map);
+//     }
+
+//     let boxed_output = Box::new(output);
+//     Box::into_raw(boxed_output) as *mut c_void
+// }

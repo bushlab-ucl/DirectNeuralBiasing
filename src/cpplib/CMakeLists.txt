@@ -2,7 +2,7 @@
 cmake_minimum_required(VERSION 3.15)
 
 # Set the project name
-project(DNB VERSION 0.2.0)
+project(DNB VERSION 0.3.2)
 
 # Use C++14 standard
 set(CMAKE_CXX_STANDARD 14)
@@ -18,7 +18,10 @@ link_directories("C:/CereLink/CBSDK-7.6.1-win64/lib")
 add_executable(DNB src/main.cpp)
 
 # Link the CBSDK library (this assumes the CBSDK library is named libcbsdk.a for MinGW)
-target_link_libraries(DNB PRIVATE cbsdk)  # Adjust if necessary
+target_link_libraries(DNB PRIVATE cbsdk)
+
+# Link the winmm library for playing audio
+target_link_libraries(DNB PRIVATE winmm)
 
 # Bugfix from CereLink wiki
 target_compile_definitions(DNB PRIVATE NO_AFX)
