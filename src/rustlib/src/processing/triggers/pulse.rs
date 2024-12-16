@@ -13,6 +13,8 @@ pub struct PulseTriggerConfig {
 
 pub struct Keys {
     triggered: &'static str,
+    trigger_index: &'static str,
+    predicted_next_maxima_index: &'static str,
     activation_active: &'static str,
     inhibition_active: &'static str,
     activation_cooldown_samples_remaining: &'static str,
@@ -32,6 +34,9 @@ impl PulseTrigger {
     pub fn new(config: PulseTriggerConfig) -> Self {
         let keys = Keys {
             triggered: Box::leak(format!("triggers:{}:triggered", config.id).into_boxed_str()),
+            trigger_index: Box::leak(
+                format!("triggers:{}:trigger_index", config.id).into_boxed_str(),
+            ),
             activation_active: Box::leak(
                 format!("triggers:{}:activation_active", config.id).into_boxed_str(),
             ),
@@ -57,6 +62,13 @@ impl PulseTrigger {
             ),
             inhibition_detector: Box::leak(
                 format!("detectors:{}:detected", config.inhibition_detector_id).into_boxed_str(),
+            ),
+            predicted_next_maxima_index: Box::leak(
+                format!(
+                    "detectors:{}:predicted_next_maxima_index",
+                    config.activation_detector_id
+                )
+                .into_boxed_str(),
             ),
         };
 
@@ -128,8 +140,19 @@ impl TriggerInstance for PulseTrigger {
         if activation_active && self.pulse_cooldown_remaining == 0 {
             self.pulse_cooldown_remaining =
                 self.cooldown_samples(self.config.pulse_cooldown_ms, global_config.fs);
+            // Send pulse
             results.insert(self.keys.triggered, 1.0);
+
+            // get the predicted next maxima index from the activation detector
+            let predicted_next_maxima = results
+                .get(self.keys.predicted_next_maxima_index)
+                .cloned()
+                .unwrap_or(0.0);
+
+            // Insert the predicted next maxima index as the trigger index
+            results.insert(self.keys.trigger_index, predicted_next_maxima);
         } else {
+            // Don't send pulse
             results.insert(self.keys.triggered, 0.0);
         }
 

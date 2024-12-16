@@ -3,6 +3,7 @@ use super::filters::FilterInstance;
 use super::triggers::TriggerInstance;
 
 use std::collections::HashMap;
+// use std::time;
 
 // use std::time::{Instant};
 
@@ -99,8 +100,12 @@ impl SignalProcessor {
     }
 
     // Process a Vec of raw samples - chunk with defined length
-    pub fn run_chunk(&mut self, raw_samples: Vec<f64>) -> Vec<HashMap<&'static str, f64>> {
+    pub fn run_chunk(
+        &mut self,
+        raw_samples: Vec<f64>,
+    ) -> (Vec<HashMap<&'static str, f64>>, Option<usize>) {
         let mut output = Vec::with_capacity(raw_samples.len());
+        let mut trigger_index_option = Option::<usize>::None;
 
         for sample in raw_samples {
             // let start_time_whole = Instant::now(); // Start timer before analysis
@@ -135,8 +140,30 @@ impl SignalProcessor {
 
             // Triggers evaluate based on detector outputs
             // let start_time = Instant::now(); // Start timer before analysis
-            for (_id, trigger) in self.triggers.iter_mut() {
+            for (id, trigger) in self.triggers.iter_mut() {
                 trigger.evaluate(&self.config, &mut self.results);
+
+                // Check if the trigger has been activated
+                let triggered = self
+                    .results
+                    .get(Box::leak(
+                        format!("triggers:{}:triggered", id).into_boxed_str(),
+                    ))
+                    .cloned()
+                    .unwrap_or(0.0)
+                    > 0.0;
+
+                if triggered {
+                    // find next maxima index
+                    trigger_index_option = Some(
+                        self.results
+                            .get(Box::leak(
+                                format!("triggers:{}:trigger_index", id).into_boxed_str(),
+                            ))
+                            .cloned()
+                            .unwrap_or(0.0) as usize,
+                    );
+                }
             }
             // let duration = start_time.elapsed();
             // println!("Triggers ran  in {:?}", duration); // Timing the analysis phase only
@@ -149,6 +176,6 @@ impl SignalProcessor {
             // println!("Whole block ran  in {:?}", duration_whole); // Timing the analysis phase only
         }
 
-        output
+        return (output, trigger_index_option);
     }
 }
