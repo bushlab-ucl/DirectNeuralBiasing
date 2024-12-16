@@ -5,11 +5,9 @@ use crate::processing::signal_processor::{SignalProcessor, SignalProcessorConfig
 use crate::processing::triggers::pulse::{PulseTrigger, PulseTriggerConfig};
 
 // use std::collections::HashMap;
-use rand::Rng;
 use std::ffi::CString;
 use std::os::raw::c_char;
 use std::os::raw::c_void;
-use std::time::{SystemTime, UNIX_EPOCH};
 // use std::ptr;
 
 #[repr(C)]
@@ -185,30 +183,15 @@ pub extern "C" fn run_chunk(
     let data_slice = unsafe { std::slice::from_raw_parts(data, length) };
 
     // Run the actual signal processing logic
-    let _result = processor.processor.run_chunk(data_slice.to_vec());
+    let (_output, trigger_timestamp_option) = processor.processor.run_chunk(data_slice.to_vec());
     // println!("{:?}", result); // Print the result (can be removed later)
 
-    // Random trigger condition with a small probability
-    let mut rng = rand::thread_rng();
-    let probability = 0.005; // Small probability (0.5% chance to trigger)
-    let trigger_condition = rng.gen_bool(probability); // Random boolean based on probability
-
-    if trigger_condition {
-        // Get the current system time (UNIX timestamp in seconds)
-        let start = SystemTime::now();
-        let since_the_epoch = start
-            .duration_since(UNIX_EPOCH)
-            .expect("Time went backwards");
-        let timestamp = since_the_epoch.as_secs_f64(); // Convert to seconds as a double
-
-        // Allocate memory to return the result to C++
-        let result_ptr = Box::into_raw(Box::new(timestamp));
-
-        println!("Trigger event at timestamp: {}", timestamp); // Print when a trigger occurs
-        return result_ptr as *mut c_void; // Return pointer to timestamp
+    if let Some(trigger_timestamp) = trigger_timestamp_option {
+        // Allocate memory for the timestamp and return it
+        let result_ptr = Box::into_raw(Box::new(trigger_timestamp));
+        return result_ptr as *mut c_void;
     } else {
-        // println!("No trigger event"); // Print when no trigger occurs
-        return std::ptr::null_mut(); // Return null if no event
+        return std::ptr::null_mut(); // No trigger
     }
 }
 

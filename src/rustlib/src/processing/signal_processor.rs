@@ -6,6 +6,7 @@ use std::collections::HashMap;
 // use std::time;
 
 // use std::time::{Instant};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 // use crate::utils::log::log_to_file;
 // use rayon::prelude::*;
@@ -103,9 +104,9 @@ impl SignalProcessor {
     pub fn run_chunk(
         &mut self,
         raw_samples: Vec<f64>,
-    ) -> (Vec<HashMap<&'static str, f64>>, Option<usize>) {
+    ) -> (Vec<HashMap<&'static str, f64>>, Option<f64>) {
         let mut output = Vec::with_capacity(raw_samples.len());
-        let mut trigger_index_option = Option::<usize>::None;
+        let mut trigger_timestamp_option = None;
 
         for sample in raw_samples {
             // let start_time_whole = Instant::now(); // Start timer before analysis
@@ -154,15 +155,25 @@ impl SignalProcessor {
                     > 0.0;
 
                 if triggered {
-                    // find next maxima index
-                    trigger_index_option = Some(
-                        self.results
-                            .get(Box::leak(
-                                format!("triggers:{}:trigger_index", id).into_boxed_str(),
-                            ))
-                            .cloned()
-                            .unwrap_or(0.0) as usize,
-                    );
+                    let now = SystemTime::now();
+                    let current_unix_time = now
+                        .duration_since(UNIX_EPOCH)
+                        .expect("Time went backwards")
+                        .as_secs_f64();
+
+                    let trigger_index = self
+                        .results
+                        .get(Box::leak(
+                            format!("triggers:{}:trigger_index", id).into_boxed_str(),
+                        ))
+                        .cloned()
+                        .unwrap_or(0.0) as usize;
+
+                    // Convert trigger_index into an absolute timestamp
+                    let relative_time_sec =
+                        (trigger_index as isize - self.index as isize) as f64 / self.config.fs;
+
+                    trigger_timestamp_option = Some(current_unix_time + relative_time_sec);
                 }
             }
             // let duration = start_time.elapsed();
@@ -176,6 +187,6 @@ impl SignalProcessor {
             // println!("Whole block ran  in {:?}", duration_whole); // Timing the analysis phase only
         }
 
-        return (output, trigger_index_option);
+        return (output, trigger_timestamp_option);
     }
 }

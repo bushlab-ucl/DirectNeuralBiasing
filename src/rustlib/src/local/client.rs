@@ -92,7 +92,7 @@ pub fn run() -> io::Result<()> {
         println!("Received sample: {}", raw_sample);
 
         let start_time = Instant::now();
-        let output = processor.run_chunk(vec![raw_sample]);
+        let (output, _timestamp) = processor.run_chunk(vec![raw_sample]);
         let duration = start_time.elapsed();
 
         total_processing_time += duration;

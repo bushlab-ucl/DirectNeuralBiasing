@@ -127,7 +127,7 @@ pub fn run() -> io::Result<()> {
             chunk_count += 1;
 
             let start_time = Instant::now(); // Start timer before analysis
-            let output = processor.run_chunk(samples.clone());
+            let (output, _timestamp) = processor.run_chunk(samples.clone());
             let duration = start_time.elapsed();
 
             println!(

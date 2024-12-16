@@ -1,6 +1,6 @@
 [package]
 name = "direct-neural-biasing"
-version = "0.11.0"
+version = "0.12.3"
 authors = ["Daniel Humphries <d.humphries@ucl.ac.uk>"]
 # description = "A Rust library with Python and C++ bindings for low-latency, closed-loop neuroscience research."
 license = "CC-BY-NC-4.0"
@@ -41,8 +41,8 @@ lto = true      # Link-time optimization
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["consoleapi", "winuser", "fileapi"] }
 
-[target.x86_64-pc-windows-gnu]
-rustflags = ["-C", "target-feature=+crt-static"]
+# [target.x86_64-pc-windows-gnu]
+# rustflags = ["-C", "target-feature=+crt-static"]
 
 [package.metadata.maturin]
 name = "direct-neural-biasing"

@@ -110,7 +110,7 @@ impl PySignalProcessor {
         self.processor.index = 0; // reset the index
     }
 
-    pub fn run_chunk(&mut self, data: Vec<f64>) -> Vec<HashMap<&'static str, f64>> {
+    pub fn run_chunk(&mut self, data: Vec<f64>) -> (Vec<HashMap<&'static str, f64>>, Option<f64>) {
         self.processor.run_chunk(data)
     }
 }
