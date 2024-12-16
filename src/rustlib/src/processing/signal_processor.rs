@@ -6,7 +6,7 @@ use std::collections::HashMap;
 // use std::time;
 
 // use std::time::{Instant};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 // use crate::utils::log::log_to_file;
 // use rayon::prelude::*;
@@ -156,10 +156,6 @@ impl SignalProcessor {
 
                 if triggered {
                     let now = SystemTime::now();
-                    let current_unix_time = now
-                        .duration_since(UNIX_EPOCH)
-                        .expect("Time went backwards")
-                        .as_secs_f64();
 
                     let trigger_index = self
                         .results
@@ -169,11 +165,39 @@ impl SignalProcessor {
                         .cloned()
                         .unwrap_or(0.0) as usize;
 
-                    // Convert trigger_index into an absolute timestamp
-                    let relative_time_sec =
-                        (trigger_index as isize - self.index as isize) as f64 / self.config.fs;
+                    // Verify the trigger index is ahead of the current index
+                    if trigger_index < self.index {
+                        eprintln!(
+                            "Error: Trigger index ({}) is behind the current index ({})!",
+                            trigger_index, self.index
+                        );
+                        continue; // Skip processing for this trigger
+                    }
 
-                    trigger_timestamp_option = Some(current_unix_time + relative_time_sec);
+                    // Compute the relative time offset as a Duration
+                    let sample_diff = trigger_index as isize - self.index as isize;
+                    let time_offset = Duration::from_secs_f64(sample_diff as f64 / self.config.fs);
+
+                    // Add the relative time offset to the current UNIX time
+                    let future_trigger_timestamp = now + time_offset;
+
+                    // Convert SystemTime to UNIX timestamp (f64) for c++ compatibility
+                    let unix_timestamp = future_trigger_timestamp
+                        .duration_since(UNIX_EPOCH)
+                        .expect("Time went backwards")
+                        .as_secs_f64();
+
+                    // Update the trigger timestamp
+                    trigger_timestamp_option = Some(unix_timestamp);
+
+                    // //debug, print now time from above
+                    // println!("Now time: {:?}", now);
+
+                    // // Debugging: print the computed future timestamp
+                    // println!(
+                    //     "Future trigger timestamp: {:?} (Relative offset: {:?})",
+                    //     future_trigger_timestamp, time_offset
+                    // );
                 }
             }
             // let duration = start_time.elapsed();

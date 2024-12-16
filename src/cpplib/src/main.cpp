@@ -87,6 +87,9 @@ void process_buffer_loop(void *rust_processor, RunChunkFunc run_chunk)
     // Process the buffer in Rust
     void *result = run_chunk(rust_processor, buffer, buffer_size);
 
+    // print result
+    // std::cout << "Result: " << result << std::endl;
+
     // Time the processing end
     auto end_time = std::chrono::high_resolution_clock::now();
     auto processing_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
