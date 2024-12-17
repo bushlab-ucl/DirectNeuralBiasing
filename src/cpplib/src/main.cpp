@@ -1,4 +1,5 @@
 #define WIN32_LEAN_AND_MEAN // Exclude rarely-used stuff from Windows headers
+#define NOMINMAX
 #include <windows.h>
 #include "cbsdk.h"
 #include <iostream>
@@ -20,14 +21,22 @@ using namespace std;
 
 // Constants
 const double fs = 30000.0;       // Sampling rate (30kHz)
-const size_t buffer_size = 1024; // Buffer size for real-time processing (adjust as needed)
+const size_t buffer_size = 4096; // Buffer size for real-time processing (adjust as needed)
 const size_t num_buffers = 2;    // Number of reusable buffers (double buffering)
 
-// Thread-safe queue for processing buffers
-std::queue<double *> buffer_queue;
-std::mutex queue_mutex;
+// Buffer struct
+struct Buffer
+{
+  double data[buffer_size]; // Buffer data
+  bool ready;               // Flag to indicate if the buffer is ready for processing
+};
+
+Buffer buffers[num_buffers];
+size_t filling_buffer_index = 0; // Index of the buffer being filled
+
+std::mutex buffer_mutex;
 std::condition_variable buffer_cv;
-bool stop_processing = false; // Flag to stop the processing thread
+bool stop_processing = false; // Flag to stop the threads
 
 // Function to load Rust functions from DLL
 bool load_rust_functions(HINSTANCE &hinstLib, CreateSignalProcessorFunc &create_signal_processor,
@@ -70,27 +79,31 @@ void process_buffer_loop(void *rust_processor, RunChunkFunc run_chunk)
 {
   while (true)
   {
-    std::unique_lock<std::mutex> lock(queue_mutex);
-    buffer_cv.wait(lock, []
-                   { return !buffer_queue.empty() || stop_processing; });
+    size_t processing_buffer_index;
 
-    if (stop_processing && buffer_queue.empty())
-      break;
+    // Wait for a buffer to become ready
+    {
+      std::unique_lock<std::mutex> lock(buffer_mutex);
+      buffer_cv.wait(lock, []
+                     { return stop_processing || buffers[0].ready || buffers[1].ready; });
 
-    double *buffer = buffer_queue.front();
-    buffer_queue.pop();
-    lock.unlock();
+      if (stop_processing)
+        break;
 
-    // Time the processing start
+      // Find the ready buffer
+      processing_buffer_index = buffers[0].ready ? 0 : 1;
+      buffers[processing_buffer_index].ready = false; // Mark as being processed
+    }
+
+    // debug, print buffer
+    // for (size_t i = 0; i < buffer_size; i++)
+    // {
+    //   std::cout << buffers[processing_buffer_index].data[i] << " ";
+    // }
+
+    // Process the buffer
     auto start_time = std::chrono::high_resolution_clock::now();
-
-    // Process the buffer in Rust
-    void *result = run_chunk(rust_processor, buffer, buffer_size);
-
-    // print result
-    // std::cout << "Result: " << result << std::endl;
-
-    // Time the processing end
+    void *result = run_chunk(rust_processor, buffers[processing_buffer_index].data, buffer_size);
     auto end_time = std::chrono::high_resolution_clock::now();
     auto processing_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
 
@@ -102,20 +115,11 @@ void process_buffer_loop(void *rust_processor, RunChunkFunc run_chunk)
       play_audio_pulse(); // Play an audio pulse
       std::cout << "Triggered at timestamp: " << timestamp << " seconds since UNIX epoch." << std::endl;
       std::cout << "Processing time: " << processing_time << " ms" << std::endl;
-
-      // After processing the result, free the memory allocated in Rust
       delete static_cast<double *>(result);
     }
-    else
-    {
-      // No trigger, Rust returned nullptr
-      // std::cout << "No trigger event detected." << std::endl;
-    }
 
-    // Print the processing time
-    // std::cout << "Processing time: " << processing_time << " ms" << std::endl;
-
-    // The buffer will be reused, so no need to delete[] buffer.
+    // Notify the data collection thread
+    buffer_cv.notify_one();
   }
 }
 
@@ -168,17 +172,15 @@ int main(int argc, char *argv[])
 
   Sleep(1000); // Wait to allow data to start flowing
 
-  // Preallocate a fixed set of buffers for double buffering
-  double *buffers[num_buffers];
-  for (size_t i = 0; i < num_buffers; i++)
-  {
-    buffers[i] = new double[buffer_size]; // Preallocated reusable buffers
-  }
-  size_t buffer_index = 0; // Track the current buffer index
-
   // Allocate memory for the trial data
   cbSdkTrialCont trial;
-  trial.samples[0] = malloc(buffer_size * sizeof(INT16)); // Only using one channel for now
+  for (int i = 0; i < cbNUM_ANALOG_CHANS; i++)
+  {
+    trial.samples[i] = malloc(buffer_size * sizeof(INT16));
+  }
+
+  // std::cout << "Expected samples buffer size: " << cbSdk_CONTINUOUS_DATA_SAMPLES << std::endl;
+  // std::cout << "my samples buffer size: " << buffer_size << std::endl;
 
   // Initialize the trial data structure
   res = cbSdkInitTrialData(0, 1, NULL, &trial, NULL, NULL);
@@ -188,61 +190,86 @@ int main(int argc, char *argv[])
     return 1;
   }
 
-  int loop_count = 0;
-  const int max_loops = 1000; // Number of loops to run
-
   // Main loop to collect data
   while (true)
   {
-    loop_count++;
-
-    // Get the data samples from Blackrock
+    // Fetch data from Blackrock
     res = cbSdkGetTrialData(0, 1, NULL, &trial, NULL, NULL);
-    if (res == CBSDKRESULT_SUCCESS && trial.count > 0)
+    if (res == CBSDKRESULT_SUCCESS)
     {
-      INT16 *int_samples = (INT16 *)trial.samples[0]; // Get samples for channel 1
-
-      // Copy samples into the preallocated buffer
-      double *active_buffer = buffers[buffer_index];
-      for (size_t i = 0; i < trial.num_samples[0]; i++)
+      if (trial.count > 0)
       {
-        active_buffer[i] = static_cast<double>(int_samples[i]);
-      }
+        INT16 *int_samples = reinterpret_cast<INT16 *>(trial.samples[0]);
+        size_t total_samples = trial.num_samples[0];
+        size_t processed_samples = 0;
 
-      // Push the filled buffer into the processing queue
+        while (processed_samples < total_samples)
+        {
+          size_t remaining_samples = total_samples - processed_samples;
+          size_t chunk_size = std::min(buffer_size, remaining_samples);
+
+          // Ensure we are switching to a buffer that's not "ready"
+          {
+            std::unique_lock<std::mutex> lock(buffer_mutex);
+            buffer_cv.wait(lock, [&]()
+                           { return !buffers[filling_buffer_index].ready || stop_processing; });
+
+            if (stop_processing)
+              break;
+          }
+
+          // Copy chunk of data into the chosen buffer
+          for (size_t i = 0; i < chunk_size; i++)
+          {
+            buffers[filling_buffer_index].data[i] = static_cast<double>(int_samples[processed_samples + i]);
+          }
+
+          // Debug: Print active buffer values
+          std::cout << "Buffer Index: " << filling_buffer_index
+                    << " | First few values: ";
+          for (size_t i = 0; i < std::min<size_t>(chunk_size, 5); i++)
+          {
+            std::cout << buffers[filling_buffer_index].data[i] << " ";
+          }
+          std::cout << std::endl;
+
+          // Mark buffer as ready
+          {
+            std::lock_guard<std::mutex> lock(buffer_mutex);
+            buffers[filling_buffer_index].ready = true;
+          }
+          buffer_cv.notify_one();
+
+          // Switch to the next buffer (round-robin)
+          filling_buffer_index = (filling_buffer_index + 1) % num_buffers;
+          processed_samples += chunk_size;
+        }
+      }
+      else
       {
-        std::lock_guard<std::mutex> lock(queue_mutex);
-        buffer_queue.push(active_buffer);
+        std::cerr << "No trial data available (trial.count = 0)" << std::endl;
       }
-      buffer_cv.notify_one(); // Notify the processing thread
-
-      // Cycle through the buffers (double-buffering logic)
-      buffer_index = (buffer_index + 1) % num_buffers;
     }
     else
     {
-      std::cerr << "No trial data or ERROR in cbSdkGetTrialData" << std::endl;
+      std::cerr << "Error fetching trial data: " << res << std::endl;
     }
+    Sleep(100);
   }
-
-  // Clean up
-  free(trial.samples[0]);
 
   // Signal the processing thread to stop and wait for it to finish
-  {
-    std::lock_guard<std::mutex> lock(queue_mutex);
-    stop_processing = true;
-  }
-  buffer_cv.notify_one();
+  stop_processing = true;
+  buffer_cv.notify_all();
   processing_thread.join();
 
+  // Clean up
   delete_signal_processor(rust_processor);
   FreeLibrary(hinstLib);
 
-  // Free the preallocated buffers
-  for (size_t i = 0; i < num_buffers; i++)
+  // free samples
+  for (int i = 0; i < cbNUM_ANALOG_CHANS; i++)
   {
-    delete[] buffers[i];
+    free(trial.samples[i]);
   }
 
   // Close the Blackrock system

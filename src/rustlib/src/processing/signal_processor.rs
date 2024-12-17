@@ -110,7 +110,6 @@ impl SignalProcessor {
 
         for sample in raw_samples {
             // let start_time_whole = Instant::now(); // Start timer before analysis
-
             // Reset and update globals
             self.results.clear();
             self.results

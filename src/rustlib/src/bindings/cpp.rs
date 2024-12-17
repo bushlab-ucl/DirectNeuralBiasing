@@ -186,6 +186,10 @@ pub extern "C" fn run_chunk(
     let (_output, trigger_timestamp_option) = processor.processor.run_chunk(data_slice.to_vec());
     // println!("{:?}", result); // Print the result (can be removed later)
 
+    // eprintln!(
+    //     "trigger_timestamp_option: {}",
+    //     trigger_timestamp_option.unwrap_or(0.0)
+    // );
     if let Some(trigger_timestamp) = trigger_timestamp_option {
         // Allocate memory for the timestamp and return it
         let result_ptr = Box::into_raw(Box::new(trigger_timestamp));
