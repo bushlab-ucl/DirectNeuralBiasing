@@ -2,7 +2,7 @@
 cmake_minimum_required(VERSION 3.15)
 
 # Set the project name
-project(DNB VERSION 0.3.2)
+project(DNB VERSION 0.4.0)
 
 # Use C++14 standard
 set(CMAKE_CXX_STANDARD 14)

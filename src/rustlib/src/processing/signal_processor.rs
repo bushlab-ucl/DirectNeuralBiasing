@@ -5,6 +5,7 @@ use super::triggers::TriggerInstance;
 use std::collections::HashMap;
 // use std::time;
 
+use colored::Colorize;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 // use crate::utils::log::log_to_file;
@@ -207,9 +208,30 @@ impl SignalProcessor {
             // println!("Whole block ran  in {:?}", duration_whole); // Timing the analysis phase only
         }
 
+        // debug print timing
         let duration_whole = start_time_whole.elapsed();
-        eprintln!("Processed chunk in {:?}", duration_whole); // Timing the analysis phase only
-        eprintln!("Trigger timestamp option: {:?}", trigger_timestamp_option); //print the trigger_timestamp_option
+        eprintln!(
+            "{}",
+            format!("Processed chunk in {:?}", duration_whole).blue()
+        );
+
+        // debug print trigger timestamp option
+        eprintln!(
+            "{}",
+            format!("Trigger timestamp option: {:?}", trigger_timestamp_option).color(
+                if trigger_timestamp_option.is_some() {
+                    "green"
+                } else {
+                    "red"
+                }
+            )
+        );
+
+        // debug print output length
+        eprintln!(
+            "{}",
+            format!("Output length: {:?}", output.len()).color("yellow")
+        );
 
         return (output, trigger_timestamp_option);
     }
