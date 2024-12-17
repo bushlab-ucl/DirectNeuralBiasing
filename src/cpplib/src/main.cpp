@@ -226,12 +226,19 @@ int main(int argc, char *argv[])
 
           // Debug: Print active buffer values
           std::cout << "Buffer Index: " << filling_buffer_index
+                    << " | Filled Length: " << chunk_size
                     << " | First few values: ";
           for (size_t i = 0; i < std::min<size_t>(chunk_size, 5); i++)
           {
             std::cout << buffers[filling_buffer_index].data[i] << " ";
           }
-          std::cout << std::endl;
+          // Print last few values
+          // std::cout << "| Last few values: ";
+          // for (size_t i = chunk_size - std::min<size_t>(chunk_size, 5); i < chunk_size; i++)
+          // {
+          //   std::cout << buffers[filling_buffer_index].data[i] << " ";
+          // }
+          // std::cout << std::endl;
 
           // Mark buffer as ready
           {
@@ -254,7 +261,7 @@ int main(int argc, char *argv[])
     {
       std::cerr << "Error fetching trial data: " << res << std::endl;
     }
-    Sleep(100);
+    Sleep(10);
   }
 
   // Signal the processing thread to stop and wait for it to finish
