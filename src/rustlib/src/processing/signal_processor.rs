@@ -5,8 +5,7 @@ use super::triggers::TriggerInstance;
 use std::collections::HashMap;
 // use std::time;
 
-// use std::time::{Instant};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 // use crate::utils::log::log_to_file;
 // use rayon::prelude::*;
@@ -107,9 +106,9 @@ impl SignalProcessor {
     ) -> (Vec<HashMap<&'static str, f64>>, Option<f64>) {
         let mut output = Vec::with_capacity(raw_samples.len());
         let mut trigger_timestamp_option = None;
+        let start_time_whole = Instant::now(); // Start timer before analysis
 
         for sample in raw_samples {
-            // let start_time_whole = Instant::now(); // Start timer before analysis
             // Reset and update globals
             self.results.clear();
             self.results
@@ -205,10 +204,12 @@ impl SignalProcessor {
             output.push(self.results.clone());
 
             self.index += 1;
-
-            // let duration_whole = start_time_whole.elapsed();
             // println!("Whole block ran  in {:?}", duration_whole); // Timing the analysis phase only
         }
+
+        let duration_whole = start_time_whole.elapsed();
+        eprintln!("Processed chunk in {:?}", duration_whole); // Timing the analysis phase only
+        eprintln!("Trigger timestamp option: {:?}", trigger_timestamp_option); //print the trigger_timestamp_option
 
         return (output, trigger_timestamp_option);
     }

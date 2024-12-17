@@ -228,7 +228,7 @@ int main(int argc, char *argv[])
           std::cout << "Buffer Index: " << filling_buffer_index
                     << " | Filled Length: " << chunk_size
                     << " | First few values: ";
-          for (size_t i = 0; i < std::min<size_t>(chunk_size, 5); i++)
+          for (size_t i = 0; i < std::min<size_t>(chunk_size, chunk_size); i++)
           {
             std::cout << buffers[filling_buffer_index].data[i] << " ";
           }
@@ -255,7 +255,7 @@ int main(int argc, char *argv[])
     {
       std::cerr << "Error fetching trial data: " << res << std::endl;
     }
-    Sleep(10);
+    // Sleep(1);
   }
 
   // Signal the processing thread to stop and wait for it to finish
