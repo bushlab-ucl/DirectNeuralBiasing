@@ -232,13 +232,7 @@ int main(int argc, char *argv[])
           {
             std::cout << buffers[filling_buffer_index].data[i] << " ";
           }
-          // Print last few values
-          // std::cout << "| Last few values: ";
-          // for (size_t i = chunk_size - std::min<size_t>(chunk_size, 5); i < chunk_size; i++)
-          // {
-          //   std::cout << buffers[filling_buffer_index].data[i] << " ";
-          // }
-          // std::cout << std::endl;
+          std::cout << std::endl;
 
           // Mark buffer as ready
           {
