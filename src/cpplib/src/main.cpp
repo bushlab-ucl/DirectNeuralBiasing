@@ -218,10 +218,13 @@ int main(int argc, char *argv[])
               break;
           }
 
-          // Copy chunk of data into the chosen buffer
+          // Convert INT16 samples to voltage values (microvolts)
           for (size_t i = 0; i < chunk_size; i++)
           {
-            buffers[filling_buffer_index].data[i] = static_cast<double>(int_samples[processed_samples + i]);
+            // Convert from INT16 to double (microvolts)
+            // The factor 0.25 comes from the typical resolution of Blackrock systems
+            // You may need to adjust this based on your specific hardware configuration
+            buffers[filling_buffer_index].data[i] = static_cast<double>(int_samples[processed_samples + i]) * 0.25;
           }
 
           // Debug: Print active buffer values
@@ -233,6 +236,16 @@ int main(int argc, char *argv[])
             std::cout << buffers[filling_buffer_index].data[i] << " ";
           }
           std::cout << std::endl;
+
+          // Add after the conversion loop:
+          if (processed_samples == 0) { // Only print first few samples of first chunk
+              std::cout << "Sample conversions (first 5 samples):" << std::endl;
+              for (size_t i = 0; i < std::min<size_t>(5, chunk_size); i++) {
+                  std::cout << "Raw: " << int_samples[i] 
+                            << " -> Converted: " << buffers[filling_buffer_index].data[i] 
+                            << " µV" << std::endl;
+              }
+          }
 
           // Mark buffer as ready
           {
