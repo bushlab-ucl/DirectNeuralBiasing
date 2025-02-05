@@ -13,6 +13,23 @@ use std::os::raw::c_void;
 #[repr(C)]
 pub struct SignalProcessorFFI {
     processor: SignalProcessor,
+    context_buffer: VecDeque<f64>,
+    context_size: usize,
+}
+
+impl SignalProcessorFFI {
+    pub fn new(verbose: bool, fs: f64, channel: usize) -> Self {
+        let config = SignalProcessorConfig {
+            verbose,
+            fs,
+            channel,
+        };
+        Self {
+            processor: SignalProcessor::new(config),
+            context_buffer: VecDeque::with_capacity(4096 + 4000), // buffer_size + 2*context_size
+            context_size: 2000,
+        }
+    }
 }
 
 #[no_mangle]
@@ -178,25 +195,27 @@ pub extern "C" fn run_chunk(
     data: *const f64,
     length: usize,
 ) -> *mut c_void {
-    // Access the processor from the pointer
     let processor = unsafe { &mut *(processor_ptr as *mut SignalProcessorFFI) };
     let data_slice = unsafe { std::slice::from_raw_parts(data, length) };
-
-    // Run the actual signal processing logic
-    let (_output, trigger_timestamp_option) = processor.processor.run_chunk(data_slice.to_vec());
-    // println!("{:?}", result); // Print the result (can be removed later)
-
-    // eprintln!(
-    //     "trigger_timestamp_option: {}",
-    //     trigger_timestamp_option.unwrap_or(0.0)
-    // );
+    
+    // Add new data to context buffer
+    processor.context_buffer.extend(data_slice);
+    
+    // Trim old context if buffer gets too large
+    while processor.context_buffer.len() > length + (processor.context_size * 2) {
+        processor.context_buffer.pop_front();
+    }
+    
+    // Process with context
+    let (_output, trigger_timestamp_option) = 
+        processor.processor.run_chunk(processor.context_buffer.make_contiguous().to_vec());
+    
     if let Some(trigger_timestamp) = trigger_timestamp_option {
         // Allocate memory for the timestamp and return it
         let result_ptr = Box::into_raw(Box::new(trigger_timestamp));
         return result_ptr as *mut c_void;
-    } else {
-        return std::ptr::null_mut(); // No trigger
     }
+    std::ptr::null_mut()
 }
 
 // #[no_mangle]
