@@ -145,8 +145,51 @@ int main(int argc, char *argv[])
     return 1;
   }
 
+  // COME BACK HERE TO RECONSIDER HOW WE DO PARAMS AND COMPONENTS
+  // COME BACK HERE TO RECONSIDER HOW WE DO PARAMS AND COMPONENTS
+
+  // Add filters (matching the local implementation)
+  const char* ied_filter_id = "ied_filter";
+  add_filter(rust_processor, ied_filter_id, 80.0, 120.0, fs);
+
+  const char* slow_wave_filter_id = "slow_wave_filter";
+  add_filter(rust_processor, slow_wave_filter_id, 0.5, 4.0, fs);
+
+  // Add wave peak detector for IED
+  const char* ied_detector_id = "ied_detector";
+  add_wave_peak_detector(
+      rust_processor,
+      ied_detector_id,
+      "ied_filter",
+      0.5,  // threshold
+      10.0  // min_peak_height
+  );
+
+  // Add threshold detector for slow waves
+  const char* slow_wave_detector_id = "slow_wave_detector";
+  add_threshold_detector(
+      rust_processor,
+      slow_wave_detector_id,
+      "slow_wave_filter",
+      0.5  // threshold
+  );
+
+  // Add pulse trigger
+  const char* trigger_id = "pulse_trigger";
+  add_pulse_trigger(
+      rust_processor,
+      trigger_id,
+      ied_detector_id,
+      slow_wave_detector_id,
+      1000,  // inhibition_cooldown_ms
+      1000   // pulse_cooldown_ms
+  );
+
   // Start the processing thread
   std::thread processing_thread(process_buffer_loop, rust_processor, run_chunk);
+
+  // COME BACK HERE TO RECONSIDER HOW WE DO PARAMS AND COMPONENTS - END
+  // COME BACK HERE TO RECONSIDER HOW WE DO PARAMS AND COMPONENTS - END
 
   // Open Blackrock system
   cbSdkResult res = cbSdkOpen(0, CBSDKCONNECTION_DEFAULT);
