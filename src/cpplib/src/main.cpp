@@ -16,26 +16,16 @@
 typedef void *(__cdecl *CreateSignalProcessorFunc)(bool verbose, double fs, size_t channel);
 typedef void(__cdecl *DeleteSignalProcessorFunc)(void *processor);
 typedef void *(__cdecl *RunChunkFunc)(void *processor, const double *data, size_t length);
-typedef void(__cdecl *AddFilterFunc)(void *processor, const char *id, double f_low, double f_high, double fs);
-typedef void(__cdecl *AddWavePeakDetectorFunc)(void *processor, const char *id, const char *filter_id, 
-    double z_score_threshold, double sinusoidness_threshold);
-typedef void(__cdecl *AddThresholdDetectorFunc)(void *processor, const char *id, const char *filter_id, 
-    double threshold);
-typedef void(__cdecl *AddPulseTriggerFunc)(void *processor, const char *id, const char *activation_detector_id,
-    const char *inhibition_detector_id, double inhibition_cooldown_ms, double pulse_cooldown_ms);
-
-using namespace std;
 
 // Constants
 const double fs = 30000.0;       // Sampling rate (30kHz)
-const size_t buffer_size = 4096; // Buffer size for real-time processing (adjust as needed)
+const size_t buffer_size = 4096; // Buffer size for real-time processing
 const size_t num_buffers = 2;    // Number of reusable buffers (double buffering)
 
 // Buffer struct
-struct Buffer
-{
-  double data[buffer_size]; // Buffer data
-  bool ready;               // Flag to indicate if the buffer is ready for processing
+struct Buffer {
+    double data[buffer_size];
+    bool ready;
 };
 
 Buffer buffers[num_buffers];
@@ -49,11 +39,7 @@ bool stop_processing = false; // Flag to stop the threads
 bool load_rust_functions(HINSTANCE &hinstLib, 
     CreateSignalProcessorFunc &create_signal_processor,
     DeleteSignalProcessorFunc &delete_signal_processor, 
-    RunChunkFunc &run_chunk,
-    AddFilterFunc &add_filter,
-    AddWavePeakDetectorFunc &add_wave_peak_detector,
-    AddThresholdDetectorFunc &add_threshold_detector,
-    AddPulseTriggerFunc &add_pulse_trigger)
+    RunChunkFunc &run_chunk)
 {
   hinstLib = LoadLibrary(TEXT("./direct_neural_biasing.dll"));
   Sleep(1000);
@@ -66,14 +52,8 @@ bool load_rust_functions(HINSTANCE &hinstLib,
     create_signal_processor = (CreateSignalProcessorFunc)GetProcAddress(hinstLib, "create_signal_processor");
     delete_signal_processor = (DeleteSignalProcessorFunc)GetProcAddress(hinstLib, "delete_signal_processor");
     run_chunk = (RunChunkFunc)GetProcAddress(hinstLib, "run_chunk");
-    add_filter = (AddFilterFunc)GetProcAddress(hinstLib, "add_filter");
-    add_wave_peak_detector = (AddWavePeakDetectorFunc)GetProcAddress(hinstLib, "add_wave_peak_detector");
-    add_threshold_detector = (AddThresholdDetectorFunc)GetProcAddress(hinstLib, "add_threshold_detector");
-    add_pulse_trigger = (AddPulseTriggerFunc)GetProcAddress(hinstLib, "add_pulse_trigger");
 
-    if (create_signal_processor == NULL || delete_signal_processor == NULL || 
-        run_chunk == NULL || add_filter == NULL || add_wave_peak_detector == NULL ||
-        add_threshold_detector == NULL || add_pulse_trigger == NULL) {
+    if (create_signal_processor == NULL || delete_signal_processor == NULL || run_chunk == NULL) {
         std::cerr << "Failed to load Rust functions!" << std::endl;
         FreeLibrary(hinstLib);
         return false;
@@ -147,14 +127,9 @@ int main(int argc, char *argv[])
   CreateSignalProcessorFunc create_signal_processor;
   DeleteSignalProcessorFunc delete_signal_processor;
   RunChunkFunc run_chunk;
-  AddFilterFunc add_filter;
-  AddWavePeakDetectorFunc add_wave_peak_detector;
-  AddThresholdDetectorFunc add_threshold_detector;
-  AddPulseTriggerFunc add_pulse_trigger;
 
   // Load the Rust library and functions
-  if (!load_rust_functions(hinstLib, create_signal_processor, delete_signal_processor, 
-      run_chunk, add_filter, add_wave_peak_detector, add_threshold_detector, add_pulse_trigger))
+  if (!load_rust_functions(hinstLib, create_signal_processor, delete_signal_processor, run_chunk))
   {
     return 1;
   }
@@ -168,51 +143,8 @@ int main(int argc, char *argv[])
     return 1;
   }
 
-  // COME BACK HERE TO RECONSIDER HOW WE DO PARAMS AND COMPONENTS
-  // COME BACK HERE TO RECONSIDER HOW WE DO PARAMS AND COMPONENTS
-
-  // Add filters (matching the local implementation)
-  const char* ied_filter_id = "ied_filter";
-  add_filter(rust_processor, ied_filter_id, 80.0, 120.0, fs);
-
-  const char* slow_wave_filter_id = "slow_wave_filter";
-  add_filter(rust_processor, slow_wave_filter_id, 0.5, 4.0, fs);
-
-  // Add wave peak detector for IED
-  const char* ied_detector_id = "ied_detector";
-  add_wave_peak_detector(
-      rust_processor,
-      ied_detector_id,
-      "ied_filter",
-      0.5,  // threshold
-      10.0  // min_peak_height
-  );
-
-  // Add threshold detector for slow waves
-  const char* slow_wave_detector_id = "slow_wave_detector";
-  add_threshold_detector(
-      rust_processor,
-      slow_wave_detector_id,
-      "slow_wave_filter",
-      0.5  // threshold
-  );
-
-  // Add pulse trigger
-  const char* trigger_id = "pulse_trigger";
-  add_pulse_trigger(
-      rust_processor,
-      trigger_id,
-      ied_detector_id,
-      slow_wave_detector_id,
-      1000,  // inhibition_cooldown_ms
-      1000   // pulse_cooldown_ms
-  );
-
   // Start the processing thread
   std::thread processing_thread(process_buffer_loop, rust_processor, run_chunk);
-
-  // COME BACK HERE TO RECONSIDER HOW WE DO PARAMS AND COMPONENTS - END
-  // COME BACK HERE TO RECONSIDER HOW WE DO PARAMS AND COMPONENTS - END
 
   // Open Blackrock system
   cbSdkResult res = cbSdkOpen(0, CBSDKCONNECTION_DEFAULT);

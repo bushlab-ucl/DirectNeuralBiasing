@@ -23,9 +23,60 @@ impl SignalProcessorFFI {
             fs,
             channel,
         };
+        let mut processor = SignalProcessor::new(config);
+
+        // Add filters
+        let ied_filter = BandPassFilter::new(BandPassFilterConfig {
+            id: "ied_filter".to_string(),
+            f_low: 80.0,
+            f_high: 120.0,
+            fs,
+        });
+        processor.add_filter(Box::new(ied_filter));
+
+        let slow_wave_filter = BandPassFilter::new(BandPassFilterConfig {
+            id: "slow_wave_filter".to_string(),
+            f_low: 0.5,
+            f_high: 4.0,
+            fs,
+        });
+        processor.add_filter(Box::new(slow_wave_filter));
+
+        // Add detectors
+        let ied_detector = ThresholdDetector::new(ThresholdDetectorConfig {
+            id: "ied_detector".to_string(),
+            filter_id: "ied_filter".to_string(),
+            z_score_threshold: 2.0,
+            buffer_size: 10,
+            sensitivity: 0.5,
+        });
+        processor.add_detector(Box::new(ied_detector));
+
+        let slow_wave_detector = WavePeakDetector::new(WavePeakDetectorConfig {
+            id: "slow_wave_detector".to_string(),
+            filter_id: "slow_wave_filter".to_string(),
+            z_score_threshold: 2.0,
+            sinusoidness_threshold: 0.6,
+            check_sinusoidness: true,
+            wave_polarity: "downwave".to_string(),
+            min_wave_length_ms: Some(500.0),
+            max_wave_length_ms: Some(2000.0),
+        });
+        processor.add_detector(Box::new(slow_wave_detector));
+
+        // Add trigger
+        let trigger = PulseTrigger::new(PulseTriggerConfig {
+            id: "pulse_trigger".to_string(),
+            activation_detector_id: "slow_wave_detector".to_string(),
+            inhibition_detector_id: "ied_detector".to_string(),
+            inhibition_cooldown_ms: 1000.0,
+            pulse_cooldown_ms: 0.0,
+        });
+        processor.add_trigger(Box::new(trigger));
+
         Self {
-            processor: SignalProcessor::new(config),
-            context_buffer: VecDeque::with_capacity(4096 + 4000), // buffer_size + 2*context_size
+            processor,
+            context_buffer: VecDeque::with_capacity(4096 + 4000),
             context_size: 2000,
         }
     }
