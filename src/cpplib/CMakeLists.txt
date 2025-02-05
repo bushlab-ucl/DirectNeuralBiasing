@@ -2,7 +2,7 @@
 cmake_minimum_required(VERSION 3.15)
 
 # Set the project name
-project(DNB VERSION 0.4.0)
+project(DNB VERSION 0.5.0)
 
 # Use C++14 standard
 set(CMAKE_CXX_STANDARD 14)
@@ -17,11 +17,27 @@ link_directories("C:/CereLink/CBSDK-7.6.1-win64/lib")
 # Add the main.cpp file in the src folder as a source file
 add_executable(DNB src/main.cpp)
 
-# Link the CBSDK library (this assumes the CBSDK library is named libcbsdk.a for MinGW)
-target_link_libraries(DNB PRIVATE cbsdk)
+# Link against the correct library name based on compiler
+if(MSVC)
+    target_link_libraries(DNB PRIVATE cbsdk.lib)
+else()
+    target_link_libraries(DNB PRIVATE cbsdk)
+endif()
 
-# Link the winmm library for playing audio
-target_link_libraries(DNB PRIVATE winmm)
+# Link the winmm library for playing audio (use correct name for MSVC)
+if(MSVC)
+    target_link_libraries(DNB PRIVATE winmm.lib)
+else()
+    target_link_libraries(DNB PRIVATE winmm)
+endif()
 
 # Bugfix from CereLink wiki
 target_compile_definitions(DNB PRIVATE NO_AFX)
+
+# Add MSVC-specific flags
+if(MSVC)
+    # Disable specific warnings and set runtime library
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHsc /MP")
+    # Use Multi-threaded DLL runtime library
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+endif()
