@@ -16,6 +16,13 @@
 typedef void *(__cdecl *CreateSignalProcessorFunc)(bool verbose, double fs, size_t channel);
 typedef void(__cdecl *DeleteSignalProcessorFunc)(void *processor);
 typedef void *(__cdecl *RunChunkFunc)(void *processor, const double *data, size_t length);
+typedef void(__cdecl *AddFilterFunc)(void *processor, const char *id, double f_low, double f_high, double fs);
+typedef void(__cdecl *AddWavePeakDetectorFunc)(void *processor, const char *id, const char *filter_id, 
+    double z_score_threshold, double sinusoidness_threshold);
+typedef void(__cdecl *AddThresholdDetectorFunc)(void *processor, const char *id, const char *filter_id, 
+    double threshold);
+typedef void(__cdecl *AddPulseTriggerFunc)(void *processor, const char *id, const char *activation_detector_id,
+    const char *inhibition_detector_id, double inhibition_cooldown_ms, double pulse_cooldown_ms);
 
 using namespace std;
 
@@ -39,8 +46,14 @@ std::condition_variable buffer_cv;
 bool stop_processing = false; // Flag to stop the threads
 
 // Function to load Rust functions from DLL
-bool load_rust_functions(HINSTANCE &hinstLib, CreateSignalProcessorFunc &create_signal_processor,
-                         DeleteSignalProcessorFunc &delete_signal_processor, RunChunkFunc &run_chunk)
+bool load_rust_functions(HINSTANCE &hinstLib, 
+    CreateSignalProcessorFunc &create_signal_processor,
+    DeleteSignalProcessorFunc &delete_signal_processor, 
+    RunChunkFunc &run_chunk,
+    AddFilterFunc &add_filter,
+    AddWavePeakDetectorFunc &add_wave_peak_detector,
+    AddThresholdDetectorFunc &add_threshold_detector,
+    AddPulseTriggerFunc &add_pulse_trigger)
 {
   hinstLib = LoadLibrary(TEXT("./direct_neural_biasing.dll"));
   Sleep(1000);
@@ -50,18 +63,23 @@ bool load_rust_functions(HINSTANCE &hinstLib, CreateSignalProcessorFunc &create_
     return false;
   }
 
-  create_signal_processor = (CreateSignalProcessorFunc)GetProcAddress(hinstLib, "create_signal_processor");
-  delete_signal_processor = (DeleteSignalProcessorFunc)GetProcAddress(hinstLib, "delete_signal_processor");
-  run_chunk = (RunChunkFunc)GetProcAddress(hinstLib, "run_chunk");
+    create_signal_processor = (CreateSignalProcessorFunc)GetProcAddress(hinstLib, "create_signal_processor");
+    delete_signal_processor = (DeleteSignalProcessorFunc)GetProcAddress(hinstLib, "delete_signal_processor");
+    run_chunk = (RunChunkFunc)GetProcAddress(hinstLib, "run_chunk");
+    add_filter = (AddFilterFunc)GetProcAddress(hinstLib, "add_filter");
+    add_wave_peak_detector = (AddWavePeakDetectorFunc)GetProcAddress(hinstLib, "add_wave_peak_detector");
+    add_threshold_detector = (AddThresholdDetectorFunc)GetProcAddress(hinstLib, "add_threshold_detector");
+    add_pulse_trigger = (AddPulseTriggerFunc)GetProcAddress(hinstLib, "add_pulse_trigger");
 
-  if (create_signal_processor == NULL || delete_signal_processor == NULL || run_chunk == NULL)
-  {
-    std::cerr << "Failed to load Rust functions!" << std::endl;
-    FreeLibrary(hinstLib);
-    return false;
-  }
+    if (create_signal_processor == NULL || delete_signal_processor == NULL || 
+        run_chunk == NULL || add_filter == NULL || add_wave_peak_detector == NULL ||
+        add_threshold_detector == NULL || add_pulse_trigger == NULL) {
+        std::cerr << "Failed to load Rust functions!" << std::endl;
+        FreeLibrary(hinstLib);
+        return false;
+    }
 
-  return true;
+    return true;
 }
 
 // Function to play an audio pulse
@@ -129,9 +147,14 @@ int main(int argc, char *argv[])
   CreateSignalProcessorFunc create_signal_processor;
   DeleteSignalProcessorFunc delete_signal_processor;
   RunChunkFunc run_chunk;
+  AddFilterFunc add_filter;
+  AddWavePeakDetectorFunc add_wave_peak_detector;
+  AddThresholdDetectorFunc add_threshold_detector;
+  AddPulseTriggerFunc add_pulse_trigger;
 
   // Load the Rust library and functions
-  if (!load_rust_functions(hinstLib, create_signal_processor, delete_signal_processor, run_chunk))
+  if (!load_rust_functions(hinstLib, create_signal_processor, delete_signal_processor, 
+      run_chunk, add_filter, add_wave_peak_detector, add_threshold_detector, add_pulse_trigger))
   {
     return 1;
   }
