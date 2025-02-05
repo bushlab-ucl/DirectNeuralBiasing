@@ -227,25 +227,28 @@ int main(int argc, char *argv[])
             buffers[filling_buffer_index].data[i] = static_cast<double>(int_samples[processed_samples + i]) * 0.25;
           }
 
-          // Debug: Print active buffer values
-          std::cout << "Buffer Index: " << filling_buffer_index
-                    << " | Filled Length: " << chunk_size
-                    << " | First few values: ";
-          for (size_t i = 0; i < std::min<size_t>(chunk_size, chunk_size); i++)
-          {
-            std::cout << buffers[filling_buffer_index].data[i] << " ";
-          }
-          std::cout << std::endl;
+          // // Debug: Print active buffer values
+          // std::cout << "Buffer Index: " << filling_buffer_index
+          //           << " | Filled Length: " << chunk_size
+          //           << " | First few values: ";
 
-          // Add after the conversion loop:
-          if (processed_samples == 0) { // Only print first few samples of first chunk
-              std::cout << "Sample conversions (first 5 samples):" << std::endl;
-              for (size_t i = 0; i < std::min<size_t>(5, chunk_size); i++) {
-                  std::cout << "Raw: " << int_samples[i] 
-                            << " -> Converted: " << buffers[filling_buffer_index].data[i] 
-                            << " µV" << std::endl;
-              }
-          }
+          // for (size_t i = 0; i < std::min<size_t>(chunk_size, chunk_size); i++)
+          // {
+          //   std::cout << buffers[filling_buffer_index].data[i] << " ";
+          // }
+          // std::cout << std::endl;
+
+          // // Add after the conversion loop:
+          // if (processed_samples == 0)
+          // { // Only print first few samples of first chunk
+          //   std::cout << "Sample conversions (first 5 samples):" << std::endl;
+          //   for (size_t i = 0; i < std::min<size_t>(5, chunk_size); i++)
+          //   {
+          //     std::cout << "Raw: " << int_samples[i]
+          //               << " -> Converted: " << buffers[filling_buffer_index].data[i]
+          //               << " µV" << std::endl;
+          //   }
+          // }
 
           // Mark buffer as ready
           {
@@ -268,7 +271,7 @@ int main(int argc, char *argv[])
     {
       std::cerr << "Error fetching trial data: " << res << std::endl;
     }
-    // Sleep(1);
+    Sleep(10);
   }
 
   // Signal the processing thread to stop and wait for it to finish
