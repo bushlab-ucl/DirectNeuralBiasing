@@ -37,11 +37,11 @@ pub fn run() -> io::Result<()> {
 
     let chunk_size = 4096;
     let context_size = 2000;
-    let buffer_size = (context_size * 2) + 1;
+    let max_buffer_size = chunk_size + (context_size * 2);
     let mut samples = Vec::with_capacity(chunk_size);
     let mut counter = 0;
     let mut global_counter = 0;
-    let mut sample_buffer = VecDeque::with_capacity(buffer_size); // Using VecDeque for the ring buffer
+    let mut sample_buffer = VecDeque::with_capacity(max_buffer_size);
     let mut chunk_count = 0; // Count the number of chunks processed
     let mut detected_events = 0; // Count the number of detected events
 
@@ -135,36 +135,34 @@ pub fn run() -> io::Result<()> {
                 chunk_count, total_chunks, duration, global_counter
             );
 
-            for sample_result in output {
-                sample_buffer.push_back(sample_result.clone());
+            // Add new data to sample buffer
+            sample_buffer.extend(output);
+            
+            // Strictly maintain buffer size
+            while sample_buffer.len() > max_buffer_size {
+                sample_buffer.pop_front();  // Remove oldest samples
+            }
 
-                // If the buffer is full, analyse middle sample and remove the oldest sample
-                if sample_buffer.len() >= buffer_size {
-                    // Check if the sample in the middle of the buffer is an event
-                    let middle_sample = sample_buffer.get(context_size).unwrap();
+            // Check if the sample in the middle of the buffer is an event
+            let middle_sample = sample_buffer.get(context_size).unwrap();
 
-                    // If the middle sample is an event, write the context to the file
-                    if let Some(&triggered) = middle_sample.get("triggers:pulse_trigger:triggered")
-                    {
-                        if triggered == 1.0 {
-                            detected_events += 1;
-                            println!("Detected event: {:?}", middle_sample);
+            // If the middle sample is an event, write the context to the file
+            if let Some(&triggered) = middle_sample.get("triggers:pulse_trigger:triggered")
+            {
+                if triggered == 1.0 {
+                    detected_events += 1;
+                    println!("Detected event: {:?}", middle_sample);
 
-                            println!(
-                                "Writing to file: Detected event {} - chunk {}/{}",
-                                detected_events, chunk_count, total_chunks
-                            );
+                    println!(
+                        "Writing to file: Detected event {} - chunk {}/{}",
+                        detected_events, chunk_count, total_chunks
+                    );
 
-                            for results in &sample_buffer {
-                                writeln!(output_file, "{:?}", results)?;
-                            }
-
-                            println!("Finished writing event to file");
-                        }
+                    for results in &sample_buffer {
+                        writeln!(output_file, "{:?}", results)?;
                     }
 
-                    // Pop the oldest chunk
-                    sample_buffer.pop_front();
+                    println!("Finished writing event to file");
                 }
             }
 
