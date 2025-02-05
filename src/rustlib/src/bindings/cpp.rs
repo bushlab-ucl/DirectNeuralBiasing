@@ -4,11 +4,10 @@ use crate::processing::filters::bandpass::{BandPassFilter, BandPassFilterConfig}
 use crate::processing::signal_processor::{SignalProcessor, SignalProcessorConfig};
 use crate::processing::triggers::pulse::{PulseTrigger, PulseTriggerConfig};
 
-// use std::collections::HashMap;
+use std::collections::VecDeque;
 use std::ffi::CString;
 use std::os::raw::c_char;
 use std::os::raw::c_void;
-// use std::ptr;
 
 #[repr(C)]
 pub struct SignalProcessorFFI {
@@ -34,13 +33,8 @@ impl SignalProcessorFFI {
 
 #[no_mangle]
 pub extern "C" fn create_signal_processor(verbose: bool, fs: f64, channel: usize) -> *mut c_void {
-    let config = SignalProcessorConfig {
-        verbose,
-        fs,
-        channel,
-    };
-    let processor = SignalProcessor::new(config);
-    let boxed_processor = Box::new(SignalProcessorFFI { processor });
+    let processor_ffi = SignalProcessorFFI::new(verbose, fs, channel);
+    let boxed_processor = Box::new(processor_ffi);
     Box::into_raw(boxed_processor) as *mut c_void
 }
 
