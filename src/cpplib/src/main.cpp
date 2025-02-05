@@ -20,7 +20,7 @@ typedef void *(__cdecl *RunChunkFunc)(void *processor, const double *data, size_
 using namespace std;
 
 // Constants
-const double fs = 30000.0;       // Sampling rate (30kHz)
+const double fs = 512.0;         // 30000.0;       // Sampling rate (30kHz)
 const size_t buffer_size = 4096; // Buffer size for real-time processing (adjust as needed)
 const size_t num_buffers = 2;    // Number of reusable buffers (double buffering)
 
@@ -271,7 +271,7 @@ int main(int argc, char *argv[])
     {
       std::cerr << "Error fetching trial data: " << res << std::endl;
     }
-    Sleep(10);
+    Sleep(100);
   }
 
   // Signal the processing thread to stop and wait for it to finish
