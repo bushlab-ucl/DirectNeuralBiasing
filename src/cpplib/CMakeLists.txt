@@ -41,3 +41,12 @@ if(MSVC)
     # Use Multi-threaded DLL runtime library
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 endif()
+
+# Add this near the top after project()
+if(MINGW)
+    # Force static linking of runtime libraries for MinGW
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -static-libgcc -static-libstdc++")
+    
+    # Add Windows system libraries that CBSDK might depend on
+    target_link_libraries(DNB PRIVATE ws2_32 user32 gdi32)
+endif()

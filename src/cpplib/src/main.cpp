@@ -146,13 +146,31 @@ int main(int argc, char *argv[])
   // Start the processing thread
   std::thread processing_thread(process_buffer_loop, rust_processor, run_chunk);
 
-  // Open Blackrock system
+  // Before cbSdkOpen
+  std::cout << "Attempting to open CBSDK..." << std::endl;
+
+  // Try opening with different connection types
   cbSdkResult res = cbSdkOpen(0, CBSDKCONNECTION_DEFAULT);
-  if (res != CBSDKRESULT_SUCCESS)
-  {
-    std::cerr << "ERROR: cbSdkOpen" << std::endl;
-    return 1;
+  if (res != CBSDKRESULT_SUCCESS) {
+      std::cerr << "ERROR: cbSdkOpen failed with error code: " << res << std::endl;
+      
+      // Try Central
+      std::cout << "Trying Central connection..." << std::endl;
+      res = cbSdkOpen(0, CBSDKCONNECTION_CENTRAL);
+      if (res != CBSDKRESULT_SUCCESS) {
+          std::cerr << "ERROR: Central connection failed with error code: " << res << std::endl;
+          
+          // Try UDP
+          std::cout << "Trying UDP connection..." << std::endl;
+          res = cbSdkOpen(0, CBSDKCONNECTION_UDP);
+          if (res != CBSDKRESULT_SUCCESS) {
+              std::cerr << "ERROR: UDP connection failed with error code: " << res << std::endl;
+              return 1;
+          }
+      }
   }
+
+  std::cout << "CBSDK opened successfully!" << std::endl;
 
   // Configure the first channel (continuous recording at 30kHz)
   cbPKT_CHANINFO chan_info;
