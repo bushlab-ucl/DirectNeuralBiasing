@@ -246,20 +246,30 @@ pub extern "C" fn run_chunk(
     // Add new data to context buffer
     processor.context_buffer.extend(data_slice);
     
-    // Trim old context if buffer gets too large
-    while processor.context_buffer.len() > length + (processor.context_size * 2) {
-        processor.context_buffer.pop_front();
+    // Strictly maintain buffer size
+    let max_buffer_size = length + (processor.context_size * 2);
+    while processor.context_buffer.len() > max_buffer_size {
+        processor.context_buffer.pop_front();  // Remove oldest samples
     }
+
+    // // Debug print to monitor buffer size
+    // if processor.processor.config.verbose {
+    //     eprintln!(
+    //         "Context buffer size: {}, Max allowed: {}", 
+    //         processor.context_buffer.len(), 
+    //         max_buffer_size
+    //     );
+    // }
     
-    // Process with context
+    // Process the data
     let (_output, trigger_timestamp_option) = 
-        processor.processor.run_chunk(processor.context_buffer.make_contiguous().to_vec());
+        processor.processor.run_chunk(Vec::from(data_slice));  // Only process new data
     
     if let Some(trigger_timestamp) = trigger_timestamp_option {
-        // Allocate memory for the timestamp and return it
         let result_ptr = Box::into_raw(Box::new(trigger_timestamp));
         return result_ptr as *mut c_void;
     }
+    
     std::ptr::null_mut()
 }
 
