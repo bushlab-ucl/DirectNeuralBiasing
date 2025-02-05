@@ -18,14 +18,15 @@ typedef void(__cdecl *DeleteSignalProcessorFunc)(void *processor);
 typedef void *(__cdecl *RunChunkFunc)(void *processor, const double *data, size_t length);
 
 // Constants
-const double fs = 30000.0;       // Sampling rate (30kHz)
+const double fs = 512.0;         // Sampling rate (30kHz)
 const size_t buffer_size = 4096; // Buffer size for real-time processing
 const size_t num_buffers = 2;    // Number of reusable buffers (double buffering)
 
 // Buffer struct
-struct Buffer {
-    double data[buffer_size];
-    bool ready;
+struct Buffer
+{
+  double data[buffer_size];
+  bool ready;
 };
 
 Buffer buffers[num_buffers];
@@ -36,10 +37,10 @@ std::condition_variable buffer_cv;
 bool stop_processing = false; // Flag to stop the threads
 
 // Function to load Rust functions from DLL
-bool load_rust_functions(HINSTANCE &hinstLib, 
-    CreateSignalProcessorFunc &create_signal_processor,
-    DeleteSignalProcessorFunc &delete_signal_processor, 
-    RunChunkFunc &run_chunk)
+bool load_rust_functions(HINSTANCE &hinstLib,
+                         CreateSignalProcessorFunc &create_signal_processor,
+                         DeleteSignalProcessorFunc &delete_signal_processor,
+                         RunChunkFunc &run_chunk)
 {
   hinstLib = LoadLibrary(TEXT("./direct_neural_biasing.dll"));
   Sleep(1000);
@@ -49,17 +50,18 @@ bool load_rust_functions(HINSTANCE &hinstLib,
     return false;
   }
 
-    create_signal_processor = (CreateSignalProcessorFunc)GetProcAddress(hinstLib, "create_signal_processor");
-    delete_signal_processor = (DeleteSignalProcessorFunc)GetProcAddress(hinstLib, "delete_signal_processor");
-    run_chunk = (RunChunkFunc)GetProcAddress(hinstLib, "run_chunk");
+  create_signal_processor = (CreateSignalProcessorFunc)GetProcAddress(hinstLib, "create_signal_processor");
+  delete_signal_processor = (DeleteSignalProcessorFunc)GetProcAddress(hinstLib, "delete_signal_processor");
+  run_chunk = (RunChunkFunc)GetProcAddress(hinstLib, "run_chunk");
 
-    if (create_signal_processor == NULL || delete_signal_processor == NULL || run_chunk == NULL) {
-        std::cerr << "Failed to load Rust functions!" << std::endl;
-        FreeLibrary(hinstLib);
-        return false;
-    }
+  if (create_signal_processor == NULL || delete_signal_processor == NULL || run_chunk == NULL)
+  {
+    std::cerr << "Failed to load Rust functions!" << std::endl;
+    FreeLibrary(hinstLib);
+    return false;
+  }
 
-    return true;
+  return true;
 }
 
 // Function to play an audio pulse
@@ -151,23 +153,26 @@ int main(int argc, char *argv[])
 
   // Try opening with different connection types
   cbSdkResult res = cbSdkOpen(0, CBSDKCONNECTION_DEFAULT);
-  if (res != CBSDKRESULT_SUCCESS) {
-      std::cerr << "ERROR: cbSdkOpen failed with error code: " << res << std::endl;
-      
-      // Try Central
-      std::cout << "Trying Central connection..." << std::endl;
-      res = cbSdkOpen(0, CBSDKCONNECTION_CENTRAL);
-      if (res != CBSDKRESULT_SUCCESS) {
-          std::cerr << "ERROR: Central connection failed with error code: " << res << std::endl;
-          
-          // Try UDP
-          std::cout << "Trying UDP connection..." << std::endl;
-          res = cbSdkOpen(0, CBSDKCONNECTION_UDP);
-          if (res != CBSDKRESULT_SUCCESS) {
-              std::cerr << "ERROR: UDP connection failed with error code: " << res << std::endl;
-              return 1;
-          }
+  if (res != CBSDKRESULT_SUCCESS)
+  {
+    std::cerr << "ERROR: cbSdkOpen failed with error code: " << res << std::endl;
+
+    // Try Central
+    std::cout << "Trying Central connection..." << std::endl;
+    res = cbSdkOpen(0, CBSDKCONNECTION_CENTRAL);
+    if (res != CBSDKRESULT_SUCCESS)
+    {
+      std::cerr << "ERROR: Central connection failed with error code: " << res << std::endl;
+
+      // Try UDP
+      std::cout << "Trying UDP connection..." << std::endl;
+      res = cbSdkOpen(0, CBSDKCONNECTION_UDP);
+      if (res != CBSDKRESULT_SUCCESS)
+      {
+        std::cerr << "ERROR: UDP connection failed with error code: " << res << std::endl;
+        return 1;
       }
+    }
   }
 
   std::cout << "CBSDK opened successfully!" << std::endl;

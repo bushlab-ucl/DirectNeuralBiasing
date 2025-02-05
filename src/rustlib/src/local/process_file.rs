@@ -35,7 +35,7 @@ pub fn run() -> io::Result<()> {
         ));
     }
 
-    let chunk_size = 10000;
+    let chunk_size = 4096;
     let context_size = 2000;
     let buffer_size = (context_size * 2) + 1;
     let mut samples = Vec::with_capacity(chunk_size);
