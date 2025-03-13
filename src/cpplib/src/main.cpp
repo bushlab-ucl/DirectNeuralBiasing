@@ -11,6 +11,7 @@
 #include <condition_variable>
 #include <mmsystem.h> // For PlaySound API
 #include <ctime>      // For printing timestamps
+#include <future>     // For async scheduling
 
 // Rust FFI declarations
 typedef void *(__cdecl *CreateSignalProcessorFunc)(bool verbose, double fs, size_t channel);
@@ -74,6 +75,39 @@ void play_audio_pulse()
   PlaySoundA(sound_file, NULL, SND_FILENAME | SND_ASYNC);
 }
 
+// Function to schedule audio pulse at a specific timestamp
+void schedule_audio_pulse(double timestamp)
+{
+  // Convert timestamp (UNIX epoch seconds) to system clock time point
+  std::chrono::system_clock::time_point target_time = 
+      std::chrono::system_clock::from_time_t(static_cast<time_t>(timestamp)) +
+      std::chrono::milliseconds(static_cast<int>((timestamp - static_cast<time_t>(timestamp)) * 1000));
+  
+  // Get current time
+  auto now = std::chrono::system_clock::now();
+  
+  // Calculate delay
+  auto delay = target_time - now;
+  
+  // If the timestamp is in the past, play immediately
+  if (delay.count() <= 0) {
+    std::cout << "Warning: Scheduled time is in the past, playing immediately." << std::endl;
+    play_audio_pulse();
+    return;
+  }
+  
+  // Print scheduling information
+  auto delay_ms = std::chrono::duration_cast<std::chrono::milliseconds>(delay).count();
+  std::cout << "Scheduling audio pulse in " << delay_ms << " ms" << std::endl;
+  
+  // Schedule the audio pulse using async
+  std::async(std::launch::async, [delay]() {
+    std::this_thread::sleep_for(delay);
+    play_audio_pulse();
+    std::cout << "Audio pulse played at scheduled time." << std::endl;
+  });
+}
+
 // Processing thread function
 void process_buffer_loop(void *rust_processor, RunChunkFunc run_chunk)
 {
@@ -112,7 +146,10 @@ void process_buffer_loop(void *rust_processor, RunChunkFunc run_chunk)
     {
       // Rust returned a valid timestamp
       double timestamp = *reinterpret_cast<double *>(result);
-      play_audio_pulse(); // Play an audio pulse
+      
+      // Schedule the audio pulse at the specified timestamp instead of playing immediately
+      schedule_audio_pulse(timestamp);
+      
       std::cout << "Triggered at timestamp: " << timestamp << " seconds since UNIX epoch." << std::endl;
       std::cout << "Processing time: " << processing_time << " ms" << std::endl;
       delete static_cast<double *>(result);
