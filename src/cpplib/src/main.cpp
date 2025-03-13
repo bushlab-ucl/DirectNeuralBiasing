@@ -12,6 +12,8 @@
 #include <mmsystem.h> // For PlaySound API
 #include <ctime>      // For printing timestamps
 #include <future>     // For async scheduling
+#include <vector>     // For storing futures
+#include <algorithm>  // For std::remove_if
 
 // Rust FFI declarations
 typedef void *(__cdecl *CreateSignalProcessorFunc)(bool verbose, double fs, size_t channel);
@@ -100,12 +102,24 @@ void schedule_audio_pulse(double timestamp)
   auto delay_ms = std::chrono::duration_cast<std::chrono::milliseconds>(delay).count();
   std::cout << "Scheduling audio pulse in " << delay_ms << " ms" << std::endl;
   
-  // Schedule the audio pulse using async
-  std::async(std::launch::async, [delay]() {
+  // Schedule the audio pulse using async and store the future
+  // We need to store the future to prevent it from being destroyed immediately
+  static std::vector<std::future<void>> futures;
+  futures.push_back(std::async(std::launch::async, [delay]() {
     std::this_thread::sleep_for(delay);
     play_audio_pulse();
     std::cout << "Audio pulse played at scheduled time." << std::endl;
-  });
+  }));
+  
+  // Clean up completed futures to prevent memory growth
+  futures.erase(
+    std::remove_if(futures.begin(), futures.end(), 
+      [](std::future<void>& f) {
+        return f.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
+      }
+    ),
+    futures.end()
+  );
 }
 
 // Processing thread function
