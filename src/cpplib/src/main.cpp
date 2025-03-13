@@ -204,11 +204,12 @@ void process_buffer_loop(void *rust_processor, RunChunkFunc run_chunk)
       // Rust returned a valid timestamp
       double timestamp = *reinterpret_cast<double *>(result);
       
+      // Log processing information
+      std::cout << "Processing time: " << processing_time << " ms" << std::endl;
+      
       // Schedule the audio pulse at the specified timestamp instead of playing immediately
       schedule_audio_pulse(timestamp);
       
-      std::cout << "Triggered at timestamp: " << timestamp << " seconds since UNIX epoch." << std::endl;
-      std::cout << "Processing time: " << processing_time << " ms" << std::endl;
       delete static_cast<double *>(result);
     }
 
