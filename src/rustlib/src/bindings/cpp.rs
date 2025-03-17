@@ -55,7 +55,7 @@ impl SignalProcessorFFI {
         });
         processor.add_detector(Box::new(slow_wave_detector));
 
-        let ied_detector = WavePeakDetector::new(ThresholdDetectorConfig {
+        let ied_detector = WavePeakDetector::new(WavePeakDetectorConfig {
             id: "ied_detector".to_string(),
             filter_id: "ied_filter".to_string(),
             z_score_threshold: 1.5,
@@ -139,14 +139,14 @@ pub extern "C" fn add_threshold_detector(
     let filter_id_str = unsafe { CString::from_raw(filter_id as *mut c_char) }
         .into_string()
         .unwrap();
-    let config = ThresholdDetectorConfig {
+    let config = WavePeakDetectorConfig {
         id: id_str,
         filter_id: filter_id_str,
         z_score_threshold,
         buffer_size,
         sensitivity,
     };
-    let detector = ThresholdDetector::new(config);
+    let detector = WavePeakDetector::new(config);
     processor.processor.add_detector(Box::new(detector));
 }
 
