@@ -8,7 +8,10 @@ use std::collections::HashMap;
 use colored::Colorize;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-// use crate::utils::log::log_to_file;
+// Uncomment these imports as we'll need them for logging
+use crate::utils::log::log_to_file;
+use std::sync::mpsc::{self, Receiver, Sender};
+use std::thread;
 // use rayon::prelude::*;
 // use std::os::raw::c_void;
 
@@ -22,6 +25,7 @@ pub struct SignalProcessorConfig {
     pub verbose: bool,
     pub fs: f64,
     pub channel: usize,
+    pub enable_debug_logging: bool, // New field to control debug logging
 }
 
 pub struct SignalProcessor {
@@ -32,6 +36,7 @@ pub struct SignalProcessor {
     pub config: SignalProcessorConfig,
     pub results: HashMap<&'static str, f64>,
     pub keys: Keys,
+    log_sender: Option<Sender<(HashMap<&'static str, f64>, String)>>, // Channel to send logs to background thread
 }
 
 pub struct Keys {
@@ -43,6 +48,15 @@ pub struct Keys {
 
 impl SignalProcessor {
     pub fn new(config: SignalProcessorConfig) -> Self {
+        let log_sender = if config.enable_debug_logging {
+            // Set up logging thread only if debug logging is enabled
+            let (tx, rx) = mpsc::channel();
+            SignalProcessor::setup_logging_thread(rx);
+            Some(tx)
+        } else {
+            None
+        };
+
         SignalProcessor {
             index: 0,
             filters: HashMap::new(),
@@ -56,6 +70,63 @@ impl SignalProcessor {
                 global_channel: "global:channel",
                 global_timestamp_ms: "global:timestamp_ms",
             },
+            log_sender,
+        }
+    }
+
+    // New method to set up the logging thread
+    fn setup_logging_thread(rx: Receiver<(HashMap<&'static str, f64>, String)>) {
+        thread::spawn(move || {
+            // Create an initial log entry to show the logging system is active
+            let _ = log_to_file(
+                "trigger_debug.log", 
+                "Signal processor trigger logging started"
+            );
+            
+            while let Ok((results, trigger_id)) = rx.recv() {
+                // Get current timestamp for the log
+                let timestamp = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or(Duration::from_secs(0))
+                    .as_secs_f64();
+                
+                // Format the trigger event information
+                let mut log_entry = format!(
+                    "TRIGGER EVENT [{}]\n", 
+                    timestamp
+                );
+                
+                // Add trigger ID
+                log_entry.push_str(&format!("Trigger ID: {}\n\n", trigger_id));
+                
+                // Add all results values in a readable format
+                log_entry.push_str("RESULTS CONTEXT:\n");
+                log_entry.push_str("----------------\n");
+                
+                // Create sorted list of keys for consistent output
+                let mut keys: Vec<&&'static str> = results.keys().collect();
+                keys.sort();
+                
+                for &key in keys {
+                    if let Some(value) = results.get(key) {
+                        log_entry.push_str(&format!("{} = {}\n", key, value));
+                    }
+                }
+                
+                // Log the event to file
+                if let Err(e) = log_to_file("trigger_debug.log", &log_entry) {
+                    eprintln!("{}", format!("Failed to log trigger event: {}", e).red());
+                }
+            }
+        });
+    }
+
+    // New method to log trigger events
+    fn log_trigger_event(&self, trigger_id: &str) {
+        if let Some(sender) = &self.log_sender {
+            if let Err(e) = sender.send((self.results.clone(), trigger_id.to_string())) {
+                eprintln!("{}", format!("Failed to send log event: {}", e).red());
+            }
         }
     }
 
@@ -186,6 +257,11 @@ impl SignalProcessor {
                         .expect("Time went backwards")
                         .as_secs_f64();
 
+                    // Log the trigger event with context
+                    if self.config.enable_debug_logging {
+                        self.log_trigger_event(id);
+                    }
+                    
                     // Update the trigger timestamp
                     trigger_timestamp_option = Some(unix_timestamp);
 
