@@ -179,6 +179,9 @@ impl SignalProcessor {
         let mut output = Vec::with_capacity(raw_samples.len());
         let mut trigger_timestamp_option = None;
         let start_time_whole = Instant::now(); // Start timer before analysis
+        
+        // Create a vector to collect trigger events
+        let mut trigger_events = Vec::new();
 
         for sample in raw_samples {
             // Reset and update globals
@@ -194,23 +197,16 @@ impl SignalProcessor {
             );
 
             // Filters process the sample
-            // let start_time = Instant::now(); // Start timer before analysis
             for (_id, filter) in self.filters.iter_mut() {
                 filter.process_sample(&self.config, &mut self.results);
             }
-            // let duration = start_time.elapsed();
-            // println!("Filters ran  in {:?}", duration); // Timing the analysis phase only
 
             // Detectors process the filtered results
-            // let start_time = Instant::now(); // Start timer before analysis
             for (_id, detector) in self.detectors.iter_mut() {
                 detector.process_sample(&self.config, &mut self.results, self.index);
             }
-            // let duration = start_time.elapsed();
-            // println!("Detectors ran  in {:?}", duration); // Timing the analysis phase only
 
             // Triggers evaluate based on detector outputs
-            // let start_time = Instant::now(); // Start timer before analysis
             for (id, trigger) in self.triggers.iter_mut() {
                 trigger.evaluate(&self.config, &mut self.results);
 
@@ -256,33 +252,31 @@ impl SignalProcessor {
                         .duration_since(UNIX_EPOCH)
                         .expect("Time went backwards")
                         .as_secs_f64();
-
-                    // Log the trigger event with context
+                    
+                    // If debug logging is enabled, collect the trigger event info for later logging
                     if self.config.enable_debug_logging {
-                        let trigger_id_clone = id.clone();
-                        self.log_trigger_event(trigger_id_clone);
+                        // Clone both results and trigger ID for the event log
+                        trigger_events.push((self.results.clone(), id.clone()));
                     }
                     
                     // Update the trigger timestamp
                     trigger_timestamp_option = Some(unix_timestamp);
-
-                    // //debug, print now time from above
-                    // println!("Now time: {:?}", now);
-
-                    // // Debugging: print the computed future timestamp
-                    // println!(
-                    //     "Future trigger timestamp: {:?} (Relative offset: {:?})",
-                    //     future_trigger_timestamp, time_offset
-                    // );
                 }
             }
-            // let duration = start_time.elapsed();
-            // println!("Triggers ran  in {:?}", duration); // Timing the analysis phase only
 
             output.push(self.results.clone());
-
             self.index += 1;
-            // println!("Whole block ran  in {:?}", duration_whole); // Timing the analysis phase only
+        }
+
+        // Now log all collected trigger events outside the mutable borrow scope
+        if self.config.enable_debug_logging {
+            for (results, trigger_id) in trigger_events {
+                if let Some(sender) = &self.log_sender {
+                    if let Err(e) = sender.send((results, trigger_id)) {
+                        eprintln!("{}", format!("Failed to send log event: {}", e).red());
+                    }
+                }
+            }
         }
 
         // debug print timing
