@@ -23,7 +23,7 @@ typedef void(__cdecl *DeleteSignalProcessorFunc)(void *processor);
 typedef void *(__cdecl *RunChunkFunc)(void *processor, const double *data, size_t length);
 
 // Constants
-const double fs = 512.0;         // Sampling rate (30kHz)
+const double fs = 30000.0;       // Sampling rate (30kHz)
 const size_t buffer_size = 4096; // Buffer size for real-time processing
 const size_t num_buffers = 2;    // Number of reusable buffers (double buffering)
 

@@ -1,4 +1,4 @@
-use crate::processing::detectors::threshold::{ThresholdDetector, ThresholdDetectorConfig};
+// use crate::processing::detectors::threshold::{ThresholdDetector, ThresholdDetectorConfig};
 use crate::processing::detectors::wave_peak::{WavePeakDetector, WavePeakDetectorConfig};
 use crate::processing::filters::bandpass::{BandPassFilter, BandPassFilterConfig};
 use crate::processing::signal_processor::{SignalProcessor, SignalProcessorConfig};
@@ -43,34 +43,37 @@ impl SignalProcessorFFI {
         processor.add_filter(Box::new(slow_wave_filter));
 
         // Add detectors
-        let ied_detector = ThresholdDetector::new(ThresholdDetectorConfig {
-            id: "ied_detector".to_string(),
-            filter_id: "ied_filter".to_string(),
-            z_score_threshold: 2.0,
-            buffer_size: 10,
-            sensitivity: 0.5,
-        });
-        processor.add_detector(Box::new(ied_detector));
-
         let slow_wave_detector = WavePeakDetector::new(WavePeakDetectorConfig {
             id: "slow_wave_detector".to_string(),
             filter_id: "slow_wave_filter".to_string(),
             z_score_threshold: 2.0,
-            sinusoidness_threshold: 0.6,
-            check_sinusoidness: true,
+            sinusoidness_threshold: 0.7,
+            check_sinusoidness: false,
             wave_polarity: "downwave".to_string(),
             min_wave_length_ms: Some(500.0),
             max_wave_length_ms: Some(2000.0),
         });
         processor.add_detector(Box::new(slow_wave_detector));
 
+        let ied_detector = WavePeakDetector::new(ThresholdDetectorConfig {
+            id: "ied_detector".to_string(),
+            filter_id: "ied_filter".to_string(),
+            z_score_threshold: 1.5,
+            sinusoidness_threshold: 0.0,
+            check_sinusoidness: false,
+            wave_polarity: "upwave".to_string(),
+            min_wave_length_ms: None,
+            max_wave_length_ms: None,
+        });
+        processor.add_detector(Box::new(ied_detector));
+
         // Add trigger
         let trigger = PulseTrigger::new(PulseTriggerConfig {
             id: "pulse_trigger".to_string(),
             activation_detector_id: "slow_wave_detector".to_string(),
             inhibition_detector_id: "ied_detector".to_string(),
-            inhibition_cooldown_ms: 1000.0,
-            pulse_cooldown_ms: 0.0,
+            inhibition_cooldown_ms: 2000.0,
+            pulse_cooldown_ms: 2000.0,
         });
         processor.add_trigger(Box::new(trigger));
 
@@ -242,34 +245,33 @@ pub extern "C" fn run_chunk(
 ) -> *mut c_void {
     let processor = unsafe { &mut *(processor_ptr as *mut SignalProcessorFFI) };
     let data_slice = unsafe { std::slice::from_raw_parts(data, length) };
-    
+
     // Add new data to context buffer
     processor.context_buffer.extend(data_slice);
-    
+
     // Strictly maintain buffer size
     let max_buffer_size = length + (processor.context_size * 2);
     while processor.context_buffer.len() > max_buffer_size {
-        processor.context_buffer.pop_front();  // Remove oldest samples
+        processor.context_buffer.pop_front(); // Remove oldest samples
     }
 
     // // Debug print to monitor buffer size
     // if processor.processor.config.verbose {
     //     eprintln!(
-    //         "Context buffer size: {}, Max allowed: {}", 
-    //         processor.context_buffer.len(), 
+    //         "Context buffer size: {}, Max allowed: {}",
+    //         processor.context_buffer.len(),
     //         max_buffer_size
     //     );
     // }
-    
+
     // Process the data
-    let (_output, trigger_timestamp_option) = 
-        processor.processor.run_chunk(Vec::from(data_slice));  // Only process new data
-    
+    let (_output, trigger_timestamp_option) = processor.processor.run_chunk(Vec::from(data_slice)); // Only process new data
+
     if let Some(trigger_timestamp) = trigger_timestamp_option {
         let result_ptr = Box::into_raw(Box::new(trigger_timestamp));
         return result_ptr as *mut c_void;
     }
-    
+
     std::ptr::null_mut()
 }
 
