@@ -56,8 +56,7 @@ pub fn log_to_file(filename: &str, message: &str) -> io::Result<()> {
 /// # Returns
 /// 
 /// * `io::Result<()>` - Success or error result
-// These utility functions are provided for future logging needs
-// They are currently unused but maintained for API completeness
+#[allow(dead_code)]
 pub fn log_with_header(filename: &str, header: &str, message: &str) -> io::Result<()> {
     let formatted_message = format!(
         "===== {} =====\n{}\n====================",
