@@ -123,32 +123,32 @@ pub extern "C" fn add_filter(
     processor.processor.add_filter(Box::new(filter));
 }
 
-#[no_mangle]
-pub extern "C" fn add_threshold_detector(
-    processor_ptr: *mut c_void,
-    id: *const c_char,
-    filter_id: *const c_char,
-    z_score_threshold: f64,
-    buffer_size: usize,
-    sensitivity: f64,
-) {
-    let processor = unsafe { &mut *(processor_ptr as *mut SignalProcessorFFI) };
-    let id_str = unsafe { CString::from_raw(id as *mut c_char) }
-        .into_string()
-        .unwrap();
-    let filter_id_str = unsafe { CString::from_raw(filter_id as *mut c_char) }
-        .into_string()
-        .unwrap();
-    let config = WavePeakDetectorConfig {
-        id: id_str,
-        filter_id: filter_id_str,
-        z_score_threshold,
-        buffer_size,
-        sensitivity,
-    };
-    let detector = WavePeakDetector::new(config);
-    processor.processor.add_detector(Box::new(detector));
-}
+// #[no_mangle]
+// pub extern "C" fn add_threshold_detector(
+//     processor_ptr: *mut c_void,
+//     id: *const c_char,
+//     filter_id: *const c_char,
+//     z_score_threshold: f64,
+//     buffer_size: usize,
+//     sensitivity: f64,
+// ) {
+//     let processor = unsafe { &mut *(processor_ptr as *mut SignalProcessorFFI) };
+//     let id_str = unsafe { CString::from_raw(id as *mut c_char) }
+//         .into_string()
+//         .unwrap();
+//     let filter_id_str = unsafe { CString::from_raw(filter_id as *mut c_char) }
+//         .into_string()
+//         .unwrap();
+//     let config = WavePeakDetectorConfig {
+//         id: id_str,
+//         filter_id: filter_id_str,
+//         z_score_threshold,
+//         buffer_size,
+//         sensitivity,
+//     };
+//     let detector = WavePeakDetector::new(config);
+//     processor.processor.add_detector(Box::new(detector));
+// }
 
 #[no_mangle]
 pub extern "C" fn add_wave_peak_detector(
