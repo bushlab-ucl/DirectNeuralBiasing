@@ -22,6 +22,7 @@ impl SignalProcessorFFI {
             verbose,
             fs,
             channel,
+            enable_debug_logging: true,
         };
         let mut processor = SignalProcessor::new(config);
 

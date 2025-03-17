@@ -57,6 +57,7 @@ pub fn run() -> io::Result<()> {
         verbose: true,
         fs: 512.0,
         channel: 1,
+        enable_debug_logging: true, // Enable logging for now
     };
 
     let mut processor = SignalProcessor::new(processor_config);

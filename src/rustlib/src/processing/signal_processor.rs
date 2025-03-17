@@ -122,9 +122,9 @@ impl SignalProcessor {
     }
 
     // New method to log trigger events
-    fn log_trigger_event(&self, trigger_id: &str) {
+    fn log_trigger_event(&self, trigger_id: String) {
         if let Some(sender) = &self.log_sender {
-            if let Err(e) = sender.send((self.results.clone(), trigger_id.to_string())) {
+            if let Err(e) = sender.send((self.results.clone(), trigger_id)) {
                 eprintln!("{}", format!("Failed to send log event: {}", e).red());
             }
         }
@@ -259,7 +259,8 @@ impl SignalProcessor {
 
                     // Log the trigger event with context
                     if self.config.enable_debug_logging {
-                        self.log_trigger_event(id);
+                        let trigger_id_clone = id.clone();
+                        self.log_trigger_event(trigger_id_clone);
                     }
                     
                     // Update the trigger timestamp
