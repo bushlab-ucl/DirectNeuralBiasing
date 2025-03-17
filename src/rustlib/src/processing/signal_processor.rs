@@ -121,15 +121,6 @@ impl SignalProcessor {
         });
     }
 
-    // New method to log trigger events
-    fn log_trigger_event(&self, trigger_id: String) {
-        if let Some(sender) = &self.log_sender {
-            if let Err(e) = sender.send((self.results.clone(), trigger_id)) {
-                eprintln!("{}", format!("Failed to send log event: {}", e).red());
-            }
-        }
-    }
-
     pub fn add_filter(&mut self, filter: Box<dyn FilterInstance>) {
         let id = filter.id().to_string();
         self.filters.insert(id, filter);
