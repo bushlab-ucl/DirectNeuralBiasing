@@ -1,0 +1,42 @@
+processor:
+  verbose: true
+  fs: 30000.0  # 30kHz sampling rate
+  downsample_rate: 0.1
+  channel: 1
+  enable_debug_logging: true
+
+filters:
+  bandpass_filters:
+    - id: ied_filter
+      f_low: 80.0
+      f_high: 120.0
+    - id: slow_wave_filter
+      f_low: 0.5
+      f_high: 4.0
+
+detectors:
+  wave_peak_detectors:
+    - id: slow_wave_detector
+      filter_id: slow_wave_filter
+      z_score_threshold: 2.0
+      sinusoidness_threshold: 0.7
+      check_sinusoidness: false
+      wave_polarity: downwave
+      min_wave_length_ms: 500.0
+      max_wave_length_ms: 2000.0
+    - id: ied_detector
+      filter_id: ied_filter
+      z_score_threshold: 1.5
+      sinusoidness_threshold: 0.0
+      check_sinusoidness: false
+      wave_polarity: upwave
+      min_wave_length_ms: null
+      max_wave_length_ms: null
+
+triggers:
+  pulse_triggers:
+    - id: pulse_trigger
+      activation_detector_id: slow_wave_detector
+      inhibition_detector_id: ied_detector
+      inhibition_cooldown_ms: 2000.0
+      pulse_cooldown_ms: 2000.0
