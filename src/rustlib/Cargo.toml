@@ -28,9 +28,9 @@ name = "main"
 path = "src/main.rs"
 
 # this breaks it for some reason
-[lib]
-name = "direct_neural_biasing"
-crate-type = ["cdylib"]
+# [lib]
+# name = "direct_neural_biasing"
+# crate-type = ["cdylib"]
 
 [profile.release]
 opt-level = "z" # Optimize for binary size, helpful for DLLs

@@ -16,11 +16,12 @@ pub struct PySignalProcessor {
 #[pymethods]
 impl PySignalProcessor {
     #[new]
-    pub fn new(verbose: bool, fs: f64, channel: usize) -> Self {
+    pub fn new(verbose: bool, fs: f64, channel: usize, enable_debug_logging: bool) -> Self {
         let config = SignalProcessorConfig {
             verbose,
             fs,
             channel,
+            enable_debug_logging
         };
         PySignalProcessor {
             processor: SignalProcessor::new(config),
