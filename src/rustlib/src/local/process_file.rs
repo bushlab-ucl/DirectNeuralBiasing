@@ -26,7 +26,7 @@ where
 }
 
 pub fn run() -> io::Result<()> {
-    let data_file_path = "./data/data_channel1.csv";
+    let data_file_path = "./data/test_waveform.csv";
     if !Path::new(data_file_path).exists() {
         eprintln!("Error: Data file not found at path: {}", data_file_path);
         return Err(io::Error::new(

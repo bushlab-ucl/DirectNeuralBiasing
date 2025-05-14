@@ -1,0 +1,89 @@
+
+--- Log entry at 1747220786 ---
+Signal processor trigger logging started
+--- End of entry ---
+
+
+--- Log entry at 1747221188 ---
+Signal processor trigger logging started
+--- End of entry ---
+
+
+--- Log entry at 1747221188 ---
+TRIGGER EVENT [1747221188.056174]
+Trigger ID: pulse_trigger
+
+RESULTS CONTEXT:
+----------------
+detectors:ied_detector:confidence = 0
+detectors:ied_detector:detected = 0
+detectors:ied_detector:statistics:count = 795
+detectors:ied_detector:statistics:mean = 0.000012185717101943226
+detectors:ied_detector:statistics:std_dev = 0.007561314114670046
+detectors:ied_detector:statistics:sum = 0.009687645096044865
+detectors:ied_detector:statistics:sum_of_squares = 0.04545302760776576
+detectors:ied_detector:statistics:z_score = 1.3961471471001632
+detectors:slow_wave_detector:detected = 1
+detectors:slow_wave_detector:peak_z_score_amplitude = 2.30654100100057
+detectors:slow_wave_detector:predicted_next_maxima_index = 1033
+detectors:slow_wave_detector:sinusoidness = 0.9183450088387551
+detectors:slow_wave_detector:statistics:z_score = 0.4381167072381207
+detectors:slow_wave_detector:wave_end_index = 794
+detectors:slow_wave_detector:wave_start_index = 316
+filters:ied_filter:filtered_sample = 0.010568892846626725
+filters:slow_wave_filter:filtered_sample = 0.003787014183665451
+global:channel = 1
+global:index = 794
+global:raw_sample = -1.0027718015934728
+global:timestamp_ms = 15.5078125
+triggers:pulse_trigger:activation_active = 1
+triggers:pulse_trigger:activation_cooldown_samples_remaining = 0
+triggers:pulse_trigger:inhibition_active = 0
+triggers:pulse_trigger:inhibition_cooldown_samples_remaining = 0
+triggers:pulse_trigger:trigger_index = 1033
+triggers:pulse_trigger:triggered = 1
+
+--- End of entry ---
+
+
+--- Log entry at 1747221259 ---
+Signal processor trigger logging started
+--- End of entry ---
+
+
+--- Log entry at 1747221259 ---
+TRIGGER EVENT [1747221259.965997]
+Trigger ID: pulse_trigger
+
+RESULTS CONTEXT:
+----------------
+detectors:ied_detector:confidence = 0
+detectors:ied_detector:detected = 0
+detectors:ied_detector:statistics:count = 795
+detectors:ied_detector:statistics:mean = 0.000012185717101943226
+detectors:ied_detector:statistics:std_dev = 0.007561314114670046
+detectors:ied_detector:statistics:sum = 0.009687645096044865
+detectors:ied_detector:statistics:sum_of_squares = 0.04545302760776576
+detectors:ied_detector:statistics:z_score = 1.3961471471001632
+detectors:slow_wave_detector:detected = 1
+detectors:slow_wave_detector:peak_z_score_amplitude = 2.30654100100057
+detectors:slow_wave_detector:predicted_next_maxima_index = 1033
+detectors:slow_wave_detector:sinusoidness = 0.9183450088387551
+detectors:slow_wave_detector:statistics:z_score = 0.4381167072381207
+detectors:slow_wave_detector:wave_end_index = 794
+detectors:slow_wave_detector:wave_start_index = 316
+filters:ied_filter:filtered_sample = 0.010568892846626725
+filters:slow_wave_filter:filtered_sample = 0.003787014183665451
+global:channel = 1
+global:index = 794
+global:raw_sample = -1.0027718015934728
+global:timestamp_ms = 15.5078125
+triggers:pulse_trigger:activation_active = 1
+triggers:pulse_trigger:activation_cooldown_samples_remaining = 0
+triggers:pulse_trigger:inhibition_active = 0
+triggers:pulse_trigger:inhibition_cooldown_samples_remaining = 0
+triggers:pulse_trigger:trigger_index = 1033
+triggers:pulse_trigger:triggered = 1
+
+--- End of entry ---
+
