@@ -1,7 +1,7 @@
 processor:
   verbose: true
   fs: 30000.0  # 30kHz sampling rate
-  downsample_rate: 0.1
+  downsample_rate: 1.0
   channel: 1
   enable_debug_logging: true
 
