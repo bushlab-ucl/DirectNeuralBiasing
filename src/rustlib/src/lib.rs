@@ -22,3 +22,6 @@ pub mod utils;
 
 /// - Bindings for Python and C++ (wip).
 pub mod bindings;
+
+/// - Config
+pub mod config;

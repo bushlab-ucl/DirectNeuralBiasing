@@ -2,7 +2,9 @@ use super::{DetectorInstance, Statistics};
 use crate::processing::signal_processor::SignalProcessorConfig;
 
 use std::collections::HashMap;
+use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct WavePeakDetectorConfig {
     pub id: String,
     pub filter_id: String,

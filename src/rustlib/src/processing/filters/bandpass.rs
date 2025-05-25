@@ -1,12 +1,14 @@
 use super::FilterInstance;
 use crate::processing::signal_processor::SignalProcessorConfig;
-use std::collections::HashMap;
 
+use std::collections::HashMap;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct BandPassFilterConfig {
     pub id: String,
     pub f_low: f64,
     pub f_high: f64,
-    pub fs: f64,
 }
 
 pub struct BandPassFilter {
@@ -80,9 +82,9 @@ pub struct Keys {
 
 impl BandPassFilter {
     // Constructor with initialization for high-pass and low-pass filters
-    pub fn new(config: BandPassFilterConfig) -> Self {
-        let high_pass = SecondOrderFilter::new(config.f_low, config.fs, "high");
-        let low_pass = SecondOrderFilter::new(config.f_high, config.fs, "low");
+    pub fn new(config: BandPassFilterConfig, fs: f64) -> Self {
+        let high_pass = SecondOrderFilter::new(config.f_low, fs, "high");
+        let low_pass = SecondOrderFilter::new(config.f_high, fs, "low");
         let keys = Keys {
             filtered_sample: Box::leak(
                 format!("filters:{}:filtered_sample", config.id).into_boxed_str(),

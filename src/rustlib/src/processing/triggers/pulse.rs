@@ -1,8 +1,12 @@
-use crate::processing::signal_processor::SignalProcessorConfig;
-use std::collections::HashMap;
-
 use super::TriggerInstance;
+use crate::processing::signal_processor::SignalProcessorConfig;
 
+use std::collections::HashMap;
+use serde::{Deserialize, Serialize};
+
+
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PulseTriggerConfig {
     pub id: String,
     pub activation_detector_id: String,

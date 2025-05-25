@@ -1,7 +1,10 @@
 use super::{DetectorInstance, RingBuffer, Statistics};
 use crate::processing::signal_processor::SignalProcessorConfig;
-use std::collections::HashMap;
 
+use std::collections::HashMap;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ThresholdDetectorConfig {
     pub id: String,
     pub filter_id: String,

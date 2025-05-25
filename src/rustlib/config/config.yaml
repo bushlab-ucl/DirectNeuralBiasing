@@ -1,7 +1,7 @@
 processor:
   verbose: true
-  fs: 30000.0  # 30kHz sampling rate
-  downsample_rate: 1.0
+  fs: 512.0  # 30kHz sampling rate
+  downsample_rate: 1.0 # Note, has no effect yet
   channel: 1
   enable_debug_logging: true
 
@@ -18,7 +18,7 @@ detectors:
   wave_peak_detectors:
     - id: slow_wave_detector
       filter_id: slow_wave_filter
-      z_score_threshold: 2.0
+      z_score_threshold: 1.0
       sinusoidness_threshold: 0.7
       check_sinusoidness: false
       wave_polarity: downwave
