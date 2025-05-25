@@ -1,8 +1,8 @@
+mod config;
 mod local;
 mod processing;
 mod tests;
 mod utils;
-mod config;
 
 /// - For running the local debug.
 // #[cfg(not(feature = "python-extension"))]

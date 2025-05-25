@@ -30,7 +30,7 @@ where
 pub fn run() -> io::Result<()> {
     let data_file_path = "./data/test_waveform.csv";
     let config_file_path = "./config/config.yaml";
-    
+
     if !Path::new(data_file_path).exists() {
         eprintln!("Error: Data file not found at path: {}", data_file_path);
         return Err(io::Error::new(
@@ -64,7 +64,7 @@ pub fn run() -> io::Result<()> {
     let mut global_counter = 0;
     let mut sample_buffer = VecDeque::with_capacity(max_buffer_size);
     let mut chunk_count = 0; // Count the number of chunks processed
-    // let mut detected_events = 0; // Count the number of detected events
+                             // let mut detected_events = 0; // Count the number of detected events
 
     // let mut output_file = File::create("output.csv")?;
 
@@ -98,10 +98,10 @@ pub fn run() -> io::Result<()> {
 
             // Add new data to sample buffer
             sample_buffer.extend(output);
-            
+
             // Strictly maintain buffer size
             while sample_buffer.len() > max_buffer_size {
-                sample_buffer.pop_front();  // Remove oldest samples
+                sample_buffer.pop_front(); // Remove oldest samples
             }
 
             // // Check if the sample in the middle of the buffer is an event
@@ -248,7 +248,7 @@ pub fn run() -> io::Result<()> {
 
 //             // Add new data to sample buffer
 //             sample_buffer.extend(output);
-            
+
 //             // Strictly maintain buffer size
 //             while sample_buffer.len() > max_buffer_size {
 //                 sample_buffer.pop_front();  // Remove oldest samples

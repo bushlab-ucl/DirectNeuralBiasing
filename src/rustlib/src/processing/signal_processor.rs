@@ -2,8 +2,8 @@ use super::detectors::DetectorInstance;
 use super::filters::FilterInstance;
 use super::triggers::TriggerInstance;
 
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 // use std::time;
 
 use colored::Colorize;
@@ -16,7 +16,7 @@ use std::thread;
 // use rayon::prelude::*;
 // use std::os::raw::c_void;
 
-use crate::config::{load_config};
+use crate::config::load_config;
 
 // -----------------------------------------------------------------------------
 // RUST CORE LOGIC
@@ -53,7 +53,6 @@ pub struct Keys {
 }
 
 impl SignalProcessor {
-
     /// Builds a new SignalProcessor instance from a configuration file.
     pub fn from_config_file(config_path: &str) -> Result<Self, String> {
         // Load the entire config from the file
@@ -77,7 +76,8 @@ impl SignalProcessor {
             triggers: HashMap::new(),
             processor_config: config.processor.clone(), // Clone the processor part of the config
             results: HashMap::with_capacity(32),
-            keys: Keys { // Consider using constants instead of this struct
+            keys: Keys {
+                // Consider using constants instead of this struct
                 global_index: "global:index",
                 global_raw_sample: "global:raw_sample",
                 global_channel: "global:channel",
@@ -87,7 +87,6 @@ impl SignalProcessor {
         };
         // --- End of logic moved from the old `new` function ---
 
-
         // --- Start of logic moved from the old `from_config` function ---
         // Add all filters from config
         for filter_config in &config.filters.bandpass_filters {
@@ -95,9 +94,9 @@ impl SignalProcessor {
                 super::filters::bandpass::BandPassFilterConfig {
                     id: filter_config.id.clone(),
                     f_low: filter_config.f_low,
-                    f_high: filter_config.f_high
+                    f_high: filter_config.f_high,
                 },
-                processor.processor_config.fs
+                processor.processor_config.fs,
             );
             processor.add_filter(Box::new(filter));
         }
@@ -114,7 +113,7 @@ impl SignalProcessor {
                     wave_polarity: detector_config.wave_polarity.clone(),
                     min_wave_length_ms: detector_config.min_wave_length_ms,
                     max_wave_length_ms: detector_config.max_wave_length_ms,
-                }
+                },
             );
             processor.add_detector(Box::new(wave_detector));
         }
@@ -128,7 +127,7 @@ impl SignalProcessor {
                     inhibition_detector_id: trigger_config.inhibition_detector_id.clone(),
                     inhibition_cooldown_ms: trigger_config.inhibition_cooldown_ms,
                     pulse_cooldown_ms: trigger_config.pulse_cooldown_ms,
-                }
+                },
             );
             processor.add_trigger(Box::new(trigger));
         }
@@ -144,16 +143,19 @@ impl SignalProcessor {
 
             // --- Call the new function to delete the old log file ---
             if let Err(e) = crate::utils::log::delete_log_file(log_file_name) {
-                eprintln!("{}", format!("Warning: Failed to delete old log file '{}': {}", log_file_name, e).yellow());
+                eprintln!(
+                    "{}",
+                    format!(
+                        "Warning: Failed to delete old log file '{}': {}",
+                        log_file_name, e
+                    )
+                    .yellow()
+                );
                 // Continue execution even if deletion failed, just warn the user.
-           }
-           // --- End of call ---
-        
+            }
+            // --- End of call ---
 
-            let _ = log_to_file(
-                log_file_name,
-                "Signal processor trigger logging started"
-            );
+            let _ = log_to_file(log_file_name, "Signal processor trigger logging started");
 
             while let Ok((results, trigger_id)) = rx.recv() {
                 // Get current timestamp for the log
@@ -163,10 +165,7 @@ impl SignalProcessor {
                     .as_secs_f64();
 
                 // Format the trigger event information
-                let mut log_entry = format!(
-                    "TRIGGER EVENT [{}]\n",
-                    timestamp
-                );
+                let mut log_entry = format!("TRIGGER EVENT [{}]\n", timestamp);
 
                 // Add trigger ID
                 log_entry.push_str(&format!("Trigger ID: {}\n\n", trigger_id));
@@ -190,11 +189,8 @@ impl SignalProcessor {
                     eprintln!("{}", format!("Failed to log trigger event: {}", e).red());
                 }
             }
-             // Log shutdown message when sender is dropped and channel is empty
-             let _ = log_to_file(
-                log_file_name,
-                "Signal processor trigger logging shut down."
-            );
+            // Log shutdown message when sender is dropped and channel is empty
+            let _ = log_to_file(log_file_name, "Signal processor trigger logging shut down.");
         });
     }
 
@@ -211,7 +207,14 @@ impl SignalProcessor {
         if !self.filters.contains_key(&filter_id) {
             // Use the processor_config for verbose checking if needed
             if self.processor_config.verbose {
-                eprintln!("{}", format!("Warning: Detector '{}' references non-existent filter ID: {}", id, filter_id).yellow());
+                eprintln!(
+                    "{}",
+                    format!(
+                        "Warning: Detector '{}' references non-existent filter ID: {}",
+                        id, filter_id
+                    )
+                    .yellow()
+                );
             }
             // Decide if this should be a panic or just a warning + skipping
             // For now, let's keep the panic as it indicates a critical config error
@@ -228,8 +231,15 @@ impl SignalProcessor {
 
         // Check if the activation detector ID is valid
         if !self.detectors.contains_key(&activation_detector_id) {
-             if self.processor_config.verbose {
-                eprintln!("{}", format!("Warning: Trigger '{}' references non-existent activation detector ID: {}", id, activation_detector_id).yellow());
+            if self.processor_config.verbose {
+                eprintln!(
+                    "{}",
+                    format!(
+                        "Warning: Trigger '{}' references non-existent activation detector ID: {}",
+                        id, activation_detector_id
+                    )
+                    .yellow()
+                );
             }
             panic!(
                 "Trigger references non-existent activation detector ID: {}",
@@ -238,27 +248,38 @@ impl SignalProcessor {
         }
 
         // Check if the inhibition detector ID is valid (if not empty)
-        if !inhibition_detector_id.is_empty() && !self.detectors.contains_key(&inhibition_detector_id) {
-             if self.processor_config.verbose {
-                eprintln!("{}", format!("Warning: Trigger '{}' references non-existent inhibition detector ID: {}", id, inhibition_detector_id).yellow());
+        if !inhibition_detector_id.is_empty()
+            && !self.detectors.contains_key(&inhibition_detector_id)
+        {
+            if self.processor_config.verbose {
+                eprintln!(
+                    "{}",
+                    format!(
+                        "Warning: Trigger '{}' references non-existent inhibition detector ID: {}",
+                        id, inhibition_detector_id
+                    )
+                    .yellow()
+                );
             }
             panic!(
                 "Trigger references non-existent inhibition detector ID: {}",
                 inhibition_detector_id
             );
         }
-         // Handle the case where inhibition_detector_id is empty string, which is valid
+        // Handle the case where inhibition_detector_id is empty string, which is valid
         if inhibition_detector_id.is_empty() {
             if self.processor_config.verbose {
-                eprintln!("{}", format!("Trigger '{}' has no inhibition detector.", id).blue());
+                eprintln!(
+                    "{}",
+                    format!("Trigger '{}' has no inhibition detector.", id).blue()
+                );
             }
         }
-
 
         self.triggers.insert(id, trigger);
     }
 
-     // Helper method to send log messages if logging is enabled
+    // Helper method to send log messages if logging is enabled
     fn send_log_event(&self, results: HashMap<&'static str, f64>, trigger_id: String) {
         if let Some(sender) = &self.log_sender {
             if let Err(e) = sender.send((results, trigger_id)) {
@@ -266,7 +287,6 @@ impl SignalProcessor {
             }
         }
     }
-
 
     // Process a Vec of raw samples - chunk with defined length
     pub fn run_chunk(
@@ -280,15 +300,16 @@ impl SignalProcessor {
         // Create a vector to collect trigger events
         let mut trigger_events_to_log = Vec::new(); // Rename to avoid confusion with results
 
-
         for sample in raw_samples {
             // Reset and update globals
             self.results.clear();
             self.results
                 .insert(&self.keys.global_index, self.index as f64);
             self.results.insert(&self.keys.global_raw_sample, sample);
-            self.results
-                .insert(&self.keys.global_channel, self.processor_config.channel as f64); // Use processor_config
+            self.results.insert(
+                &self.keys.global_channel,
+                self.processor_config.channel as f64,
+            ); // Use processor_config
             self.results.insert(
                 &self.keys.global_timestamp_ms,
                 self.index as f64 / self.processor_config.fs * 1000.0, // Correct conversion to ms (divide by fs, multiply by 1000)
@@ -296,12 +317,14 @@ impl SignalProcessor {
 
             // Filters process the sample
             for (_id, filter) in self.filters.iter_mut() {
-                filter.process_sample(&self.processor_config, &mut self.results); // Use processor_config
+                filter.process_sample(&self.processor_config, &mut self.results);
+                // Use processor_config
             }
 
             // Detectors process the filtered results
             for (_id, detector) in self.detectors.iter_mut() {
-                detector.process_sample(&self.processor_config, &mut self.results, self.index); // Use processor_config
+                detector.process_sample(&self.processor_config, &mut self.results, self.index);
+                // Use processor_config
             }
 
             // Triggers evaluate based on detector outputs
@@ -323,7 +346,7 @@ impl SignalProcessor {
                 if triggered {
                     let now = SystemTime::now();
 
-                     let trigger_index_key = format!("triggers:{}:trigger_index", id);
+                    let trigger_index_key = format!("triggers:{}:trigger_index", id);
                     let trigger_index = self
                         .results
                         .get(trigger_index_key.as_str()) // Use as_str()
@@ -343,7 +366,8 @@ impl SignalProcessor {
 
                     // Compute the relative time offset as a Duration
                     let sample_diff = trigger_index as isize - self.index as isize;
-                    let time_offset = Duration::from_secs_f64(sample_diff as f64 / self.processor_config.fs); // Use processor_config
+                    let time_offset =
+                        Duration::from_secs_f64(sample_diff as f64 / self.processor_config.fs); // Use processor_config
 
                     // Add the relative time offset to the current UNIX time
                     let future_trigger_timestamp = now + time_offset;
@@ -355,7 +379,8 @@ impl SignalProcessor {
                         .as_secs_f64();
 
                     // If debug logging is enabled, collect the trigger event info for later logging
-                    if self.processor_config.enable_debug_logging { // Use processor_config
+                    if self.processor_config.enable_debug_logging {
+                        // Use processor_config
                         // Clone both results and trigger ID for the event log
                         trigger_events_to_log.push((self.results.clone(), id.clone()));
                     }
@@ -378,9 +403,9 @@ impl SignalProcessor {
             self.send_log_event(results, trigger_id);
         }
 
-
         // debug print timing (conditional on verbose flag)
-        if self.processor_config.verbose { // Use processor_config
+        if self.processor_config.verbose {
+            // Use processor_config
             let duration_whole = start_time_whole.elapsed();
             eprintln!(
                 "{}",
@@ -405,7 +430,6 @@ impl SignalProcessor {
                 format!("Output length: {:?}", output.len()).color("yellow")
             );
         }
-
 
         return (output, trigger_timestamp_option);
     }

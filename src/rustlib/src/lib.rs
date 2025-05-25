@@ -25,3 +25,7 @@ pub mod bindings;
 
 /// - Configuration system for YAML-based settings
 pub mod config;
+
+// Add this to your lib.rs file
+#[cfg(feature = "cpp")]
+pub use bindings::cpp::*;
