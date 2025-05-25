@@ -23,5 +23,5 @@ pub mod utils;
 /// - Bindings for Python and C++ (wip).
 pub mod bindings;
 
-/// - Config
+/// - Configuration system for YAML-based settings
 pub mod config;
