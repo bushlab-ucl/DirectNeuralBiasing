@@ -18,12 +18,11 @@
 #include <sstream>    // For std::ostringstream
 
 // Rust FFI declarations
-typedef void *(__cdecl *CreateSignalProcessorFunc)(bool verbose, double fs, size_t channel);
+typedef void *(__cdecl *CreateSignalProcessorFromConfigFunc)(const char *config_path);
 typedef void(__cdecl *DeleteSignalProcessorFunc)(void *processor);
 typedef void *(__cdecl *RunChunkFunc)(void *processor, const double *data, size_t length);
 
 // Constants
-const double fs = 30000.0;       // Sampling rate (30kHz)
 const size_t buffer_size = 4096; // Buffer size for real-time processing
 const size_t num_buffers = 2;    // Number of reusable buffers (double buffering)
 
@@ -43,7 +42,7 @@ bool stop_processing = false; // Flag to stop the threads
 
 // Function to load Rust functions from DLL
 bool load_rust_functions(HINSTANCE &hinstLib,
-                         CreateSignalProcessorFunc &create_signal_processor,
+                         CreateSignalProcessorFromConfigFunc &create_signal_processor_from_config,
                          DeleteSignalProcessorFunc &delete_signal_processor,
                          RunChunkFunc &run_chunk)
 {
@@ -55,11 +54,11 @@ bool load_rust_functions(HINSTANCE &hinstLib,
     return false;
   }
 
-  create_signal_processor = (CreateSignalProcessorFunc)GetProcAddress(hinstLib, "create_signal_processor");
+  create_signal_processor_from_config = (CreateSignalProcessorFromConfigFunc)GetProcAddress(hinstLib, "create_signal_processor_from_config");
   delete_signal_processor = (DeleteSignalProcessorFunc)GetProcAddress(hinstLib, "delete_signal_processor");
   run_chunk = (RunChunkFunc)GetProcAddress(hinstLib, "run_chunk");
 
-  if (create_signal_processor == NULL || delete_signal_processor == NULL || run_chunk == NULL)
+  if (create_signal_processor_from_config == NULL || delete_signal_processor == NULL || run_chunk == NULL)
   {
     std::cerr << "Failed to load Rust functions!" << std::endl;
     FreeLibrary(hinstLib);
@@ -188,12 +187,6 @@ void process_buffer_loop(void *rust_processor, RunChunkFunc run_chunk)
       buffers[processing_buffer_index].ready = false; // Mark as being processed
     }
 
-    // debug, print buffer
-    // for (size_t i = 0; i < buffer_size; i++)
-    // {
-    //   std::cout << buffers[processing_buffer_index].data[i] << " ";
-    // }
-
     // Process the buffer
     auto start_time = std::chrono::high_resolution_clock::now();
     void *result = run_chunk(rust_processor, buffers[processing_buffer_index].data, buffer_size);
@@ -223,24 +216,28 @@ void process_buffer_loop(void *rust_processor, RunChunkFunc run_chunk)
 int main(int argc, char *argv[])
 {
   HINSTANCE hinstLib;
-  CreateSignalProcessorFunc create_signal_processor;
+  CreateSignalProcessorFromConfigFunc create_signal_processor_from_config;
   DeleteSignalProcessorFunc delete_signal_processor;
   RunChunkFunc run_chunk;
 
   // Load the Rust library and functions
-  if (!load_rust_functions(hinstLib, create_signal_processor, delete_signal_processor, run_chunk))
+  if (!load_rust_functions(hinstLib, create_signal_processor_from_config, delete_signal_processor, run_chunk))
   {
     return 1;
   }
 
-  // Initialize Rust Signal Processor (for channel 1)
-  void *rust_processor = create_signal_processor(true, fs, 1);
+  // Initialize Rust Signal Processor from config file
+  const char *config_path = "./config.yaml";
+  void *rust_processor = create_signal_processor_from_config(config_path);
   if (rust_processor == NULL)
   {
-    std::cerr << "Failed to create Rust signal processor!" << std::endl;
+    std::cerr << "Failed to create Rust signal processor from config: " << config_path << std::endl;
+    std::cerr << "Make sure the config.yaml file exists in the current directory." << std::endl;
     FreeLibrary(hinstLib);
     return 1;
   }
+
+  std::cout << "Successfully created signal processor from config: " << config_path << std::endl;
 
   // Start the processing thread
   std::thread processing_thread(process_buffer_loop, rust_processor, run_chunk);
@@ -275,6 +272,8 @@ int main(int argc, char *argv[])
   std::cout << "CBSDK opened successfully!" << std::endl;
 
   // Configure the first channel (continuous recording at 30kHz)
+  // NOTE: Channel number and sampling rate now come from config.yaml
+  // This assumes channel 1 for now, but could be made configurable
   cbPKT_CHANINFO chan_info;
   res = cbSdkGetChannelConfig(0, 1, &chan_info);
   chan_info.smpgroup = 5; // Continuous sampling at 30kHz
@@ -296,9 +295,6 @@ int main(int argc, char *argv[])
   {
     trial.samples[i] = malloc(buffer_size * sizeof(INT16));
   }
-
-  // std::cout << "Expected samples buffer size: " << cbSdk_CONTINUOUS_DATA_SAMPLES << std::endl;
-  // std::cout << "my samples buffer size: " << buffer_size << std::endl;
 
   // Initialize the trial data structure
   res = cbSdkInitTrialData(0, 1, NULL, &trial, NULL, NULL);
@@ -344,29 +340,6 @@ int main(int argc, char *argv[])
             // You may need to adjust this based on your specific hardware configuration
             buffers[filling_buffer_index].data[i] = static_cast<double>(int_samples[processed_samples + i]) * 0.25;
           }
-
-          // // Debug: Print active buffer values
-          // std::cout << "Buffer Index: " << filling_buffer_index
-          //           << " | Filled Length: " << chunk_size
-          //           << " | First few values: ";
-
-          // for (size_t i = 0; i < std::min<size_t>(chunk_size, chunk_size); i++)
-          // {
-          //   std::cout << buffers[filling_buffer_index].data[i] << " ";
-          // }
-          // std::cout << std::endl;
-
-          // // Add after the conversion loop:
-          // if (processed_samples == 0)
-          // { // Only print first few samples of first chunk
-          //   std::cout << "Sample conversions (first 5 samples):" << std::endl;
-          //   for (size_t i = 0; i < std::min<size_t>(5, chunk_size); i++)
-          //   {
-          //     std::cout << "Raw: " << int_samples[i]
-          //               << " -> Converted: " << buffers[filling_buffer_index].data[i]
-          //               << " µV" << std::endl;
-          //   }
-          // }
 
           // Mark buffer as ready
           {
