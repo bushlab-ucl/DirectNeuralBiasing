@@ -2,7 +2,7 @@
 name = "direct-neural-biasing"
 version = "1.0.3"
 authors = ["Daniel Humphries <d.humphries@ucl.ac.uk>"]
-description = "A Rust library with Python and C++ bindings for low-latency, closed-loop neuroscience research."
+# description = "A Rust library with Python and C++ bindings for low-latency, closed-loop neuroscience research."
 license = "CC-BY-NC-4.0"
 edition = "2021"
 
@@ -30,9 +30,9 @@ name = "main"
 path = "src/main.rs"
 
 # this breaks the python build it for some reason - but i think i maybe need it for something else
-[lib]
-name = "direct_neural_biasing"
-crate-type = ["cdylib"]
+# [lib]
+# name = "direct_neural_biasing"
+# crate-type = ["cdylib"]
 
 [profile.release]
 opt-level = "z" # Optimize for binary size, helpful for DLLs
@@ -48,4 +48,4 @@ winapi = { version = "0.3", features = ["consoleapi", "winuser", "fileapi"] }
 
 [package.metadata.maturin]
 name = "direct-neural-biasing"
-# summary = "A Rust library with Python and C++ bindings for low-latency, closed-loop neuroscience research."
+summary = "A Rust library with Python and C++ bindings for low-latency, closed-loop neuroscience research."
