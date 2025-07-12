@@ -28,7 +28,6 @@ impl PySignalProcessor {
         }
     }
 
-    #[staticmethod]
     pub fn from_config_file(config_path: String) -> PyResult<Self> {
         match SignalProcessor::from_config_file(&config_path) {
             Ok(processor) => Ok(PySignalProcessor { processor }),
