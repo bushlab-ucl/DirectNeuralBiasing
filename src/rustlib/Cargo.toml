@@ -21,7 +21,7 @@ maturin = { version = "1.5.1", optional = true }
 [features]
 # Define a 'python' feature to include Python bindings
 default = ["python"]
-python = ["pyo3, maturin"]
+python = ["pyo3", "maturin"]
 
 cpp = [] # Exclude Python bindings when building for C++
 
