@@ -1,7 +1,7 @@
-use crate::processing::detectors::threshold::{ThresholdDetector, ThresholdDetectorConfig};
+// use crate::processing::detectors::threshold::{ThresholdDetector, ThresholdDetectorConfig};
 use crate::processing::detectors::wave_peak::{WavePeakDetector, WavePeakDetectorConfig};
 use crate::processing::filters::bandpass::{BandPassFilter, BandPassFilterConfig};
-use crate::processing::signal_processor::{SignalProcessor, SignalProcessorConfig};
+use crate::processing::signal_processor::SignalProcessor;
 use crate::processing::triggers::pulse::{PulseTrigger, PulseTriggerConfig};
 
 use std::collections::HashMap;
@@ -15,19 +15,20 @@ pub struct PySignalProcessor {
 
 #[pymethods]
 impl PySignalProcessor {
-    #[new]
-    pub fn new(verbose: bool, fs: f64, channel: usize, enable_debug_logging: bool) -> Self {
-        let config = SignalProcessorConfig {
-            verbose,
-            fs,
-            channel,
-            enable_debug_logging,
-        };
-        PySignalProcessor {
-            processor: SignalProcessor::new(config),
-        }
-    }
+    // #[new]
+    // pub fn new(verbose: bool, fs: f64, channel: usize, enable_debug_logging: bool) -> Self {
+    //     let config = SignalProcessorConfig {
+    //         verbose,
+    //         fs,
+    //         channel,
+    //         enable_debug_logging,
+    //     };
+    //     PySignalProcessor {
+    //         processor: SignalProcessor::new(config),
+    //     }
+    // }
 
+    #[staticmethod]
     pub fn from_config_file(config_path: String) -> PyResult<Self> {
         match SignalProcessor::from_config_file(&config_path) {
             Ok(processor) => Ok(PySignalProcessor { processor }),
@@ -36,34 +37,29 @@ impl PySignalProcessor {
     }
 
     pub fn add_filter(&mut self, id: String, f_low: f64, f_high: f64, fs: f64) {
-        let config = BandPassFilterConfig {
-            id,
-            f_low,
-            f_high,
-            fs,
-        };
-        let filter = BandPassFilter::new(config);
+        let config = BandPassFilterConfig { id, f_low, f_high };
+        let filter = BandPassFilter::new(config, fs);
         self.processor.add_filter(Box::new(filter));
     }
 
-    pub fn add_threshold_detector(
-        &mut self,
-        id: String,
-        filter_id: String,
-        z_score_threshold: f64,
-        buffer_size: usize,
-        sensitivity: f64,
-    ) {
-        let config = ThresholdDetectorConfig {
-            id,
-            filter_id,
-            z_score_threshold,
-            buffer_size,
-            sensitivity,
-        };
-        let detector = ThresholdDetector::new(config);
-        self.processor.add_detector(Box::new(detector));
-    }
+    // pub fn add_threshold_detector(
+    //     &mut self,
+    //     id: String,
+    //     filter_id: String,
+    //     z_score_threshold: f64,
+    //     buffer_size: usize,
+    //     sensitivity: f64,
+    // ) {
+    //     let config = ThresholdDetectorConfig {
+    //         id,
+    //         filter_id,
+    //         z_score_threshold,
+    //         buffer_size,
+    //         sensitivity,
+    //     };
+    //     let detector = ThresholdDetector::new(config);
+    //     self.processor.add_detector(Box::new(detector));
+    // }
 
     pub fn add_wave_peak_detector(
         &mut self,
