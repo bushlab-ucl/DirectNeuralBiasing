@@ -21,10 +21,18 @@ impl PySignalProcessor {
             verbose,
             fs,
             channel,
-            enable_debug_logging
+            enable_debug_logging,
         };
         PySignalProcessor {
             processor: SignalProcessor::new(config),
+        }
+    }
+
+    #[staticmethod]
+    pub fn from_config_file(config_path: String) -> PyResult<Self> {
+        match SignalProcessor::from_config_file(&config_path) {
+            Ok(processor) => Ok(PySignalProcessor { processor }),
+            Err(e) => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(e)),
         }
     }
 
