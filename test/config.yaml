@@ -7,7 +7,7 @@ detectors:
     min_wave_length_ms: 500.0
     sinusoidness_threshold: 0.7
     wave_polarity: downwave
-    z_score_threshold: 2.0
+    z_score_threshold: 1.0
   - check_sinusoidness: false
     filter_id: ied_filter
     id: ied_detector
@@ -15,7 +15,7 @@ detectors:
     min_wave_length_ms: null
     sinusoidness_threshold: 0.0
     wave_polarity: upwave
-    z_score_threshold: 1.5
+    z_score_threshold: 2.5
 filters:
   bandpass_filters:
   - f_high: 4.0
@@ -35,4 +35,4 @@ triggers:
     id: pulse_trigger
     inhibition_cooldown_ms: 1000.0
     inhibition_detector_id: ied_detector
-    pulse_cooldown_ms: 1000.0
+    pulse_cooldown_ms: 0.0
