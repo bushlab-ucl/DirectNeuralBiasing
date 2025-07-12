@@ -1,6 +1,6 @@
 [package]
 name = "direct-neural-biasing"
-version = "1.0.5"
+version = "1.0.6"
 authors = ["Daniel Humphries <d.humphries@ucl.ac.uk>"]
 # description = "A Rust library with Python and C++ bindings for low-latency, closed-loop neuroscience research."
 license = "CC-BY-NC-4.0"
@@ -29,10 +29,9 @@ cpp = [] # Exclude Python bindings when building for C++
 name = "main"
 path = "src/main.rs"
 
-# this breaks the python build it for some reason - but i think i maybe need it for something else
-# [lib]
-# name = "direct_neural_biasing"
-# crate-type = ["cdylib"]
+[lib]
+name = "direct_neural_biasing"
+crate-type = ["cdylib"]
 
 [profile.release]
 opt-level = "z" # Optimize for binary size, helpful for DLLs
