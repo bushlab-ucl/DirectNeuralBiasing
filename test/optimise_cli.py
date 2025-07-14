@@ -42,7 +42,6 @@ import optuna # New import for Optuna
 # DEFAULT_PARAM_GRID is now effectively replaced by Optuna's suggestion methods.
 
 DATA_FS = 30_000.0
-MRK_FS = 512.0
 TOLERANCE_MS = 125
 CTX_MS = 1000  # ± ms context for plots
 DATA_DIR = Path("data")
@@ -51,8 +50,17 @@ PLOTS_DIR = Path("plots")
 RESULTS_DIR.mkdir(exist_ok=True)
 PLOTS_DIR.mkdir(exist_ok=True)
 
+# NEW: Define patient-specific metadata
+PATIENT_METADATA = {
+    2: {'mrk_fs': 512.0},
+    3: {'mrk_fs': 1024.0},
+    4: {'mrk_fs': 1024.0},
+    6: {'mrk_fs': 1024.0},
+    7: {'mrk_fs': 1024.0},
+}
+
 # Define the data fractions for progressive evaluation
-DATA_FRACTIONS = [0.001, 0.0025, 0.01, 0.05, 0.1, 0.25, 1.0] # More fractions for smoother progression
+DATA_FRACTIONS = [0.05, 0.1, 0.25] # More fractions for smoother progression
 
 # Thread-safe CSV writer
 csv_lock = threading.Lock()
@@ -73,20 +81,30 @@ def _parse_mrk(p: Path):
         next(f)  # Skip header
         return np.asarray([int(l.split()[0]) for l in f if l.split()], int)
 
-def _mrk512_to_30k(idx):
-    """Convert marker indices from 512Hz to 30kHz sampling rate."""
-    return (idx * DATA_FS / MRK_FS).astype(int)
+# UPDATED: Make the function generic
+def _mrk_to_30k(idx: np.ndarray, mrk_fs: float):
+    """Convert marker indices from a given sample rate to 30kHz."""
+    return (idx * DATA_FS / mrk_fs).astype(int)
 
-# Modified to return raw signal data which is used for plotting
+# UPDATED: This function now uses the metadata dictionary
 def load_patient_data_for_eval(pid: int, frac: float) -> Tuple[np.ndarray, Dict[int, int]]:
     """Load patient EEG data and ground truth markers for a given fraction."""
     sig_full = np.load(DATA_DIR / f"Patient{pid}EEG.npy")[0]
     sig_slice = sig_full[: int(len(sig_full) * frac)]
-    
+
+    # ---> THE FIX <---
+    # Look up the correct marker sample rate for this patient
+    try:
+        mrk_fs = PATIENT_METADATA[pid]['mrk_fs']
+    except KeyError:
+        raise ValueError(f"Marker sample rate for Patient {pid} not defined in PATIENT_METADATA.")
+
     mrk = _parse_mrk(DATA_DIR / f"Patient{pid:02d}_OfflineMrk.mrk")
-    gt = dict(zip(_mrk512_to_30k(mrk), mrk))
+
+    # Use the patient-specific sample rate for conversion
+    gt = dict(zip(_mrk_to_30k(mrk, mrk_fs), mrk))
     gt = {k: v for k, v in gt.items() if k < len(sig_slice)}  # Drop markers beyond slice
-    
+
     return sig_slice, gt
 
 
