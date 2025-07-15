@@ -4,7 +4,8 @@ processor:
   downsample_rate: 1.0 # Note, has no effect yet
   channel: 1
   enable_debug_logging: true
-
+  log_context_samples: 3
+  
 filters:
   bandpass_filters:
     - id: ied_filter

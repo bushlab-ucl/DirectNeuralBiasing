@@ -1,3 +1,9 @@
+processor:
+  channel: 1
+  fs: 30000.0
+  enable_debug_logging: true
+  verbose: true
+  log_context_samples: 3
 detectors:
   wave_peak_detectors:
   - check_sinusoidness: false
@@ -24,11 +30,6 @@ filters:
   - f_high: 120.0
     f_low: 80.0
     id: ied_filter
-processor:
-  channel: 1
-  enable_debug_logging: true
-  fs: 30000.0
-  verbose: true
 triggers:
   pulse_triggers:
   - activation_detector_id: slow_wave_detector

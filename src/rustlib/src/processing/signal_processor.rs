@@ -3,7 +3,7 @@ use super::filters::FilterInstance;
 use super::triggers::TriggerInstance;
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 // use std::time;
 
 use colored::Colorize;
@@ -31,6 +31,7 @@ pub struct SignalProcessorConfig {
     pub fs: f64,
     pub channel: usize,
     pub enable_debug_logging: bool, // New field to control debug logging
+    pub log_context_samples: Option<usize>, // Number of samples before/after to log (optional)
 }
 
 pub struct SignalProcessor {
@@ -41,7 +42,9 @@ pub struct SignalProcessor {
     pub processor_config: SignalProcessorConfig, // Use the config from the main config struct
     pub results: HashMap<&'static str, f64>,
     pub keys: Keys, // Consider making Keys constants if they are fixed strings
-    log_sender: Option<Sender<(HashMap<&'static str, f64>, String)>>, // Channel to send logs to background thread
+    log_sender: Option<Sender<(Vec<HashMap<&'static str, f64>>, String)>>, // Channel to send logs to background thread (now with context)
+    context_buffer: VecDeque<HashMap<&'static str, f64>>, // Ring buffer for context logging
+    context_size: usize,                                  // Number of samples before/after to keep
 }
 
 // Consider if Keys struct is necessary, or if constants are sufficient
@@ -57,6 +60,9 @@ impl SignalProcessor {
     pub fn from_config_file(config_path: &str) -> Result<Self, String> {
         // Load the entire config from the file
         let config = load_config(config_path)?;
+
+        // Get context size from config or use default
+        let context_size = config.processor.log_context_samples.unwrap_or(3);
 
         // Setup logging
         let log_sender = if config.processor.enable_debug_logging {
@@ -84,6 +90,8 @@ impl SignalProcessor {
                 global_timestamp_ms: "global:timestamp_ms",
             },
             log_sender,
+            context_buffer: VecDeque::with_capacity(context_size * 2 + 1),
+            context_size,
         };
         // --- End of logic moved from the old `new` function ---
 
@@ -137,7 +145,7 @@ impl SignalProcessor {
     }
 
     // We keep setup_logging_thread as a private helper method
-    fn setup_logging_thread(rx: Receiver<(HashMap<&'static str, f64>, String)>) {
+    fn setup_logging_thread(rx: Receiver<(Vec<HashMap<&'static str, f64>>, String)>) {
         thread::spawn(move || {
             let log_file_name = "trigger_debug.log";
 
@@ -157,7 +165,7 @@ impl SignalProcessor {
 
             let _ = log_to_file(log_file_name, "Signal processor trigger logging started");
 
-            while let Ok((results, trigger_id)) = rx.recv() {
+            while let Ok((context_results, trigger_id)) = rx.recv() {
                 // Get current timestamp for the log
                 let timestamp = SystemTime::now()
                     .duration_since(UNIX_EPOCH)
@@ -170,18 +178,58 @@ impl SignalProcessor {
                 // Add trigger ID
                 log_entry.push_str(&format!("Trigger ID: {}\n\n", trigger_id));
 
-                // Add all results values in a readable format
-                log_entry.push_str("RESULTS CONTEXT:\n");
-                log_entry.push_str("----------------\n");
+                // Log context samples
+                log_entry.push_str("CONTEXT SAMPLES:\n");
+                log_entry.push_str("================\n");
 
-                // Create sorted list of keys for consistent output
-                let mut keys: Vec<&&'static str> = results.keys().collect();
-                keys.sort();
+                for (i, sample_results) in context_results.iter().enumerate() {
+                    let is_trigger_sample = i == context_results.len() - 1; // Last sample is the trigger
+                    let marker = if is_trigger_sample {
+                        " >>> TRIGGER SAMPLE <<<"
+                    } else {
+                        ""
+                    };
 
-                for &key in keys {
-                    if let Some(value) = results.get(key) {
-                        log_entry.push_str(&format!("{} = {}\n", key, value));
+                    log_entry.push_str(&format!(
+                        "Sample {} (relative index: {}){}:\n",
+                        i,
+                        i as isize - context_results.len() as isize + 1,
+                        marker
+                    ));
+
+                    // Get index for this sample
+                    if let Some(&index) = sample_results.get("global:index") {
+                        log_entry.push_str(&format!("  global:index = {}\n", index));
                     }
+
+                    // Get timestamp
+                    if let Some(&timestamp) = sample_results.get("global:timestamp_ms") {
+                        log_entry.push_str(&format!("  global:timestamp_ms = {}\n", timestamp));
+                    }
+
+                    // Get raw sample
+                    if let Some(&raw) = sample_results.get("global:raw_sample") {
+                        log_entry.push_str(&format!("  global:raw_sample = {}\n", raw));
+                    }
+
+                    // Add key detector/trigger values for the trigger sample
+                    if is_trigger_sample {
+                        let mut keys: Vec<&&'static str> = sample_results.keys().collect();
+                        keys.sort();
+
+                        for &key in keys {
+                            if key.contains("detected")
+                                || key.contains("triggered")
+                                || key.contains("z_score")
+                            {
+                                if let Some(value) = sample_results.get(key) {
+                                    log_entry.push_str(&format!("  {} = {}\n", key, value));
+                                }
+                            }
+                        }
+                    }
+
+                    log_entry.push_str("\n");
                 }
 
                 // Log the event to file
@@ -279,10 +327,20 @@ impl SignalProcessor {
         self.triggers.insert(id, trigger);
     }
 
-    // Helper method to send log messages if logging is enabled
-    fn send_log_event(&self, results: HashMap<&'static str, f64>, trigger_id: String) {
+    // Extract context around the current sample for logging
+    fn extract_context_for_logging(&self) -> Vec<HashMap<&'static str, f64>> {
+        // Return the collected context samples
+        self.context_buffer.iter().cloned().collect()
+    }
+
+    // Enhanced logging method that sends context
+    fn send_log_event_with_context(
+        &self,
+        context: Vec<HashMap<&'static str, f64>>,
+        trigger_id: String,
+    ) {
         if let Some(sender) = &self.log_sender {
-            if let Err(e) = sender.send((results, trigger_id)) {
+            if let Err(e) = sender.send((context, trigger_id)) {
                 eprintln!("{}", format!("Failed to send log event: {}", e).red());
             }
         }
@@ -297,8 +355,8 @@ impl SignalProcessor {
         let mut trigger_timestamp_option = None;
         let start_time_whole = Instant::now(); // Start timer before analysis
 
-        // Create a vector to collect trigger events
-        let mut trigger_events_to_log = Vec::new(); // Rename to avoid confusion with results
+        // Create a vector to collect trigger events with context
+        let mut trigger_events_with_context = Vec::new();
 
         for sample in raw_samples {
             // Reset and update globals
@@ -327,14 +385,19 @@ impl SignalProcessor {
                 // Use processor_config
             }
 
+            // Add current results to context buffer (after all processing is done for this sample)
+            self.context_buffer.push_back(self.results.clone());
+
+            // Maintain buffer size (keep only what we need for context)
+            while self.context_buffer.len() > (self.context_size * 2 + 1) {
+                self.context_buffer.pop_front();
+            }
+
             // Triggers evaluate based on detector outputs
             for (id, trigger) in self.triggers.iter_mut() {
                 trigger.evaluate(&self.processor_config, &mut self.results); // Use processor_config
 
                 // Check if the trigger has been activated
-                // Note: The Box::leak approach here is a bit unusual and could lead to memory leaks
-                // if used frequently with unique strings. For fixed trigger IDs, it might be okay,
-                // but consider alternative ways to generate keys if they are dynamic.
                 let trigger_key = format!("triggers:{}:triggered", id);
                 let triggered = self
                     .results
@@ -378,11 +441,11 @@ impl SignalProcessor {
                         .expect("Time went backwards") // This should generally not happen with SystemTime::now()
                         .as_secs_f64();
 
-                    // If debug logging is enabled, collect the trigger event info for later logging
+                    // If debug logging is enabled, collect the trigger ID for later context extraction
                     if self.processor_config.enable_debug_logging {
-                        // Use processor_config
-                        // Clone both results and trigger ID for the event log
-                        trigger_events_to_log.push((self.results.clone(), id.clone()));
+                        // Store just the trigger ID, we'll extract context after the loop
+                        trigger_events_with_context.push((Vec::new(), id.clone()));
+                        // Temporary empty Vec
                     }
 
                     // Update the trigger timestamp option
@@ -393,14 +456,23 @@ impl SignalProcessor {
                 }
             }
 
+            // Extract context for any triggered events (after the mutable borrow is done)
+            if self.processor_config.enable_debug_logging && !trigger_events_with_context.is_empty()
+            {
+                let context = self.extract_context_for_logging();
+                // Update all trigger events with the same context (since they all occur at the same sample)
+                for (context_ref, _) in trigger_events_with_context.iter_mut() {
+                    *context_ref = context.clone();
+                }
+            }
+
             output.push(self.results.clone());
             self.index += 1;
         }
 
-        // Now log all collected trigger events outside the mutable borrow scope
-        // Use the helper method
-        for (results, trigger_id) in trigger_events_to_log {
-            self.send_log_event(results, trigger_id);
+        // Now log all collected trigger events with context outside the mutable borrow scope
+        for (context, trigger_id) in trigger_events_with_context {
+            self.send_log_event_with_context(context, trigger_id);
         }
 
         // debug print timing (conditional on verbose flag)

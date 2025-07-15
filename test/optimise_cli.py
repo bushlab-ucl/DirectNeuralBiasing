@@ -7,9 +7,9 @@ A command-line tool for running parameter optimization using Optuna
 with progressive data fractions, and analyzing results.
 
 Usage:
-    python dnb_cli.py search [--patients 2,3,4,6,7] [--workers 5] [--trials 100]
-    python dnb_cli.py analyze [--top 20]
-    python dnb_cli.py best
+    python optimise_cli.py search [--patients 2,3,4,6,7] [--workers 5] [--trials 100]
+    python optimise_cli.py analyze [--top 20]
+    python optimise_cli.py best
 
 Commands:
     search  - Run Optuna search across parameter combinations with progressive data
@@ -624,30 +624,73 @@ def analyze_results_optuna(top_n: int = 20):
     
     print("\n📊 Analyzing Optuna study results...")
     
-    # Get all completed trials
+    # Get ALL trials (including pruned ones)
     df = study.trials_dataframe(attrs=("number", "value", "params", "state"))
-    df_completed = df[df["state"] == "COMPLETE"].copy() # Make a copy to avoid SettingWithCopyWarning
     
-    if df_completed.empty:
-        print("No completed trials found in the study.")
+    if df.empty:
+        print("No trials found in the study.")
         return
 
-    df_completed = df_completed.rename(columns={"value": "f1_score"})
+    # Add TP/FP/FN columns by reading from trial summary files
+    df['tp'] = 0
+    df['fp'] = 0
+    df['fn'] = 0
     
-    # Sort by F1 score
-    ranked = df_completed.sort_values(by="f1_score", ascending=False)
+    summary_dir = RESULTS_DIR / "trial_summaries"
+    if summary_dir.exists():
+        summary_files = list(summary_dir.glob("trial_*_summary.json"))
+        print(f"Found {len(summary_files)} trial summary files")
+        
+        for summary_file in summary_files:
+            try:
+                with summary_file.open() as f:
+                    data = json.load(f)
+                
+                trial_num = data['trial_number']
+                stats = data['overall_statistics']
+                
+                if trial_num in df['number'].values:
+                    df.loc[df['number'] == trial_num, 'tp'] = stats['true_positives']
+                    df.loc[df['number'] == trial_num, 'fp'] = stats['false_positives']
+                    df.loc[df['number'] == trial_num, 'fn'] = stats['false_negatives']
+                    
+            except Exception as e:
+                print(f"Error reading {summary_file}: {e}")
+    else:
+        print("No trial_summaries directory found - TP/FP/FN will be 0")
+
+    df = df.rename(columns={"value": "f1_score"})
     
-    # Display top results
-    print(f"\n🏆 TOP {top_n} PARAMETER SETS (by F1-score)\n")
-    display_cols = ["f1_score"] + [col for col in ranked.columns if col.startswith("params_")]
-    print(ranked[display_cols].head(top_n).to_string(float_format="%.3f"))
+    # Sort by F1 score (NaN values will go to end)
+    df_sorted = df.sort_values(by="f1_score", ascending=False, na_position='last')
+    
+    # Show distribution of check_sinusoidness
+    print(f"\n📈 Parameter Distribution:")
+    print(f"check_sinusoidness distribution:")
+    print(df['params_check_sinusoidness'].value_counts())
+    print(f"\nTrial states:")
+    print(df['state'].value_counts())
+    
+    # Display top results with TP/FP/FN
+    print(f"\n🏆 TOP {top_n} TRIALS (by F1-score, including pruned trials)\n")
+    display_cols = ["number", "state", "f1_score", "tp", "fp", "fn"] + [col for col in df_sorted.columns if col.startswith("params_")]
+    
+    # Format the display
+    top_df = df_sorted[display_cols].head(top_n)
+    print(top_df.to_string(float_format="%.3f", index=False))
     
     # Save full summary
-    summary_csv = RESULTS_DIR / "optuna_study_summary.csv"
-    ranked.to_csv(summary_csv)
-    print(f"\n📄 Full Optuna study summary saved to {summary_csv}")
+    summary_csv = RESULTS_DIR / "optuna_study_full_summary.csv"
+    df_sorted.to_csv(summary_csv, index=False)
+    print(f"\n📄 Full Optuna study summary (all trials) saved to {summary_csv}")
     
-    return ranked
+    # Show separate summary for COMPLETE trials only
+    df_complete = df_sorted[df_sorted["state"] == "COMPLETE"]
+    if not df_complete.empty:
+        print(f"\n🎯 TOP {min(top_n, len(df_complete))} COMPLETE TRIALS ONLY:\n")
+        print(df_complete[display_cols].head(top_n).to_string(float_format="%.3f", index=False))
+    
+    return df_sorted
 
 def show_best_params_optuna():
     """Show the best parameter set from the Optuna study."""
