@@ -110,7 +110,7 @@ PATIENT_METADATA = {
 
 # Define the data fractions for progressive evaluation
 # DATA_FRACTIONS = [0.1, 0.25, 1.0]
-DATA_FRACTIONS = [1.0]
+DATA_FRACTIONS = [0.05, 0.1, 0.25]
 
 # NEW: Optimization metrics configuration
 OPTIMIZATION_METRICS = {
@@ -499,29 +499,29 @@ def create_trial_summary(trial_number: int, params: dict, results_per_patient: l
 # ─────────────────────—— Optuna Objective Function ─────────────────────────
 def objective(trial: optuna.Trial, patient_ids: List[int], max_workers: int, optimization_metric: str = "precision"):
     # Suggest parameters for the current trial
-    # params = {
-    #     "z_score_threshold": trial.suggest_float("z_score_threshold", 2.0, 4.5, step=0.5),
-    #     "sinusoidness_threshold": trial.suggest_float("sinusoidness_threshold", 0.3, 0.8, step=0.1),
-    #     "check_sinusoidness": trial.suggest_categorical("check_sinusoidness", [True, False]),
-    #     "f_low": trial.suggest_float("f_low", 0.2, 0.3, step=0.05), # Slightly more granular than just 0.25
-    #     "f_high": trial.suggest_float("f_high", 3.5, 4.5, step=0.5), # Explore around 4.0
-    #     "min_wave_ms": trial.suggest_float("min_wave_ms", 100.0, 300.0, step=50.0), # Explore around 125, 250
-    #     "max_wave_ms": trial.suggest_float("max_wave_ms", 800.0, 1200.0, step=100.0), # Explore around 1000
-    #     "z_ied_threshold": trial.suggest_float("z_ied_threshold", 1.0, 3.0, step=0.5),
-    #     "refrac_ms": trial.suggest_float("refrac_ms", 2000.0, 3000.0, step=250.0), # Explore around 2500
-    # }
-
     params = {
-        "z_score_threshold": trial.suggest_float("z_score_threshold", 2.5, 2.5),
-        "sinusoidness_threshold": trial.suggest_float("sinusoidness_threshold", 0.6, 0.6),
-        "check_sinusoidness": trial.suggest_categorical("check_sinusoidness", [True,True]),
-        "f_low": trial.suggest_float("f_low", 0.25, 0.25),
-        "f_high": trial.suggest_float("f_high", 4.0, 4.0),
-        "min_wave_ms": trial.suggest_float("min_wave_ms", 250, 250),
-        "max_wave_ms": trial.suggest_float("max_wave_ms", 1000, 1000),
-        "z_ied_threshold": trial.suggest_float("z_ied_threshold", 3.0, 3.0),
-        "refrac_ms": trial.suggest_float("refrac_ms", 2500, 2500),
+        "z_score_threshold": trial.suggest_float("z_score_threshold", 2.0, 4.5, step=0.5),
+        "sinusoidness_threshold": trial.suggest_float("sinusoidness_threshold", 0.3, 0.8, step=0.1),
+        "check_sinusoidness": trial.suggest_categorical("check_sinusoidness", [True, False]),
+        "f_low": trial.suggest_float("f_low", 0.2, 0.3, step=0.05), # Slightly more granular than just 0.25
+        "f_high": trial.suggest_float("f_high", 3.5, 4.5, step=0.5), # Explore around 4.0
+        "min_wave_ms": trial.suggest_float("min_wave_ms", 100.0, 300.0, step=50.0), # Explore around 125, 250
+        "max_wave_ms": trial.suggest_float("max_wave_ms", 800.0, 1200.0, step=100.0), # Explore around 1000
+        "z_ied_threshold": trial.suggest_float("z_ied_threshold", 1.0, 3.0, step=0.5),
+        "refrac_ms": trial.suggest_float("refrac_ms", 2000.0, 3000.0, step=250.0), # Explore around 2500
     }
+
+    # params = {
+    #     "z_score_threshold": trial.suggest_float("z_score_threshold", 2.5, 2.5),
+    #     "sinusoidness_threshold": trial.suggest_float("sinusoidness_threshold", 0.6, 0.6),
+    #     "check_sinusoidness": trial.suggest_categorical("check_sinusoidness", [True,True]),
+    #     "f_low": trial.suggest_float("f_low", 0.25, 0.25),
+    #     "f_high": trial.suggest_float("f_high", 4.0, 4.0),
+    #     "min_wave_ms": trial.suggest_float("min_wave_ms", 250, 250),
+    #     "max_wave_ms": trial.suggest_float("max_wave_ms", 1000, 1000),
+    #     "z_ied_threshold": trial.suggest_float("z_ied_threshold", 3.0, 3.0),
+    #     "refrac_ms": trial.suggest_float("refrac_ms", 2500, 2500),
+    # }
 
     # Generate config and temporary file
     cfg = make_cfg(params)
@@ -696,173 +696,185 @@ def run_optuna_search(patient_ids: List[int], max_workers: int, n_trials: int,
 
         # NEW: Create summaries for ALL completed trials, not just top 5
         print(f"Creating summaries for {len(sorted_trials)} completed trials...")
-   
-    for i, trial in enumerate(sorted_trials):
-        print(f"Processing trial #{i+1}/{len(sorted_trials)} (Trial {trial.number}): {optimization_metric}={trial.value:.3f}")
         
-        # Find the full results for this trial (from all_trial_results)
-        full_trial_data = next((item for item in all_trial_results if item['trial_number'] == trial.number), None)
-
-        if full_trial_data:
-            # Create detailed summary for this trial
-            create_trial_summary(trial.number, trial.params, full_trial_data['results_per_patient'])
+        for i, trial in enumerate(sorted_trials):
+            print(f"Processing trial #{i+1}/{len(sorted_trials)} (Trial {trial.number}): {optimization_metric}={trial.value:.3f}")
             
-            # Create plots only for top trials to avoid too many plots
-            if create_plots and i < 10:  # Only plot top 10 trials
-                print(f"  🎨 Creating plots for Trial {trial.number}...")
-                create_event_plots(trial.number, trial.params, full_trial_data['results_per_patient'])
-        else:
-            print(f"  Warning: Full results for trial {trial.number} not found. Skipping detailed summary and plots.")
+            # Find the full results for this trial (from all_trial_results)
+            full_trial_data = next((item for item in all_trial_results if item['trial_number'] == trial.number), None)
 
+            if full_trial_data:
+                # Create detailed summary for this trial
+                create_trial_summary(trial.number, trial.params, full_trial_data['results_per_patient'])
+                
+                # Create plots only for top trials to avoid too many plots
+                if create_plots and i < 10:  # Only plot top 10 trials
+                    print(f"  🎨 Creating plots for Trial {trial.number}...")
+                    create_event_plots(trial.number, trial.params, full_trial_data['results_per_patient'])
+            else:
+                print(f"  Warning: Full results for trial {trial.number} not found. Skipping detailed summary and plots.")
+                
 # ─────────────────────—— Analysis ──────────────────────────────────────────
 # The analyze_results and show_best_params functions now primarily interact with
 # the Optuna study's stored results, rather than a raw CSV, for more robust analysis.
 
 def analyze_results_optuna(top_n: int = 20):
-   """Analyze Optuna study results and show top parameter sets."""
-   study_name = "dnb_optimization"
-   storage_path = RESULTS_DIR / "optuna_study.db"
+    """Analyze Optuna study results and show top parameter sets."""
+    study_name = "dnb_optimization"
+    storage_path = RESULTS_DIR / "optuna_study.db"
 
-   try:
-       study = optuna.load_study(study_name=study_name, storage=f"sqlite:///{storage_path}")
-   except KeyError:
-       print(f"❌ Optuna study '{study_name}' not found. Run search first.")
-       return
-   except Exception as e:
-       print(f"❌ Error loading Optuna study: {e}")
-       return
-   
-   print("\n📊 Analyzing Optuna study results...")
-   
-   # Get ALL trials (including pruned ones)
-   df = study.trials_dataframe(attrs=("number", "value", "params", "state", "user_attrs"))
-   
-   if df.empty:
-       print("No trials found in the study.")
-       return
+    try:
+        study = optuna.load_study(study_name=study_name, storage=f"sqlite:///{storage_path}")
+    except KeyError:
+        print(f"❌ Optuna study '{study_name}' not found. Run search first.")
+        return
+    except Exception as e:
+        print(f"❌ Error loading Optuna study: {e}")
+        return
+    
+    print("\n📊 Analyzing Optuna study results...")
+    
+    # Get ALL trials (including pruned ones) - FIX: explicitly include user_attrs
+    try:
+        df = study.trials_dataframe(attrs=("number", "value", "params", "state", "user_attrs"))
+    except Exception as e:
+        print(f"Warning: Could not load user_attrs: {e}")
+        # Fallback without user_attrs
+        df = study.trials_dataframe(attrs=("number", "value", "params", "state"))
+        df['user_attrs'] = [{} for _ in range(len(df))]  # Add empty user_attrs
+    
+    if df.empty:
+        print("No trials found in the study.")
+        return
 
-   # NEW: Extract optimization metric from user attributes
-   optimization_metrics_used = df['user_attrs'].apply(
-       lambda x: x.get('optimization_metric', 'unknown') if isinstance(x, dict) else 'unknown'
-   )
-   print(f"Optimization metrics used: {optimization_metrics_used.value_counts().to_dict()}")
+    # Check if user_attrs column exists and has data
+    if 'user_attrs' not in df.columns:
+        print("Warning: No user_attrs found in study. Using empty attributes.")
+        df['user_attrs'] = [{} for _ in range(len(df))]
 
-   # NEW: Extract TP/FP/FN from user attributes for all fractions
-   for fraction in DATA_FRACTIONS:
-       df[f'tp_frac_{fraction}'] = df['user_attrs'].apply(
-           lambda x: x.get(f'tp_frac_{fraction}', 0) if isinstance(x, dict) else 0
-       )
-       df[f'fp_frac_{fraction}'] = df['user_attrs'].apply(
-           lambda x: x.get(f'fp_frac_{fraction}', 0) if isinstance(x, dict) else 0
-       )
-       df[f'fn_frac_{fraction}'] = df['user_attrs'].apply(
-           lambda x: x.get(f'fn_frac_{fraction}', 0) if isinstance(x, dict) else 0
-       )
-       df[f'precision_frac_{fraction}'] = df['user_attrs'].apply(
-           lambda x: x.get(f'precision_frac_{fraction}', 0) if isinstance(x, dict) else 0
-       )
-       df[f'recall_frac_{fraction}'] = df['user_attrs'].apply(
-           lambda x: x.get(f'recall_frac_{fraction}', 0) if isinstance(x, dict) else 0
-       )
-       df[f'f1_frac_{fraction}'] = df['user_attrs'].apply(
-           lambda x: x.get(f'f1_frac_{fraction}', 0) if isinstance(x, dict) else 0
-       )
-       df[f'objective_frac_{fraction}'] = df['user_attrs'].apply(
-           lambda x: x.get(f'objective_frac_{fraction}', 0) if isinstance(x, dict) else 0
-       )
+    # NEW: Extract optimization metric from user attributes (with fallback)
+    optimization_metrics_used = df['user_attrs'].apply(
+        lambda x: x.get('optimization_metric', 'unknown') if isinstance(x, dict) else 'unknown'
+    )
+    print(f"Optimization metrics used: {optimization_metrics_used.value_counts().to_dict()}")
+    
+    # ... rest of the function stays the same
+    # NEW: Extract TP/FP/FN from user attributes for all fractions
+    for fraction in DATA_FRACTIONS:
+        df[f'tp_frac_{fraction}'] = df['user_attrs'].apply(
+            lambda x: x.get(f'tp_frac_{fraction}', 0) if isinstance(x, dict) else 0
+        )
+        df[f'fp_frac_{fraction}'] = df['user_attrs'].apply(
+            lambda x: x.get(f'fp_frac_{fraction}', 0) if isinstance(x, dict) else 0
+        )
+        df[f'fn_frac_{fraction}'] = df['user_attrs'].apply(
+            lambda x: x.get(f'fn_frac_{fraction}', 0) if isinstance(x, dict) else 0
+        )
+        df[f'precision_frac_{fraction}'] = df['user_attrs'].apply(
+            lambda x: x.get(f'precision_frac_{fraction}', 0) if isinstance(x, dict) else 0
+        )
+        df[f'recall_frac_{fraction}'] = df['user_attrs'].apply(
+            lambda x: x.get(f'recall_frac_{fraction}', 0) if isinstance(x, dict) else 0
+        )
+        df[f'f1_frac_{fraction}'] = df['user_attrs'].apply(
+            lambda x: x.get(f'f1_frac_{fraction}', 0) if isinstance(x, dict) else 0
+        )
+        df[f'objective_frac_{fraction}'] = df['user_attrs'].apply(
+            lambda x: x.get(f'objective_frac_{fraction}', 0) if isinstance(x, dict) else 0
+        )
 
-   # Also add TP/FP/FN from trial summary files (for backward compatibility)
-   df['tp_summary'] = 0
-   df['fp_summary'] = 0
-   df['fn_summary'] = 0
+    # Also add TP/FP/FN from trial summary files (for backward compatibility)
+    df['tp_summary'] = 0
+    df['fp_summary'] = 0
+    df['fn_summary'] = 0
    
-   summary_dir = RESULTS_DIR / "trial_summaries"
-   if summary_dir.exists():
-       summary_files = list(summary_dir.glob("trial_*_summary.json"))
-       print(f"Found {len(summary_files)} trial summary files")
-       
-       for summary_file in summary_files:
-           try:
-               with summary_file.open() as f:
-                   data = json.load(f)
-               
-               trial_num = data['trial_number']
-               stats = data['overall_statistics']
-               
-               if trial_num in df['number'].values:
-                   df.loc[df['number'] == trial_num, 'tp_summary'] = stats['true_positives']
-                   df.loc[df['number'] == trial_num, 'fp_summary'] = stats['false_positives']
-                   df.loc[df['number'] == trial_num, 'fn_summary'] = stats['false_negatives']
-                   
-           except Exception as e:
-               print(f"Error reading {summary_file}: {e}")
-   else:
-       print("No trial_summaries directory found")
+    summary_dir = RESULTS_DIR / "trial_summaries"
+    if summary_dir.exists():
+        summary_files = list(summary_dir.glob("trial_*_summary.json"))
+        print(f"Found {len(summary_files)} trial summary files")
+        
+        for summary_file in summary_files:
+            try:
+                with summary_file.open() as f:
+                    data = json.load(f)
+                
+                trial_num = data['trial_number']
+                stats = data['overall_statistics']
+                
+                if trial_num in df['number'].values:
+                    df.loc[df['number'] == trial_num, 'tp_summary'] = stats['true_positives']
+                    df.loc[df['number'] == trial_num, 'fp_summary'] = stats['false_positives']
+                    df.loc[df['number'] == trial_num, 'fn_summary'] = stats['false_negatives']
+                    
+            except Exception as e:
+                print(f"Error reading {summary_file}: {e}")
+    else:
+        print("No trial_summaries directory found")
 
-   df = df.rename(columns={"value": "objective_score"})
-   
-   # Sort by objective score (NaN values will go to end)
-   df_sorted = df.sort_values(by="objective_score", ascending=False, na_position='last')
-   
-   # Show distribution of check_sinusoidness
-   print(f"\n📈 Parameter Distribution:")
-   print(f"check_sinusoidness distribution:")
-   print(df['params_check_sinusoidness'].value_counts())
-   print(f"\nTrial states:")
-   print(df['state'].value_counts())
-   
-   # Display top results with TP/FP/FN for final fraction (0.25)
-   final_fraction = DATA_FRACTIONS[-1]
-   print(f"\n🏆 TOP {top_n} TRIALS (by objective score, showing final fraction {final_fraction})\n")
-   display_cols = ["number", "state", "objective_score", 
-                  f"tp_frac_{final_fraction}", f"fp_frac_{final_fraction}", f"fn_frac_{final_fraction}",
-                  f"precision_frac_{final_fraction}", f"recall_frac_{final_fraction}", f"f1_frac_{final_fraction}"] + \
-                  [col for col in df_sorted.columns if col.startswith("params_")]
-   
-   # Format the display
-   top_df = df_sorted[display_cols].head(top_n)
-   # Rename columns for cleaner display
-   rename_dict = {
-       f"tp_frac_{final_fraction}": "tp",
-       f"fp_frac_{final_fraction}": "fp", 
-       f"fn_frac_{final_fraction}": "fn",
-       f"precision_frac_{final_fraction}": "precision",
-       f"recall_frac_{final_fraction}": "recall",
-       f"f1_frac_{final_fraction}": "f1"
-   }
-   top_df_display = top_df.rename(columns=rename_dict)
-   print(top_df_display.to_string(float_format="%.3f", index=False))
-   
-   # Save full summary with all fractions
-   summary_csv = RESULTS_DIR / "optuna_study_full_summary.csv"
-   df_sorted.to_csv(summary_csv, index=False)
-   print(f"\n📄 Full Optuna study summary (all trials, all fractions) saved to {summary_csv}")
-   
-   # Show separate summary for COMPLETE trials only
-   df_complete = df_sorted[df_sorted["state"] == "COMPLETE"]
-   if not df_complete.empty:
-       print(f"\n🎯 TOP {min(top_n, len(df_complete))} COMPLETE TRIALS ONLY:\n")
-       top_complete_df = df_complete[display_cols].head(top_n)
-       top_complete_display = top_complete_df.rename(columns=rename_dict)
-       print(top_complete_display.to_string(float_format="%.3f", index=False))
-   
-   # NEW: Show fraction-by-fraction breakdown for top trial
-   if not df_complete.empty:
-       best_trial_row = df_complete.iloc[0]
-       print(f"\n📊 BEST TRIAL ({best_trial_row['number']}) FRACTION BREAKDOWN:")
-       print("Fraction | TP | FP | FN | Precision | Recall |   F1   | Objective")
-       print("-" * 65)
-       for fraction in DATA_FRACTIONS:
-           tp = best_trial_row[f'tp_frac_{fraction}']
-           fp = best_trial_row[f'fp_frac_{fraction}']
-           fn = best_trial_row[f'fn_frac_{fraction}']
-           prec = best_trial_row[f'precision_frac_{fraction}']
-           rec = best_trial_row[f'recall_frac_{fraction}']
-           f1 = best_trial_row[f'f1_frac_{fraction}']
-           obj = best_trial_row[f'objective_frac_{fraction}']
-           print(f"{fraction:8.2f} | {tp:2.0f} | {fp:2.0f} | {fn:2.0f} | {prec:9.3f} | {rec:6.3f} | {f1:6.3f} | {obj:9.3f}")
-   
-   return df_sorted
+    df = df.rename(columns={"value": "objective_score"})
+
+    # Sort by objective score (NaN values will go to end)
+    df_sorted = df.sort_values(by="objective_score", ascending=False, na_position='last')
+
+    # Show distribution of check_sinusoidness
+    print(f"\n📈 Parameter Distribution:")
+    print(f"check_sinusoidness distribution:")
+    print(df['params_check_sinusoidness'].value_counts())
+    print(f"\nTrial states:")
+    print(df['state'].value_counts())
+
+    # Display top results with TP/FP/FN for final fraction (0.25)
+    final_fraction = DATA_FRACTIONS[-1]
+    print(f"\n🏆 TOP {top_n} TRIALS (by objective score, showing final fraction {final_fraction})\n")
+    display_cols = ["number", "state", "objective_score", 
+                    f"tp_frac_{final_fraction}", f"fp_frac_{final_fraction}", f"fn_frac_{final_fraction}",
+                    f"precision_frac_{final_fraction}", f"recall_frac_{final_fraction}", f"f1_frac_{final_fraction}"] + \
+                    [col for col in df_sorted.columns if col.startswith("params_")]
+
+    # Format the display
+    top_df = df_sorted[display_cols].head(top_n)
+    # Rename columns for cleaner display
+    rename_dict = {
+        f"tp_frac_{final_fraction}": "tp",
+        f"fp_frac_{final_fraction}": "fp", 
+        f"fn_frac_{final_fraction}": "fn",
+        f"precision_frac_{final_fraction}": "precision",
+        f"recall_frac_{final_fraction}": "recall",
+        f"f1_frac_{final_fraction}": "f1"
+    }
+    top_df_display = top_df.rename(columns=rename_dict)
+    print(top_df_display.to_string(float_format="%.3f", index=False))
+
+    # Save full summary with all fractions
+    summary_csv = RESULTS_DIR / "optuna_study_full_summary.csv"
+    df_sorted.to_csv(summary_csv, index=False)
+    print(f"\n📄 Full Optuna study summary (all trials, all fractions) saved to {summary_csv}")
+
+    # Show separate summary for COMPLETE trials only
+    df_complete = df_sorted[df_sorted["state"] == "COMPLETE"]
+    if not df_complete.empty:
+        print(f"\n🎯 TOP {min(top_n, len(df_complete))} COMPLETE TRIALS ONLY:\n")
+        top_complete_df = df_complete[display_cols].head(top_n)
+        top_complete_display = top_complete_df.rename(columns=rename_dict)
+        print(top_complete_display.to_string(float_format="%.3f", index=False))
+
+    # NEW: Show fraction-by-fraction breakdown for top trial
+    if not df_complete.empty:
+        best_trial_row = df_complete.iloc[0]
+        print(f"\n📊 BEST TRIAL ({best_trial_row['number']}) FRACTION BREAKDOWN:")
+        print("Fraction | TP | FP | FN | Precision | Recall |   F1   | Objective")
+        print("-" * 65)
+        for fraction in DATA_FRACTIONS:
+            tp = best_trial_row[f'tp_frac_{fraction}']
+            fp = best_trial_row[f'fp_frac_{fraction}']
+            fn = best_trial_row[f'fn_frac_{fraction}']
+            prec = best_trial_row[f'precision_frac_{fraction}']
+            rec = best_trial_row[f'recall_frac_{fraction}']
+            f1 = best_trial_row[f'f1_frac_{fraction}']
+            obj = best_trial_row[f'objective_frac_{fraction}']
+            print(f"{fraction:8.2f} | {tp:2.0f} | {fp:2.0f} | {fn:2.0f} | {prec:9.3f} | {rec:6.3f} | {f1:6.3f} | {obj:9.3f}")
+
+    return df_sorted
 
 def show_best_params_optuna():
    """Show the best parameter set from the Optuna study."""
