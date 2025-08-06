@@ -22,6 +22,7 @@
 typedef void *(__cdecl *CreateSignalProcessorFromConfigFunc)(const char *config_path);
 typedef void(__cdecl *DeleteSignalProcessorFunc)(void *processor);
 typedef void *(__cdecl *RunChunkFunc)(void *processor, const double *data, size_t length);
+typedef void(__cdecl *LogMessageFunc)(void *processor, const char *message);
 
 // Constants
 const size_t buffer_size = 4096; // Buffer size for real-time processing
@@ -45,7 +46,8 @@ bool stop_processing = false; // Flag to stop the threads
 bool load_rust_functions(HINSTANCE &hinstLib,
                          CreateSignalProcessorFromConfigFunc &create_signal_processor_from_config,
                          DeleteSignalProcessorFunc &delete_signal_processor,
-                         RunChunkFunc &run_chunk)
+                         RunChunkFunc &run_chunk,
+                         LogMessageFunc &log_message)
 {
   hinstLib = LoadLibrary(TEXT("./direct_neural_biasing.dll"));
   Sleep(1000);
@@ -58,8 +60,9 @@ bool load_rust_functions(HINSTANCE &hinstLib,
   create_signal_processor_from_config = (CreateSignalProcessorFromConfigFunc)GetProcAddress(hinstLib, "create_signal_processor_from_config");
   delete_signal_processor = (DeleteSignalProcessorFunc)GetProcAddress(hinstLib, "delete_signal_processor");
   run_chunk = (RunChunkFunc)GetProcAddress(hinstLib, "run_chunk");
+  log_message = (LogMessageFunc)GetProcAddress(hinstLib, "log_message");
 
-  if (create_signal_processor_from_config == NULL || delete_signal_processor == NULL || run_chunk == NULL)
+  if (create_signal_processor_from_config == NULL || delete_signal_processor == NULL || run_chunk == NULL || log_message == NULL)
   {
     std::cerr << "Failed to load Rust functions!" << std::endl;
     FreeLibrary(hinstLib);
@@ -210,7 +213,7 @@ bool update_config_channel(int channel)
 }
 
 // Processing thread function
-void process_buffer_loop(void *rust_processor, RunChunkFunc run_chunk)
+void process_buffer_loop(void *rust_processor, RunChunkFunc run_chunk, LogMessageFunc log_message)
 {
   while (true)
   {
@@ -244,6 +247,10 @@ void process_buffer_loop(void *rust_processor, RunChunkFunc run_chunk)
 
       // Log processing information
       std::cout << "Processing time: " << processing_time << " ms" << std::endl;
+      
+      // Log trigger detection to the Rust processor's log file
+      std::string trigger_msg = "C++: Trigger detected at timestamp " + std::to_string(timestamp) + " (processing time: " + std::to_string(processing_time) + "ms)";
+      log_message(rust_processor, trigger_msg.c_str());
 
       // Schedule the audio pulse at the specified timestamp instead of playing immediately
       schedule_audio_pulse(timestamp);
@@ -262,9 +269,10 @@ int main(int argc, char *argv[])
   CreateSignalProcessorFromConfigFunc create_signal_processor_from_config;
   DeleteSignalProcessorFunc delete_signal_processor;
   RunChunkFunc run_chunk;
+  LogMessageFunc log_message;
 
   // Load the Rust library and functions
-  if (!load_rust_functions(hinstLib, create_signal_processor_from_config, delete_signal_processor, run_chunk))
+  if (!load_rust_functions(hinstLib, create_signal_processor_from_config, delete_signal_processor, run_chunk, log_message))
   {
     return 1;
   }
@@ -325,8 +333,15 @@ int main(int argc, char *argv[])
 
       std::cout << "Successfully created signal processor from config: " << config_path << std::endl;
 
+      // Log channel change and wait time to the Rust processor's log file
+      std::string channel_msg = "C++: Channel changed to " + std::to_string(channel);
+      log_message(rust_processor, channel_msg.c_str());
+      
+      std::string wait_msg = "C++: Wait time set to " + std::to_string(wait_length) + "ms";
+      log_message(rust_processor, wait_msg.c_str());
+
       // Start the processing thread
-      std::thread processing_thread(process_buffer_loop, rust_processor, run_chunk);
+      std::thread processing_thread(process_buffer_loop, rust_processor, run_chunk, log_message);
 
       // Configure the channel (continuous recording at 30kHz)
       cbPKT_CHANINFO chan_info;
@@ -426,8 +441,12 @@ int main(int argc, char *argv[])
       // Report results for this test
       if (data_received) {
         std::cout << "✓ Channel " << channel << " with wait " << wait_length << "ms: Data received (" << data_count << " trials)" << std::endl;
+        std::string success_msg = "C++: Channel " + std::to_string(channel) + " with wait " + std::to_string(wait_length) + "ms: Data received (" + std::to_string(data_count) + " trials)";
+        log_message(rust_processor, success_msg.c_str());
       } else {
         std::cout << "✗ Channel " << channel << " with wait " << wait_length << "ms: NO DATA RECEIVED" << std::endl;
+        std::string failure_msg = "C++: Channel " + std::to_string(channel) + " with wait " + std::to_string(wait_length) + "ms: NO DATA RECEIVED";
+        log_message(rust_processor, failure_msg.c_str());
       }
 
       // Clean up for this test

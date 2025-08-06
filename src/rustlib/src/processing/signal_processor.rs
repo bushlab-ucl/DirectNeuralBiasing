@@ -210,6 +210,14 @@ impl SignalProcessor {
         }
     }
 
+    /// Public method to log messages from external code (e.g., C++)
+    #[allow(dead_code)]
+    pub fn log_message(&self, message: &str) {
+        if let Err(e) = log_verbose(&self.log_file_name, message, self.processor_config.enable_debug_logging) {
+            eprintln!("Failed to log message from external code: {}", e);
+        }
+    }
+
     pub fn add_filter(&mut self, filter: Box<dyn FilterInstance>) {
         let id = filter.id().to_string();
         self.filters.insert(id, filter);

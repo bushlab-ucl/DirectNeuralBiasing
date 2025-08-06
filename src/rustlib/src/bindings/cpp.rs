@@ -97,6 +97,27 @@ pub extern "C" fn run_chunk(
     std::ptr::null_mut()
 }
 
+#[no_mangle]
+pub extern "C" fn log_message(processor_ptr: *mut c_void, message: *const c_char) {
+    if processor_ptr.is_null() || message.is_null() {
+        eprintln!("Error: processor_ptr or message is null");
+        return;
+    }
+
+    let processor = unsafe { &*(processor_ptr as *const SignalProcessorFFI) };
+    let message_str = unsafe {
+        match std::ffi::CStr::from_ptr(message).to_str() {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("Error: Invalid message string: {}", e);
+                return;
+            }
+        }
+    };
+
+    processor.processor.log_message(message_str);
+}
+
 // // Keep the old function for backward compatibility but mark as deprecated
 // #[deprecated(note = "Use create_signal_processor_from_config instead")]
 // #[no_mangle]
