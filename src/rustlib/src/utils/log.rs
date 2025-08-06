@@ -7,7 +7,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use std::collections::HashMap;
 use std::time::Duration;
 
-/// Generates a formatted timestamp string in the format yyyy-mm-dd_hh:mm:ss
+/// Generates a formatted timestamp string in the format yyyy-mm-dd_hh-mm-ss
+/// (filesystem-safe, using hyphens instead of colons)
 ///
 /// # Returns
 ///
@@ -15,7 +16,7 @@ use std::time::Duration;
 pub fn generate_formatted_timestamp() -> String {
     let now = SystemTime::now();
     let datetime = chrono::DateTime::<chrono::Utc>::from(now);
-    datetime.format("%Y-%m-%d_%H:%M:%S").to_string()
+    datetime.format("%Y-%m-%d_%H-%M-%S").to_string()
 }
 
 /// Generates a log filename with formatted timestamp
