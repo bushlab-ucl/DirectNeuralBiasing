@@ -61,6 +61,24 @@ impl SignalProcessor {
         // Load the entire config from the file
         let config = load_config(config_path)?;
 
+        // Log the current config to the log file
+        if config.processor.enable_debug_logging {
+            // Convert config back to YAML format for logging
+            let config_yaml = serde_yaml::to_string(&config)
+                .unwrap_or_else(|_| "Failed to serialize config to YAML".to_string());
+            
+            let config_log = format!(
+                "Signal Processor Config Loaded:\n\
+                Config Path: {}\n\
+                \n\
+                Full Configuration:\n\
+                {}",
+                config_path,
+                config_yaml
+            );
+            let _ = log_to_file("trigger_debug.log", &config_log);
+        }
+
         // Get context size from config or use default
         let context_size = config.processor.log_context_samples.unwrap_or(3);
 

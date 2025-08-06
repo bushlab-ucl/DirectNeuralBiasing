@@ -16,7 +16,6 @@
 #include <algorithm>  // For std::remove_if
 #include <iomanip>    // For std::setw and std::setfill
 #include <sstream>    // For std::ostringstream
-#include <fstream>    // For file operations
 
 // Rust FFI declarations
 typedef void *(__cdecl *CreateSignalProcessorFromConfigFunc)(const char *config_path);
@@ -167,48 +166,6 @@ void schedule_audio_pulse(double timestamp)
   }
 }
 
-// Function to update config file with new channel
-bool update_config_channel(int channel)
-{
-  std::ifstream inFile("./config.yaml");
-  if (!inFile.is_open()) {
-    std::cerr << "Failed to open config.yaml for reading" << std::endl;
-    return false;
-  }
-
-  std::string line;
-  std::vector<std::string> lines;
-  bool channel_updated = false;
-
-  while (std::getline(inFile, line)) {
-    if (line.find("channel:") != std::string::npos && !channel_updated) {
-      lines.push_back("  channel: " + std::to_string(channel));
-      channel_updated = true;
-    } else {
-      lines.push_back(line);
-    }
-  }
-  inFile.close();
-
-  if (!channel_updated) {
-    std::cerr << "Could not find channel line in config.yaml" << std::endl;
-    return false;
-  }
-
-  std::ofstream outFile("./config.yaml");
-  if (!outFile.is_open()) {
-    std::cerr << "Failed to open config.yaml for writing" << std::endl;
-    return false;
-  }
-
-  for (const auto& l : lines) {
-    outFile << l << std::endl;
-  }
-  outFile.close();
-
-  return true;
-}
-
 // Processing thread function
 void process_buffer_loop(void *rust_processor, RunChunkFunc run_chunk)
 {
@@ -269,6 +226,22 @@ int main(int argc, char *argv[])
     return 1;
   }
 
+  // Initialize Rust Signal Processor from config file
+  const char *config_path = "./config.yaml";
+  void *rust_processor = create_signal_processor_from_config(config_path);
+  if (rust_processor == NULL)
+  {
+    std::cerr << "Failed to create Rust signal processor from config: " << config_path << std::endl;
+    std::cerr << "Make sure the config.yaml file exists in the current directory." << std::endl;
+    FreeLibrary(hinstLib);
+    return 1;
+  }
+
+  std::cout << "Successfully created signal processor from config: " << config_path << std::endl;
+
+  // Start the processing thread
+  std::thread processing_thread(process_buffer_loop, rust_processor, run_chunk);
+
   // Before cbSdkOpen
   std::cout << "Attempting to open CBSDK..." << std::endl;
 
@@ -298,161 +271,113 @@ int main(int argc, char *argv[])
 
   std::cout << "CBSDK opened successfully!" << std::endl;
 
-  // Test different channels and wait lengths
-  std::vector<int> wait_lengths = {100, 500, 1000, 2000}; // Different wait lengths in ms
-  
-  for (int channel = 1; channel <= 32; channel++) {
-    std::cout << "\n=== Testing Channel " << channel << " ===" << std::endl;
-    
-    for (int wait_length : wait_lengths) {
-      std::cout << "\n--- Testing with wait length: " << wait_length << "ms ---" << std::endl;
-      
-      // Update config file with new channel
-      if (!update_config_channel(channel)) {
-        std::cerr << "Failed to update config for channel " << channel << std::endl;
-        continue;
-      }
-      
-      // Initialize Rust Signal Processor from config file
-      const char *config_path = "./config.yaml";
-      void *rust_processor = create_signal_processor_from_config(config_path);
-      if (rust_processor == NULL)
+  // Configure the first channel (continuous recording at 30kHz)
+  // NOTE: Channel number and sampling rate now come from config.yaml
+  // This assumes channel 1 for now, but could be made configurable
+  cbPKT_CHANINFO chan_info;
+  res = cbSdkGetChannelConfig(0, 1, &chan_info);
+  chan_info.smpgroup = 5; // Continuous sampling at 30kHz
+  res = cbSdkSetChannelConfig(0, 1, &chan_info);
+
+  // Set up trial configuration to get continuous data
+  res = cbSdkSetTrialConfig(0, 1, 0, 0, 0, 0, 0, 0, false, 0, buffer_size, 0, 0, 0, true);
+  if (res != CBSDKRESULT_SUCCESS)
+  {
+    std::cerr << "ERROR: cbSdkSetTrialConfig" << std::endl;
+    return 1;
+  }
+
+  Sleep(1000); // Wait to allow data to start flowing
+
+  // Allocate memory for the trial data
+  cbSdkTrialCont trial;
+  for (int i = 0; i < cbNUM_ANALOG_CHANS; i++)
+  {
+    trial.samples[i] = malloc(buffer_size * sizeof(INT16));
+  }
+
+  // Initialize the trial data structure
+  res = cbSdkInitTrialData(0, 1, NULL, &trial, NULL, NULL);
+  if (res != CBSDKRESULT_SUCCESS)
+  {
+    std::cerr << "ERROR: cbSdkInitTrialData" << std::endl;
+    return 1;
+  }
+
+  // Main loop to collect data
+  while (true)
+  {
+    // Fetch data from Blackrock
+    res = cbSdkGetTrialData(0, 1, NULL, &trial, NULL, NULL);
+    if (res == CBSDKRESULT_SUCCESS)
+    {
+      if (trial.count > 0)
       {
-        std::cerr << "Failed to create Rust signal processor from config: " << config_path << std::endl;
-        std::cerr << "Make sure the config.yaml file exists in the current directory." << std::endl;
-        continue;
-      }
+        INT16 *int_samples = reinterpret_cast<INT16 *>(trial.samples[0]);
+        size_t total_samples = trial.num_samples[0];
+        size_t processed_samples = 0;
 
-      std::cout << "Successfully created signal processor from config: " << config_path << std::endl;
-
-      // Start the processing thread
-      std::thread processing_thread(process_buffer_loop, rust_processor, run_chunk);
-
-      // Configure the channel (continuous recording at 30kHz)
-      cbPKT_CHANINFO chan_info;
-      res = cbSdkGetChannelConfig(0, channel, &chan_info);
-      chan_info.smpgroup = 5; // Continuous sampling at 30kHz
-      res = cbSdkSetChannelConfig(0, channel, &chan_info);
-
-      // Set up trial configuration to get continuous data
-      res = cbSdkSetTrialConfig(0, 1, 0, 0, 0, 0, 0, 0, false, 0, buffer_size, 0, 0, 0, true);
-      if (res != CBSDKRESULT_SUCCESS)
-      {
-        std::cerr << "ERROR: cbSdkSetTrialConfig" << std::endl;
-        delete_signal_processor(rust_processor);
-        processing_thread.join();
-        continue;
-      }
-
-      Sleep(wait_length); // Wait for specified length to allow data to start flowing
-
-      // Allocate memory for the trial data
-      cbSdkTrialCont trial;
-      for (int i = 0; i < cbNUM_ANALOG_CHANS; i++)
-      {
-        trial.samples[i] = malloc(buffer_size * sizeof(INT16));
-      }
-
-      // Initialize the trial data structure
-      res = cbSdkInitTrialData(0, 1, NULL, &trial, NULL, NULL);
-      if (res != CBSDKRESULT_SUCCESS)
-      {
-        std::cerr << "ERROR: cbSdkInitTrialData" << std::endl;
-        delete_signal_processor(rust_processor);
-        processing_thread.join();
-        continue;
-      }
-
-      // Test data collection for a short period
-      auto start_test = std::chrono::steady_clock::now();
-      bool data_received = false;
-      int data_count = 0;
-      
-      while (std::chrono::steady_clock::now() - start_test < std::chrono::seconds(5)) // Test for 5 seconds
-      {
-        // Fetch data from Blackrock
-        res = cbSdkGetTrialData(0, 1, NULL, &trial, NULL, NULL);
-        if (res == CBSDKRESULT_SUCCESS)
+        while (processed_samples < total_samples)
         {
-          if (trial.count > 0)
+          size_t remaining_samples = total_samples - processed_samples;
+          size_t chunk_size = std::min(buffer_size, remaining_samples);
+
+          // Ensure we are switching to a buffer that's not "ready"
           {
-            data_received = true;
-            data_count++;
-            
-            INT16 *int_samples = reinterpret_cast<INT16 *>(trial.samples[0]);
-            size_t total_samples = trial.num_samples[0];
-            size_t processed_samples = 0;
+            std::unique_lock<std::mutex> lock(buffer_mutex);
+            buffer_cv.wait(lock, [&]()
+                           { return !buffers[filling_buffer_index].ready || stop_processing; });
 
-            while (processed_samples < total_samples)
-            {
-              size_t remaining_samples = total_samples - processed_samples;
-              size_t chunk_size = std::min(buffer_size, remaining_samples);
-
-              // Ensure we are switching to a buffer that's not "ready"
-              {
-                std::unique_lock<std::mutex> lock(buffer_mutex);
-                buffer_cv.wait(lock, [&]()
-                               { return !buffers[filling_buffer_index].ready || stop_processing; });
-
-                if (stop_processing)
-                  break;
-              }
-
-              // Convert INT16 samples to voltage values (microvolts)
-              for (size_t i = 0; i < chunk_size; i++)
-              {
-                // Convert from INT16 to double (microvolts)
-                // The factor 0.25 comes from the typical resolution of Blackrock systems
-                // You may need to adjust this based on your specific hardware configuration
-                buffers[filling_buffer_index].data[i] = static_cast<double>(int_samples[processed_samples + i]) * 0.25;
-              }
-
-              // Mark buffer as ready
-              {
-                std::lock_guard<std::mutex> lock(buffer_mutex);
-                buffers[filling_buffer_index].ready = true;
-              }
-              buffer_cv.notify_one();
-
-              // Switch to the next buffer (round-robin)
-              filling_buffer_index = (filling_buffer_index + 1) % num_buffers;
-              processed_samples += chunk_size;
-            }
+            if (stop_processing)
+              break;
           }
+
+          // Convert INT16 samples to voltage values (microvolts)
+          for (size_t i = 0; i < chunk_size; i++)
+          {
+            // Convert from INT16 to double (microvolts)
+            // The factor 0.25 comes from the typical resolution of Blackrock systems
+            // You may need to adjust this based on your specific hardware configuration
+            buffers[filling_buffer_index].data[i] = static_cast<double>(int_samples[processed_samples + i]) * 0.25;
+          }
+
+          // Mark buffer as ready
+          {
+            std::lock_guard<std::mutex> lock(buffer_mutex);
+            buffers[filling_buffer_index].ready = true;
+          }
+          buffer_cv.notify_one();
+
+          // Switch to the next buffer (round-robin)
+          filling_buffer_index = (filling_buffer_index + 1) % num_buffers;
+          processed_samples += chunk_size;
         }
-        Sleep(100);
       }
-
-      // Report results for this test
-      if (data_received) {
-        std::cout << "✓ Channel " << channel << " with wait " << wait_length << "ms: Data received (" << data_count << " trials)" << std::endl;
-      } else {
-        std::cout << "✗ Channel " << channel << " with wait " << wait_length << "ms: NO DATA RECEIVED" << std::endl;
-      }
-
-      // Clean up for this test
-      for (int i = 0; i < cbNUM_ANALOG_CHANS; i++)
+      else
       {
-        free(trial.samples[i]);
+        std::cerr << "No trial data available (trial.count = 0)" << std::endl;
       }
-
-      // Signal the processing thread to stop and wait for it to finish
-      stop_processing = true;
-      buffer_cv.notify_all();
-      processing_thread.join();
-
-      // Clean up signal processor
-      delete_signal_processor(rust_processor);
-      
-      // Reset stop flag for next iteration
-      stop_processing = false;
-      
-      // Reset buffer states
-      for (int i = 0; i < num_buffers; i++) {
-        buffers[i].ready = false;
-      }
-      filling_buffer_index = 0;
     }
+    else
+    {
+      std::cerr << "Error fetching trial data: " << res << std::endl;
+    }
+    Sleep(100);
+  }
+
+  // Signal the processing thread to stop and wait for it to finish
+  stop_processing = true;
+  buffer_cv.notify_all();
+  processing_thread.join();
+
+  // Clean up
+  delete_signal_processor(rust_processor);
+  FreeLibrary(hinstLib);
+
+  // free samples
+  for (int i = 0; i < cbNUM_ANALOG_CHANS; i++)
+  {
+    free(trial.samples[i]);
   }
 
   // Close the Blackrock system
@@ -463,6 +388,5 @@ int main(int argc, char *argv[])
     return 1;
   }
 
-  FreeLibrary(hinstLib);
   return 0;
-} 
+}
