@@ -46,6 +46,7 @@ pub struct SignalProcessor {
     log_sender: Option<Sender<(Vec<HashMap<&'static str, f64>>, String)>>, // Channel to send logs to background thread (now with context)
     context_buffer: VecDeque<HashMap<&'static str, f64>>, // Ring buffer for context logging
     context_size: usize,                                  // Number of samples before/after to keep
+    log_file_name: String,                                // Log file name for verbose logging
 }
 
 // Consider if Keys struct is necessary, or if constants are sufficient
@@ -132,6 +133,7 @@ impl SignalProcessor {
             log_sender,
             context_buffer: VecDeque::with_capacity(context_size * 2 + 1),
             context_size,
+            log_file_name,
         };
         // --- End of logic moved from the old `new` function ---
 
@@ -282,6 +284,19 @@ impl SignalProcessor {
         });
     }
 
+    /// Logs a message to both terminal and file when verbose logging is enabled
+    fn log_verbose(&self, message: &str) {
+        // Always print to terminal when verbose is enabled
+        eprintln!("{}", message);
+        
+        // Also log to file if debug logging is enabled
+        if self.processor_config.enable_debug_logging {
+            if let Err(e) = log_to_file(&self.log_file_name, message) {
+                eprintln!("Failed to log verbose message to file: {}", e);
+            }
+        }
+    }
+
     pub fn add_filter(&mut self, filter: Box<dyn FilterInstance>) {
         let id = filter.id().to_string();
         self.filters.insert(id, filter);
@@ -295,14 +310,10 @@ impl SignalProcessor {
         if !self.filters.contains_key(&filter_id) {
             // Use the processor_config for verbose checking if needed
             if self.processor_config.verbose {
-                eprintln!(
-                    "{}",
-                    format!(
-                        "Warning: Detector '{}' references non-existent filter ID: {}",
-                        id, filter_id
-                    )
-                    .yellow()
-                );
+                self.log_verbose(&format!(
+                    "Warning: Detector '{}' references non-existent filter ID: {}",
+                    id, filter_id
+                ).yellow().to_string());
             }
             // Decide if this should be a panic or just a warning + skipping
             // For now, let's keep the panic as it indicates a critical config error
@@ -320,14 +331,10 @@ impl SignalProcessor {
         // Check if the activation detector ID is valid
         if !self.detectors.contains_key(&activation_detector_id) {
             if self.processor_config.verbose {
-                eprintln!(
-                    "{}",
-                    format!(
-                        "Warning: Trigger '{}' references non-existent activation detector ID: {}",
-                        id, activation_detector_id
-                    )
-                    .yellow()
-                );
+                self.log_verbose(&format!(
+                    "Warning: Trigger '{}' references non-existent activation detector ID: {}",
+                    id, activation_detector_id
+                ).yellow().to_string());
             }
             panic!(
                 "Trigger references non-existent activation detector ID: {}",
@@ -340,14 +347,10 @@ impl SignalProcessor {
             && !self.detectors.contains_key(&inhibition_detector_id)
         {
             if self.processor_config.verbose {
-                eprintln!(
-                    "{}",
-                    format!(
-                        "Warning: Trigger '{}' references non-existent inhibition detector ID: {}",
-                        id, inhibition_detector_id
-                    )
-                    .yellow()
-                );
+                self.log_verbose(&format!(
+                    "Warning: Trigger '{}' references non-existent inhibition detector ID: {}",
+                    id, inhibition_detector_id
+                ).yellow().to_string());
             }
             panic!(
                 "Trigger references non-existent inhibition detector ID: {}",
@@ -357,10 +360,7 @@ impl SignalProcessor {
         // Handle the case where inhibition_detector_id is empty string, which is valid
         if inhibition_detector_id.is_empty() {
             if self.processor_config.verbose {
-                eprintln!(
-                    "{}",
-                    format!("Trigger '{}' has no inhibition detector.", id).blue()
-                );
+                self.log_verbose(&format!("Trigger '{}' has no inhibition detector.", id).blue().to_string());
             }
         }
 
@@ -397,6 +397,7 @@ impl SignalProcessor {
 
         // Create a vector to collect trigger events with context
         let mut trigger_events_with_context = Vec::new();
+        let mut error_messages = Vec::new(); // Collect error messages to log after the loop
 
         for sample in raw_samples {
             // Reset and update globals
@@ -459,11 +460,10 @@ impl SignalProcessor {
                     // Verify the trigger index is ahead of or at the current index
                     // A trigger occurring at the current index is valid.
                     if trigger_index < self.index {
-                        eprintln!(
-                            "{}",
-                             format!("Error: Trigger index ({}) for trigger '{}' is behind the current index ({})!",
-                                    trigger_index, id, self.index).red()
-                        );
+                        if self.processor_config.verbose {
+                            error_messages.push(format!("Error: Trigger index ({}) for trigger '{}' is behind the current index ({})!",
+                                   trigger_index, id, self.index));
+                        }
                         continue; // Skip processing for this trigger instance
                     }
 
@@ -515,32 +515,28 @@ impl SignalProcessor {
             self.send_log_event_with_context(context, trigger_id);
         }
 
+        // Log any error messages collected during processing
+        for error_msg in error_messages {
+            self.log_verbose(&error_msg.red().to_string());
+        }
+
         // debug print timing (conditional on verbose flag)
         if self.processor_config.verbose {
             // Use processor_config
             let duration_whole = start_time_whole.elapsed();
-            eprintln!(
-                "{}",
-                format!("Processed chunk in {:?}", duration_whole).blue()
-            );
+            self.log_verbose(&format!("Processed chunk in {:?}", duration_whole).blue().to_string());
 
             // debug print trigger timestamp option
-            eprintln!(
-                "{}",
-                format!("Trigger timestamp option: {:?}", trigger_timestamp_option).color(
-                    if trigger_timestamp_option.is_some() {
-                        "green"
-                    } else {
-                        "red"
-                    }
-                )
-            );
+            self.log_verbose(&format!("Trigger timestamp option: {:?}", trigger_timestamp_option).color(
+                if trigger_timestamp_option.is_some() {
+                    "green"
+                } else {
+                    "red"
+                }
+            ).to_string());
 
             // debug print output length
-            eprintln!(
-                "{}",
-                format!("Output length: {:?}", output.len()).color("yellow")
-            );
+            self.log_verbose(&format!("Output length: {:?}", output.len()).color("yellow").to_string());
         }
 
         return (output, trigger_timestamp_option);
