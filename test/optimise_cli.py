@@ -411,7 +411,7 @@ def create_event_plots(trial_number: int, params: dict, results_per_patient: lis
             plot_event(sig_full, gt_idx_val, gt_idx_full, title, save_path,
                        f_low_param, f_high_param)
         
-        print(f"    📊 Plots saved for Patient {pid} (Trial {trial_number}): {len(tp_events)} TP, {len(fp_events)} FP, {len(fn_events)} FN")
+        print(f"    Plots saved for Patient {pid} (Trial {trial_number}): {len(tp_events)} TP, {len(fp_events)} FP, {len(fn_events)} FN")
 
 # ─────────────────────—— Summary Generation ───────────────────────────────
 def create_trial_summary(trial_number: int, params: dict, results_per_patient: list):
@@ -493,7 +493,7 @@ def create_trial_summary(trial_number: int, params: dict, results_per_patient: l
     with summary_file.open('w') as f:
         json.dump(summary_data, f, indent=2)
     
-    print(f"    📄 Detailed summary saved to {summary_file}")
+    print(f"    Detailed summary saved to {summary_file}")
 
 
 # ─────────────────────—— Optuna Objective Function ─────────────────────────
@@ -768,13 +768,13 @@ def analyze_results_optuna(top_n: int = 20):
     try:
         study = optuna.load_study(study_name=study_name, storage=f"sqlite:///{storage_path}")
     except KeyError:
-        print(f"❌ Optuna study '{study_name}' not found. Run search first.")
+        print(f"Optuna study '{study_name}' not found. Run search first.")
         return
     except Exception as e:
-        print(f"❌ Error loading Optuna study: {e}")
+        print(f"Error loading Optuna study: {e}")
         return
     
-    print("\n📊 Analyzing Optuna study results...")
+    print("\nAnalyzing Optuna study results...")
     
     # Get ALL trials (including pruned ones) - FIX: handle user_attrs properly
     try:
@@ -856,6 +856,11 @@ def analyze_results_optuna(top_n: int = 20):
     
     # Sort by objective score (NaN values will go to end)
     df_sorted = df.sort_values(by="objective_score", ascending=False, na_position='last')
+
+    # Show distribution of check_sinusoidness
+    print(f"\nParameter Distribution:")
+    print(f"check_sinusoidness distribution:")
+    print(df['params_check_sinusoidness'].value_counts())
     
     # Show distribution of check_sinusoidness (if it exists)
     print(f"\n📈 Parameter Distribution:")
@@ -906,12 +911,14 @@ def analyze_results_optuna(top_n: int = 20):
     # Save full summary with all fractions
     summary_csv = RESULTS_DIR / "optuna_study_full_summary.csv"
     df_sorted.to_csv(summary_csv, index=False)
+    print(f"\nFull Optuna study summary (all trials, all fractions) saved to {summary_csv}")
+
     print(f"\n📄 Full Optuna study summary (all trials, all fractions) saved to {summary_csv}")
     
     # Show separate summary for COMPLETE trials only
     df_complete = df_sorted[df_sorted["state"] == "COMPLETE"]
     if not df_complete.empty:
-        print(f"\n🎯 TOP {min(top_n, len(df_complete))} COMPLETE TRIALS ONLY:\n")
+        print(f"\nTOP {min(top_n, len(df_complete))} COMPLETE TRIALS ONLY:\n")
         top_complete_df = df_complete[display_cols].head(top_n)
         top_complete_display = top_complete_df.rename(columns=rename_dict)
         print(top_complete_display.to_string(float_format="%.3f", index=False))
@@ -948,14 +955,14 @@ def show_best_params_optuna():
    try:
        study = optuna.load_study(study_name=study_name, storage=f"sqlite:///{storage_path}")
    except KeyError:
-       print(f"❌ Optuna study '{study_name}' not found. Run search first.")
+       print(f"Optuna study '{study_name}' not found. Run search first.")
        return
    except Exception as e:
-       print(f"❌ Error loading Optuna study: {e}")
+       print(f"Error loading Optuna study: {e}")
        return
 
    if not study.best_trial:
-       print("❌ No completed trials in the study yet to determine the best parameters.")
+       print("No completed trials in the study yet to determine the best parameters.")
        return
 
    best_trial = study.best_trial
@@ -965,13 +972,13 @@ def show_best_params_optuna():
    with best_json.open("w") as f:
        json.dump(best_trial.params, f, indent=2)
    
-   print(f"\n⭐ BEST PARAMETER SET from Optuna (saved to {best_json})")
+   print(f"\nBEST PARAMETER SET from Optuna (saved to {best_json})")
    print(f"   Trial Number: {best_trial.number}")
    print(f"   Optimization Metric: {optimization_metric}")
    print(f"   Best {optimization_metric}: {best_trial.value:.3f}")
    
    # Show breakdown by fraction if available
-   print(f"\n📊 Performance by Fraction:")
+   print(f"\nPerformance by Fraction:")
    print("Fraction | TP | FP | FN | Precision | Recall |   F1   | Objective")
    print("-" * 65)
    for fraction in DATA_FRACTIONS:
@@ -1047,16 +1054,16 @@ def show_trial_summaries():
    summary_dir = RESULTS_DIR / "trial_summaries"
    
    if not summary_dir.exists():
-       print("❌ No trial summaries found. Run search first.")
+       print("No trial summaries found. Run search first.")
        return
    
    summary_files = sorted(summary_dir.glob("trial_*_summary.json"))
    
    if not summary_files:
-       print("❌ No trial summary files found.")
+       print("No trial summary files found.")
        return
    
-   print(f"\n📁 Found {len(summary_files)} trial summaries:")
+   print(f"\nFound {len(summary_files)} trial summaries:")
    
    # Load and display brief info about each trial
    for i, summary_file in enumerate(summary_files):
@@ -1080,9 +1087,9 @@ def show_trial_summaries():
        if 0 <= idx < len(summary_files):
            show_detailed_trial_summary(summary_files[idx])
        else:
-           print("❌ Invalid choice")
+           print("Invalid choice")
    except (ValueError, KeyboardInterrupt):
-       print("\n👋 Exiting")
+                print("\nExiting")
 
 def show_detailed_trial_summary(summary_file: Path):
    """Show detailed information about a specific trial."""
@@ -1095,14 +1102,14 @@ def show_detailed_trial_summary(summary_file: Path):
    patient_details = data['patient_details']
    events = data['event_indices']
    
-   print(f"\n🔍 DETAILED SUMMARY - TRIAL {trial_number}")
+   print(f"\nDETAILED SUMMARY - TRIAL {trial_number}")
    print("=" * 50)
    
-   print(f"\n📋 Parameters:")
+   print(f"\nParameters:")
    for key, value in params.items():
        print(f"    {key}: {value}")
    
-   print(f"\n📊 Overall Statistics:")
+   print(f"\nOverall Statistics:")
    print(f"    Patients: {stats['total_patients']}")
    print(f"    Ground Truth Events: {stats['total_ground_truth']}")
    print(f"    True Positives: {stats['true_positives']}")
@@ -1112,13 +1119,13 @@ def show_detailed_trial_summary(summary_file: Path):
    print(f"    Recall: {stats['recall']:.3f}")
    print(f"    F1 Score: {stats['f1_score']:.3f}")
    
-   print(f"\n👥 Per-Patient Breakdown:")
+   print(f"\nPer-Patient Breakdown:")
    for pid, details in patient_details.items():
        print(f"    Patient {pid}: TP={details['tp_count']} FP={details['fp_count']} "
              f"FN={details['fn_count']} GT={details['gt_total']} "
              f"Prec={details['precision']:.3f} Rec={details['recall']:.3f}")
    
-   print(f"\n🎯 Event Indices:")
+   print(f"\nEvent Indices:")
    print(f"    True Positives ({len(events['true_positives'])}):")
    for i, (pid, det_idx, gt_idx) in enumerate(events['true_positives'][:10]):
        print(f"      {i+1}. Patient {pid}: Detection@{det_idx} matched GT@{gt_idx}")
