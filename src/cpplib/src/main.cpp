@@ -362,9 +362,6 @@ int main(int argc, char *argv[])
       
       // Enable the channel and set it up for continuous recording
       chan_info.smpgroup = 5; // Continuous sampling at 30kHz
-      chan_info.valid = 1;    // Enable the channel
-      chan_info.inpins = 1;   // Set input pin
-      chan_info.outpins = 0;  // No output pins
       chan_info.ainpopts = 0; // Default analog input options
       
       res = cbSdkSetChannelConfig(0, channel, &chan_info);
@@ -375,8 +372,17 @@ int main(int argc, char *argv[])
         continue;
       }
       
-      // Log successful channel configuration
-      std::string config_msg = "C++: Successfully configured channel " + std::to_string(channel) + " for continuous recording";
+      // Enable the channel for data collection
+      res = cbSdkSetChannelMask(0, channel, 1); // 1 = enable, 0 = disable
+      if (res != CBSDKRESULT_SUCCESS) {
+        std::cerr << "ERROR: cbSdkSetChannelMask for channel " << channel << std::endl;
+        delete_signal_processor(rust_processor);
+        processing_thread.join();
+        continue;
+      }
+      
+      // Log successful channel configuration and enabling
+      std::string config_msg = "C++: Successfully configured and enabled channel " + std::to_string(channel) + " for continuous recording";
       log_message(rust_processor, config_msg.c_str());
 
       // Set up trial configuration to get continuous data
