@@ -315,6 +315,9 @@ int main(int argc, char *argv[])
     for (int wait_length : wait_lengths) {
       std::cout << "\n--- Testing with wait length: " << wait_length << "ms ---" << std::endl;
       
+      // Log the start of this iteration for debugging
+      std::cout << "Starting new iteration: Channel " << channel << ", Wait time: " << wait_length << "ms" << std::endl;
+      
       // Update config file with new channel
       if (!update_config_channel(channel)) {
         std::cerr << "Failed to update config for channel " << channel << std::endl;
@@ -332,6 +335,10 @@ int main(int argc, char *argv[])
       }
 
       std::cout << "Successfully created signal processor from config: " << config_path << std::endl;
+
+      // Log the start of this iteration to the Rust processor's log file
+      std::string iteration_msg = "C++: Starting new iteration - Channel " + std::to_string(channel) + ", Wait time: " + std::to_string(wait_length) + "ms";
+      log_message(rust_processor, iteration_msg.c_str());
 
       // Log channel change and wait time to the Rust processor's log file
       std::string channel_msg = "C++: Channel changed to " + std::to_string(channel);
