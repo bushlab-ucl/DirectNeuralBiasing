@@ -11,7 +11,7 @@ use colored::Colorize;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 // Uncomment these imports as we'll need them for logging
-use crate::utils::log::log_to_file; // Assumes log_to_file is in crate::utils::log
+use crate::utils::log::{log_to_file, generate_log_filename, log_config, log_trigger_event, log_verbose}; // Import new logging functions
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 // use rayon::prelude::*;
@@ -64,11 +64,7 @@ impl SignalProcessor {
         let config = load_config(config_path)?;
 
         // Generate timestamp for log filename to avoid overwriting previous sessions
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-        let log_file_name = format!("trigger_debug_{}.log", timestamp);
+        let log_file_name = generate_log_filename("trigger_debug", "log");
 
         // Log the current config to the log file
         if config.processor.enable_debug_logging {
@@ -82,21 +78,10 @@ impl SignalProcessor {
                 }
             };
             
-            let config_log = format!(
-                "Signal Processor Config Loaded:\n\
-                Config Path: {}\n\
-                \n\
-                Full Configuration:\n\
-                {}",
-                config_path,
-                config_yaml
-            );
-            
             // Debug: Print to console as well
             eprintln!("Attempting to log config to logs/{}", log_file_name);
-            eprintln!("Config log content:\n{}", config_log);
             
-            match log_to_file(&log_file_name, &config_log) {
+            match log_config(&log_file_name, config_path, &config_yaml) {
                 Ok(_) => eprintln!("Successfully logged config to logs/{}", log_file_name),
                 Err(e) => eprintln!("Failed to log config to file: {}", e),
             }
@@ -208,74 +193,8 @@ impl SignalProcessor {
             let _ = log_to_file(&log_file_name, "Signal processor trigger logging started");
 
             while let Ok((context_results, trigger_id)) = rx.recv() {
-                // Get current timestamp for the log
-                let timestamp = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap_or(Duration::from_secs(0))
-                    .as_secs_f64();
-
-                // Format the trigger event information
-                let mut log_entry = format!("TRIGGER EVENT [{}]\n", timestamp);
-
-                // Add trigger ID
-                log_entry.push_str(&format!("Trigger ID: {}\n\n", trigger_id));
-
-                // Log context samples
-                log_entry.push_str("CONTEXT SAMPLES:\n");
-                log_entry.push_str("================\n");
-
-                for (i, sample_results) in context_results.iter().enumerate() {
-                    let is_trigger_sample = i == context_results.len() - 1; // Last sample is the trigger
-                    let marker = if is_trigger_sample {
-                        " >>> TRIGGER SAMPLE <<<"
-                    } else {
-                        ""
-                    };
-
-                    log_entry.push_str(&format!(
-                        "Sample {} (relative index: {}){}:\n",
-                        i,
-                        i as isize - context_results.len() as isize + 1,
-                        marker
-                    ));
-
-                    // Get index for this sample
-                    if let Some(&index) = sample_results.get("global:index") {
-                        log_entry.push_str(&format!("  global:index = {}\n", index));
-                    }
-
-                    // Get timestamp
-                    if let Some(&timestamp) = sample_results.get("global:timestamp_ms") {
-                        log_entry.push_str(&format!("  global:timestamp_ms = {}\n", timestamp));
-                    }
-
-                    // Get raw sample
-                    if let Some(&raw) = sample_results.get("global:raw_sample") {
-                        log_entry.push_str(&format!("  global:raw_sample = {}\n", raw));
-                    }
-
-                    // Add key detector/trigger values for the trigger sample
-                    if is_trigger_sample {
-                        let mut keys: Vec<&&'static str> = sample_results.keys().collect();
-                        keys.sort();
-
-                        for &key in keys {
-                            if key.contains("detected")
-                                || key.contains("triggered")
-                                || key.contains("z_score")
-                            {
-                                if let Some(value) = sample_results.get(key) {
-                                    log_entry.push_str(&format!("  {} = {}\n", key, value));
-                                }
-                            }
-                        }
-                    }
-
-                    log_entry.push_str("\n");
-                }
-
-                // Log the event to file
-                if let Err(e) = log_to_file(&log_file_name, &log_entry) {
+                // Log the trigger event using the new function
+                if let Err(e) = log_trigger_event(&log_file_name, &trigger_id, &context_results) {
                     eprintln!("{}", format!("Failed to log trigger event: {}", e).red());
                 }
             }
@@ -286,14 +205,8 @@ impl SignalProcessor {
 
     /// Logs a message to both terminal and file when verbose logging is enabled
     fn log_verbose(&self, message: &str) {
-        // Always print to terminal when verbose is enabled
-        eprintln!("{}", message);
-        
-        // Also log to file if debug logging is enabled
-        if self.processor_config.enable_debug_logging {
-            if let Err(e) = log_to_file(&self.log_file_name, message) {
-                eprintln!("Failed to log verbose message to file: {}", e);
-            }
+        if let Err(e) = log_verbose(&self.log_file_name, message, self.processor_config.enable_debug_logging) {
+            eprintln!("Failed to log verbose message: {}", e);
         }
     }
 

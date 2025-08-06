@@ -4,6 +4,34 @@ use std::fs::{OpenOptions, remove_file}; // Import remove_file
 use std::io::{self, Write, ErrorKind}; // Import ErrorKind
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
+use std::collections::HashMap;
+use std::time::Duration;
+
+/// Generates a formatted timestamp string in the format yyyy-mm-dd_hh:mm:ss
+///
+/// # Returns
+///
+/// * `String` - The formatted timestamp
+pub fn generate_formatted_timestamp() -> String {
+    let now = SystemTime::now();
+    let datetime = chrono::DateTime::<chrono::Utc>::from(now);
+    datetime.format("%Y-%m-%d_%H:%M:%S").to_string()
+}
+
+/// Generates a log filename with formatted timestamp
+///
+/// # Arguments
+///
+/// * `prefix` - The prefix for the log file name
+/// * `suffix` - The suffix/extension for the log file name
+///
+/// # Returns
+///
+/// * `String` - The complete log filename
+pub fn generate_log_filename(prefix: &str, suffix: &str) -> String {
+    let timestamp = generate_formatted_timestamp();
+    format!("{}_{}.{}", prefix, timestamp, suffix)
+}
 
 /// Logs a message to a file with timestamp
 ///
@@ -44,6 +72,139 @@ pub fn log_to_file(filename: &str, message: &str) -> io::Result<()> {
     // Ensure the data is written to disk
     file.flush()?;
 
+    Ok(())
+}
+
+/// Logs configuration information to a file
+///
+/// # Arguments
+///
+/// * `filename` - The name of the log file
+/// * `config_path` - The path to the configuration file
+/// * `config_yaml` - The YAML configuration content
+///
+/// # Returns
+///
+/// * `io::Result<()>` - Success or error result
+pub fn log_config(filename: &str, config_path: &str, config_yaml: &str) -> io::Result<()> {
+    let config_log = format!(
+        "Signal Processor Config Loaded:\n\
+        Config Path: {}\n\
+        \n\
+        Full Configuration:\n\
+        {}",
+        config_path,
+        config_yaml
+    );
+    
+    log_to_file(filename, &config_log)
+}
+
+/// Logs a trigger event with context samples
+///
+/// # Arguments
+///
+/// * `filename` - The name of the log file
+/// * `trigger_id` - The ID of the triggered event
+/// * `context_results` - Vector of sample results for context
+///
+/// # Returns
+///
+/// * `io::Result<()>` - Success or error result
+pub fn log_trigger_event(
+    filename: &str, 
+    trigger_id: &str, 
+    context_results: &[HashMap<&'static str, f64>]
+) -> io::Result<()> {
+    // Get current timestamp for the log
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or(Duration::from_secs(0))
+        .as_secs_f64();
+
+    // Format the trigger event information
+    let mut log_entry = format!("TRIGGER EVENT [{}]\n", timestamp);
+
+    // Add trigger ID
+    log_entry.push_str(&format!("Trigger ID: {}\n\n", trigger_id));
+
+    // Log context samples
+    log_entry.push_str("CONTEXT SAMPLES:\n");
+    log_entry.push_str("================\n");
+
+    for (i, sample_results) in context_results.iter().enumerate() {
+        let is_trigger_sample = i == context_results.len() - 1; // Last sample is the trigger
+        let marker = if is_trigger_sample {
+            " >>> TRIGGER SAMPLE <<<"
+        } else {
+            ""
+        };
+
+        log_entry.push_str(&format!(
+            "Sample {} (relative index: {}){}:\n",
+            i,
+            i as isize - context_results.len() as isize + 1,
+            marker
+        ));
+
+        // Get index for this sample
+        if let Some(&index) = sample_results.get("global:index") {
+            log_entry.push_str(&format!("  global:index = {}\n", index));
+        }
+
+        // Get timestamp
+        if let Some(&timestamp) = sample_results.get("global:timestamp_ms") {
+            log_entry.push_str(&format!("  global:timestamp_ms = {}\n", timestamp));
+        }
+
+        // Get raw sample
+        if let Some(&raw) = sample_results.get("global:raw_sample") {
+            log_entry.push_str(&format!("  global:raw_sample = {}\n", raw));
+        }
+
+        // Add key detector/trigger values for the trigger sample
+        if is_trigger_sample {
+            let mut keys: Vec<&&'static str> = sample_results.keys().collect();
+            keys.sort();
+
+            for &key in keys {
+                if key.contains("detected")
+                    || key.contains("triggered")
+                    || key.contains("z_score")
+                {
+                    if let Some(value) = sample_results.get(key) {
+                        log_entry.push_str(&format!("  {} = {}\n", key, value));
+                    }
+                }
+            }
+        }
+
+        log_entry.push_str("\n");
+    }
+
+    log_to_file(filename, &log_entry)
+}
+
+/// Logs a message to both terminal and file
+///
+/// # Arguments
+///
+/// * `filename` - The name of the log file
+/// * `message` - The message to log
+/// * `enable_file_logging` - Whether to also log to file
+///
+/// # Returns
+///
+/// * `io::Result<()>` - Success or error result
+pub fn log_verbose(filename: &str, message: &str, enable_file_logging: bool) -> io::Result<()> {
+    // Always print to terminal
+    eprintln!("{}", message);
+    
+    // Also log to file if enabled
+    if enable_file_logging {
+        log_to_file(filename, message)?;
+    }
+    
     Ok(())
 }
 
