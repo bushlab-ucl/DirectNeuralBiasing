@@ -721,7 +721,7 @@ def run_optuna_search(patient_ids: List[int], max_workers: int, n_trials: int,
         except KeyboardInterrupt:
             print("\nOptuna optimization interrupted by user.")
 
-        print("\n✅ Optuna search completed!")
+        print("\n Optuna search completed!")
         if study.best_trial:
             print(f"Best trial number: {study.best_trial.number}")
             print(f"Best parameters: {study.best_params}")
@@ -751,7 +751,7 @@ def run_optuna_search(patient_ids: List[int], max_workers: int, n_trials: int,
             
             # Create plots only for top trials to avoid too many plots
             if create_plots and i < 10:  # Only plot top 10 trials
-                print(f"  🎨 Creating plots for Trial {trial.number}...")
+                print(f"   Creating plots for Trial {trial.number}...")
                 create_event_plots(trial.number, trial.params, full_trial_data['results_per_patient'])
         else:
             print(f"  Warning: Full results for trial {trial.number} not found. Skipping detailed summary and plots.")
@@ -863,7 +863,7 @@ def analyze_results_optuna(top_n: int = 20):
     print(df['params_check_sinusoidness'].value_counts())
     
     # Show distribution of check_sinusoidness (if it exists)
-    print(f"\n📈 Parameter Distribution:")
+    print(f"\n Parameter Distribution:")
     if 'params_check_sinusoidness' in df.columns:
         print(f"check_sinusoidness distribution:")
         print(df['params_check_sinusoidness'].value_counts())
@@ -913,7 +913,7 @@ def analyze_results_optuna(top_n: int = 20):
     df_sorted.to_csv(summary_csv, index=False)
     print(f"\nFull Optuna study summary (all trials, all fractions) saved to {summary_csv}")
 
-    print(f"\n📄 Full Optuna study summary (all trials, all fractions) saved to {summary_csv}")
+    print(f"\n Full Optuna study summary (all trials, all fractions) saved to {summary_csv}")
     
     # Show separate summary for COMPLETE trials only
     df_complete = df_sorted[df_sorted["state"] == "COMPLETE"]
@@ -927,7 +927,7 @@ def analyze_results_optuna(top_n: int = 20):
     if not df_complete.empty and 'user_attrs' in df_complete.columns:
         best_trial_row = df_complete.iloc[0]
         if isinstance(best_trial_row['user_attrs'], dict) and best_trial_row['user_attrs']:
-            print(f"\n📊 BEST TRIAL ({best_trial_row['number']}) FRACTION BREAKDOWN:")
+            print(f"\n BEST TRIAL ({best_trial_row['number']}) FRACTION BREAKDOWN:")
             print("Fraction | TP | FP | FN | Precision | Recall |   F1   | Objective")
             print("-" * 65)
             for fraction in DATA_FRACTIONS:
