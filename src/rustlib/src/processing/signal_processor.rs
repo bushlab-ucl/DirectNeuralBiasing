@@ -3,6 +3,7 @@ use super::filters::FilterInstance;
 use super::triggers::TriggerInstance;
 
 use serde::{Deserialize, Serialize};
+use serde_yaml;
 use std::collections::{HashMap, VecDeque};
 // use std::time;
 
@@ -61,11 +62,24 @@ impl SignalProcessor {
         // Load the entire config from the file
         let config = load_config(config_path)?;
 
+        // Generate timestamp for log filename to avoid overwriting previous sessions
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let log_file_name = format!("trigger_debug_{}.log", timestamp);
+
         // Log the current config to the log file
         if config.processor.enable_debug_logging {
             // Convert config back to YAML format for logging
-            let config_yaml = serde_yaml::to_string(&config)
-                .unwrap_or_else(|_| "Failed to serialize config to YAML".to_string());
+            let config_yaml_result = serde_yaml::to_string(&config);
+            let config_yaml = match config_yaml_result {
+                Ok(yaml) => yaml,
+                Err(e) => {
+                    eprintln!("Failed to serialize config to YAML: {}", e);
+                    format!("Failed to serialize config to YAML: {}", e)
+                }
+            };
             
             let config_log = format!(
                 "Signal Processor Config Loaded:\n\
@@ -76,7 +90,15 @@ impl SignalProcessor {
                 config_path,
                 config_yaml
             );
-            let _ = log_to_file("trigger_debug.log", &config_log);
+            
+            // Debug: Print to console as well
+            eprintln!("Attempting to log config to logs/{}", log_file_name);
+            eprintln!("Config log content:\n{}", config_log);
+            
+            match log_to_file(&log_file_name, &config_log) {
+                Ok(_) => eprintln!("Successfully logged config to logs/{}", log_file_name),
+                Err(e) => eprintln!("Failed to log config to file: {}", e),
+            }
         }
 
         // Get context size from config or use default
@@ -87,7 +109,7 @@ impl SignalProcessor {
             // Set up logging thread only if debug logging is enabled
             let (tx, rx) = mpsc::channel();
             // We can keep setup_logging_thread as a private helper within the impl
-            SignalProcessor::setup_logging_thread(rx);
+            SignalProcessor::setup_logging_thread(rx, log_file_name.clone());
             Some(tx)
         } else {
             None
@@ -163,25 +185,25 @@ impl SignalProcessor {
     }
 
     // We keep setup_logging_thread as a private helper method
-    fn setup_logging_thread(rx: Receiver<(Vec<HashMap<&'static str, f64>>, String)>) {
+    fn setup_logging_thread(rx: Receiver<(Vec<HashMap<&'static str, f64>>, String)>, log_file_name: String) {
         thread::spawn(move || {
-            let log_file_name = "trigger_debug.log";
 
-            // --- Call the new function to delete the old log file ---
-            if let Err(e) = crate::utils::log::delete_log_file(log_file_name) {
-                eprintln!(
-                    "{}",
-                    format!(
-                        "Warning: Failed to delete old log file '{}': {}",
-                        log_file_name, e
-                    )
-                    .yellow()
-                );
-                // Continue execution even if deletion failed, just warn the user.
-            }
-            // --- End of call ---
+            // remove comments to overwrite logs on each load
+            // // --- Call the new function to delete the old log file ---
+            // if let Err(e) = crate::utils::log::delete_log_file(log_file_name) {
+            //     eprintln!(
+            //         "{}",
+            //         format!(
+            //             "Warning: Failed to delete old log file '{}': {}",
+            //             log_file_name, e
+            //         )
+            //         .yellow()
+            //     );
+            //     // Continue execution even if deletion failed, just warn the user.
+            // }
+            // // --- End of call ---
 
-            let _ = log_to_file(log_file_name, "Signal processor trigger logging started");
+            let _ = log_to_file(&log_file_name, "Signal processor trigger logging started");
 
             while let Ok((context_results, trigger_id)) = rx.recv() {
                 // Get current timestamp for the log
@@ -251,12 +273,12 @@ impl SignalProcessor {
                 }
 
                 // Log the event to file
-                if let Err(e) = log_to_file(log_file_name, &log_entry) {
+                if let Err(e) = log_to_file(&log_file_name, &log_entry) {
                     eprintln!("{}", format!("Failed to log trigger event: {}", e).red());
                 }
             }
             // Log shutdown message when sender is dropped and channel is empty
-            let _ = log_to_file(log_file_name, "Signal processor trigger logging shut down.");
+            let _ = log_to_file(&log_file_name, "Signal processor trigger logging shut down.");
         });
     }
 

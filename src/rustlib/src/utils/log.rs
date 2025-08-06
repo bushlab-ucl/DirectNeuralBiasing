@@ -115,6 +115,7 @@ pub fn log_csv(filename: &str, headers: &[&str], data: &[&str]) -> io::Result<()
 /// # Returns
 ///
 /// * `io::Result<()>` - Success if the file was deleted or didn't exist, or an error if deletion failed for another reason.
+#[allow(dead_code)]
 pub fn delete_log_file(filename: &str) -> io::Result<()> {
     let log_dir = "logs";
     let path = format!("{}/{}", log_dir, filename);
