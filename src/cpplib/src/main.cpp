@@ -353,18 +353,47 @@ int main(int argc, char *argv[])
       // Configure the channel (continuous recording at 30kHz)
       cbPKT_CHANINFO chan_info;
       res = cbSdkGetChannelConfig(0, channel, &chan_info);
+      if (res != CBSDKRESULT_SUCCESS) {
+        std::cerr << "ERROR: cbSdkGetChannelConfig for channel " << channel << std::endl;
+        delete_signal_processor(rust_processor);
+        processing_thread.join();
+        continue;
+      }
+      
+      // Enable the channel and set it up for continuous recording
       chan_info.smpgroup = 5; // Continuous sampling at 30kHz
+      chan_info.valid = 1;    // Enable the channel
+      chan_info.inpins = 1;   // Set input pin
+      chan_info.outpins = 0;  // No output pins
+      chan_info.ainpopts = 0; // Default analog input options
+      
       res = cbSdkSetChannelConfig(0, channel, &chan_info);
+      if (res != CBSDKRESULT_SUCCESS) {
+        std::cerr << "ERROR: cbSdkSetChannelConfig for channel " << channel << std::endl;
+        delete_signal_processor(rust_processor);
+        processing_thread.join();
+        continue;
+      }
+      
+      // Log successful channel configuration
+      std::string config_msg = "C++: Successfully configured channel " + std::to_string(channel) + " for continuous recording";
+      log_message(rust_processor, config_msg.c_str());
 
       // Set up trial configuration to get continuous data
       res = cbSdkSetTrialConfig(0, 1, 0, 0, 0, 0, 0, 0, false, 0, buffer_size, 0, 0, 0, true);
       if (res != CBSDKRESULT_SUCCESS)
       {
-        std::cerr << "ERROR: cbSdkSetTrialConfig" << std::endl;
+        std::cerr << "ERROR: cbSdkSetTrialConfig failed with error code: " << res << std::endl;
+        std::string error_msg = "C++: Failed to set trial config, error code: " + std::to_string(res);
+        log_message(rust_processor, error_msg.c_str());
         delete_signal_processor(rust_processor);
         processing_thread.join();
         continue;
       }
+      
+      // Log successful trial configuration
+      std::string trial_msg = "C++: Successfully set trial configuration with buffer size: " + std::to_string(buffer_size);
+      log_message(rust_processor, trial_msg.c_str());
 
       Sleep(wait_length); // Wait for specified length to allow data to start flowing
 
@@ -379,11 +408,16 @@ int main(int argc, char *argv[])
       res = cbSdkInitTrialData(0, 1, NULL, &trial, NULL, NULL);
       if (res != CBSDKRESULT_SUCCESS)
       {
-        std::cerr << "ERROR: cbSdkInitTrialData" << std::endl;
+        std::cerr << "ERROR: cbSdkInitTrialData failed with error code: " << res << std::endl;
+        std::string error_msg = "C++: Failed to initialize trial data, error code: " + std::to_string(res);
+        log_message(rust_processor, error_msg.c_str());
         delete_signal_processor(rust_processor);
         processing_thread.join();
         continue;
       }
+      
+      // Log successful trial data initialization
+      log_message(rust_processor, "C++: Successfully initialized trial data structure");
 
       // Test data collection for a short period
       auto start_test = std::chrono::steady_clock::now();
@@ -440,6 +474,17 @@ int main(int argc, char *argv[])
               filling_buffer_index = (filling_buffer_index + 1) % num_buffers;
               processed_samples += chunk_size;
             }
+          }
+        }
+        else
+        {
+          // Log when we get no trial data
+          static int no_data_count = 0;
+          no_data_count++;
+          if (no_data_count % 10 == 0) // Log every 10th attempt to avoid spam
+          {
+            std::string no_data_msg = "C++: No trial data available (attempt " + std::to_string(no_data_count) + "), error code: " + std::to_string(res);
+            log_message(rust_processor, no_data_msg.c_str());
           }
         }
         Sleep(100);
