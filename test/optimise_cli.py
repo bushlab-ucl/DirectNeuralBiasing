@@ -872,7 +872,7 @@ def analyze_results_optuna(top_n: int = 20):
     
     # Display top results with TP/FP/FN for final fraction
     final_fraction = DATA_FRACTIONS[-1]
-    print(f"\n🏆 TOP {top_n} TRIALS (by objective score, showing final fraction {final_fraction})\n")
+    print(f"\nTOP {top_n} TRIALS (by objective score, showing final fraction {final_fraction})\n")
     
     # Build display columns dynamically
     display_cols = ["number", "state", "objective_score"]
