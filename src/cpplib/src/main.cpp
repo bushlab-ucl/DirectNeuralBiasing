@@ -428,16 +428,10 @@ int main(int argc, char *argv[])
       std::cout << "Channel configuration restored successfully" << std::endl;
     }
     
-    // Clear any channel masks that might have been set
-    res = cbSdkSetChannelMask(0, g_channel, 0); // Disable any masks
-    if (res != CBSDKRESULT_SUCCESS)
-    {
-      std::cerr << "WARNING: Failed to clear channel mask (code " << res << ")" << std::endl;
-    }
-    else
-    {
-      std::cout << "Channel masks cleared" << std::endl;
-    }
+          // Note: We don't call cbSdkSetChannelMask here because:
+      // 1. We never set channel masks for continuous acquisition
+      // 2. cbSdkSetChannelMask is for trial-based data, not continuous streaming
+      // 3. Calling it unnecessarily could interfere with other applications
     
     // Clean up global variables
     delete g_original_chan_info;
