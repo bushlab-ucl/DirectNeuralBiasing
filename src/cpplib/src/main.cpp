@@ -100,11 +100,39 @@ int get_channel_from_config(const std::string &config_path)
 // ──────────────────────────────────────────────────────────────
 //                 Windows console Ctrl+C handler
 // ──────────────────────────────────────────────────────────────
+// Global variables for cleanup
+cbPKT_CHANINFO* g_original_chan_info = nullptr;
+int g_channel = -1;
+bool g_channel_configured = false;
+
 BOOL WINAPI ConsoleHandler(DWORD signal)
 {
   if (signal == CTRL_C_EVENT)
   {
     std::cout << "\nCTRL+C received – shutting down…" << std::endl;
+    
+    // Restore channel configuration if it was modified
+    if (g_channel_configured && g_original_chan_info != nullptr && g_channel > 0)
+    {
+      std::cout << "Restoring channel configuration due to Ctrl+C..." << std::endl;
+      cbSdkResult res = cbSdkSetChannelConfig(0, g_channel, g_original_chan_info);
+      if (res != CBSDKRESULT_SUCCESS)
+      {
+        std::cerr << "WARNING: Failed to restore channel config on Ctrl+C (code " << res << ")" << std::endl;
+      }
+      else
+      {
+        std::cout << "Channel configuration restored successfully" << std::endl;
+      }
+      
+      // Clear any channel masks
+      res = cbSdkSetChannelMask(0, g_channel, 0);
+      if (res != CBSDKRESULT_SUCCESS)
+      {
+        std::cerr << "WARNING: Failed to clear channel mask on Ctrl+C (code " << res << ")" << std::endl;
+      }
+    }
+    
     stop_processing = true;
     buffer_cv.notify_all();
     return TRUE;
@@ -281,6 +309,7 @@ int main(int argc, char *argv[])
 
   // ── Configure Blackrock channel ──────────────────────────
   cbPKT_CHANINFO chan_info;
+  
   res = cbSdkGetChannelConfig(0, channel, &chan_info);
   if (res != CBSDKRESULT_SUCCESS)
   {
@@ -288,14 +317,23 @@ int main(int argc, char *argv[])
     return 1;
   }
 
-    chan_info.smpgroup = 5; // Continuous 30 kHz
+  // Store original configuration for cleanup (global variables for Ctrl+C handler)
+  g_original_chan_info = new cbPKT_CHANINFO(chan_info);
+  g_channel = channel;
+  
+  // Configure for continuous acquisition
+  chan_info.smpgroup = 5; // Continuous 30 kHz
   chan_info.ainpopts = 0;
   res = cbSdkSetChannelConfig(0, channel, &chan_info);
   if (res != CBSDKRESULT_SUCCESS)
   {
     std::cerr << "ERROR: cbSdkSetChannelConfig (code " << res << ")" << std::endl;
+    delete g_original_chan_info;
+    g_original_chan_info = nullptr;
     return 1;
   }
+  
+  g_channel_configured = true;
 
   // Note: cbSdkSetChannelMask is not needed for continuous acquisition
   // It's used for trial-based data collection, not continuous streaming
@@ -375,6 +413,38 @@ int main(int argc, char *argv[])
 
   // ── Cleanup ──────────────────────────────────────────────
   log_message(rust_processor, "C++: Shutting down");
+  
+  // Restore original channel configuration to prevent persistent effects
+  if (g_channel_configured && g_original_chan_info != nullptr)
+  {
+    std::cout << "Restoring original channel configuration..." << std::endl;
+    res = cbSdkSetChannelConfig(0, g_channel, g_original_chan_info);
+    if (res != CBSDKRESULT_SUCCESS)
+    {
+      std::cerr << "WARNING: Failed to restore channel config (code " << res << ")" << std::endl;
+    }
+    else
+    {
+      std::cout << "Channel configuration restored successfully" << std::endl;
+    }
+    
+    // Clear any channel masks that might have been set
+    res = cbSdkSetChannelMask(0, g_channel, 0); // Disable any masks
+    if (res != CBSDKRESULT_SUCCESS)
+    {
+      std::cerr << "WARNING: Failed to clear channel mask (code " << res << ")" << std::endl;
+    }
+    else
+    {
+      std::cout << "Channel masks cleared" << std::endl;
+    }
+    
+    // Clean up global variables
+    delete g_original_chan_info;
+    g_original_chan_info = nullptr;
+    g_channel_configured = false;
+  }
+  
   for (int i = 0; i < cbNUM_ANALOG_CHANS; ++i)
   {
     free(trial.samples[i]);
