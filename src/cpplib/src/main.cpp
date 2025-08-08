@@ -297,13 +297,9 @@ int main(int argc, char *argv[])
     return 1;
   }
 
-  res = cbSdkSetChannelMask(0, channel, 1); // Enable channel
-  if (res != CBSDKRESULT_SUCCESS)
-  {
-    std::cerr << "ERROR: cbSdkSetChannelMask (code " << res << ")" << std::endl;
-    return 1;
-  }
-  log_message(rust_processor, "C++: Channel configured and enabled for continuous acquisition");
+  // Note: cbSdkSetChannelMask is not needed for continuous acquisition
+  // It's used for trial-based data collection, not continuous streaming
+  log_message(rust_processor, "C++: Channel configured for continuous acquisition");
 
   // ── Trial configuration ──────────────────────────────────
   res = cbSdkSetTrialConfig(0, 1, 0, 0, 0, 0, 0, 0, false, 0, buffer_size, 0, 0, 0, true);
