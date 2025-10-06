@@ -486,6 +486,28 @@ int main(int argc, char *argv[])
   }
   std::cout << "CBSDK opened successfully!" << std::endl;
 
+  // ── Print Debug to check connection issues  ──────────────────────
+  // After cbSdkOpen
+  cbSdkConnectionType conType;
+  cbSdkInstrumentType instType;
+  cbSdkGetType(0, &conType, &instType);
+  std::cout << "Connection type: " << (conType == CBSDKCONNECTION_CENTRAL ? "Central" : 
+                                      conType == CBSDKCONNECTION_UDP ? "UDP" : "Default") << std::endl;
+
+  // Before modifying channel config
+  cbPKT_CHANINFO chan_info;
+  cbSdkGetChannelConfig(0, channel, &chan_info);
+  std::cout << "BEFORE modification - smpgroup: " << chan_info.smpgroup << std::endl;
+  std::cout << "BEFORE modification - ainpopts: " << chan_info.ainpopts << std::endl;
+
+  // After modifying channel config
+  std::cout << "AFTER modification - smpgroup: " << chan_info.smpgroup << std::endl;
+
+  // Check trial status before setting
+  uint32_t bActive = 0;
+  cbSdkGetTrialConfig(0, &bActive);
+  std::cout << "Trial already active: " << (bActive ? "YES" : "NO") << std::endl;
+
   // ── Create Rust signal processor ─────────────────────────
   void *rust_processor = create_signal_processor_from_config(config_path);
   if (!rust_processor)
