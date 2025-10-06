@@ -64,7 +64,7 @@ bool enable_logging = false;
 const size_t MAX_QUEUE_SIZE = 1000; // ~4MB of buffering (1000 chunks * 4096 samples * 8 bytes / chunk)
 
 // Background thread for writing data to file
-void data_logging_thread(const std::string& filename)
+void data_logging_thread(const std::string &filename)
 {
   std::ofstream outfile(filename, std::ios::binary);
   if (!outfile.is_open())
@@ -75,21 +75,20 @@ void data_logging_thread(const std::string& filename)
   }
 
   std::cout << "Data logging started: " << filename << std::endl;
-  
+
   size_t total_samples_written = 0;
   size_t chunks_written = 0;
-  
+
   while (true)
   {
     LogChunk chunk;
-    
+
     // Wait for data in the queue
     {
       std::unique_lock<std::mutex> lock(log_queue_mutex);
-      log_queue_cv.wait(lock, []() {
-        return stop_logging || !log_queue.empty();
-      });
-      
+      log_queue_cv.wait(lock, []()
+                        { return stop_logging || !log_queue.empty(); });
+
       // Process remaining queue items even after stop signal
       if (log_queue.empty())
       {
@@ -98,74 +97,73 @@ void data_logging_thread(const std::string& filename)
         else
           continue;
       }
-      
+
       // Get the next chunk from queue
       chunk = std::move(log_queue.front());
       log_queue.pop();
-      
+
       // Notify if we were blocking due to full queue
       if (log_queue.size() < MAX_QUEUE_SIZE)
       {
         log_queue_cv.notify_all();
       }
     }
-    
+
     // Write to file (outside the lock for performance)
     if (!chunk.data.empty())
     {
-      outfile.write(reinterpret_cast<const char*>(chunk.data.data()), 
+      outfile.write(reinterpret_cast<const char *>(chunk.data.data()),
                     chunk.data.size() * sizeof(double));
       total_samples_written += chunk.data.size();
       chunks_written++;
-      
+
       // Periodic progress report
       if (chunks_written % 1000 == 0)
       {
-        std::cout << "Logged " << chunks_written << " chunks (" 
+        std::cout << "Logged " << chunks_written << " chunks ("
                   << (total_samples_written / 30000.0) << " seconds of data)" << std::endl;
       }
     }
   }
-  
+
   outfile.close();
-  std::cout << "Data logging stopped. Total samples written: " << total_samples_written 
+  std::cout << "Data logging stopped. Total samples written: " << total_samples_written
             << " (" << (total_samples_written / 30000.0) << " seconds)" << std::endl;
 }
 
 // Add data to logging queue (with backpressure handling)
-void log_data_chunk(const double* data, size_t length)
+void log_data_chunk(const double *data, size_t length)
 {
   if (!enable_logging)
     return;
-  
+
   std::unique_lock<std::mutex> lock(log_queue_mutex);
-  
+
   // Wait if queue is full (applies backpressure to acquisition)
   if (log_queue.size() >= MAX_QUEUE_SIZE)
   {
     static bool warned = false;
     if (!warned)
     {
-      std::cerr << "WARNING: Log queue full (" << MAX_QUEUE_SIZE 
+      std::cerr << "WARNING: Log queue full (" << MAX_QUEUE_SIZE
                 << " chunks). Waiting for disk I/O to catch up..." << std::endl;
       std::cerr << "This will slow down real-time acquisition. Consider using a faster disk." << std::endl;
       warned = true;
     }
-    
+
     // Wait for queue to have space (with timeout to check stop flag)
-    log_queue_cv.wait_for(lock, std::chrono::milliseconds(100), []() {
-      return log_queue.size() < MAX_QUEUE_SIZE || stop_logging;
-    });
-    
+    log_queue_cv.wait_for(lock, std::chrono::milliseconds(100), []()
+                          { return log_queue.size() < MAX_QUEUE_SIZE || stop_logging; });
+
     if (stop_logging)
       return;
   }
-  
+
   // Create new chunk and copy data
   LogChunk chunk;
   chunk.data.assign(data, data + length);
   log_queue.push(std::move(chunk));
-  
+
   // Notify logging thread
   log_queue_cv.notify_one();
 }
@@ -260,7 +258,7 @@ bool get_save_raw_data_from_config(const std::string &config_path)
 //                 Windows console Ctrl+C handler
 // ──────────────────────────────────────────────────────────────
 // Global variables for cleanup
-cbPKT_CHANINFO* g_original_chan_info = nullptr;
+cbPKT_CHANINFO *g_original_chan_info = nullptr;
 int g_channel = -1;
 bool g_channel_configured = false;
 
@@ -269,7 +267,7 @@ BOOL WINAPI ConsoleHandler(DWORD signal)
   if (signal == CTRL_C_EVENT)
   {
     std::cout << "\nCTRL+C received – shutting down…" << std::endl;
-    
+
     // Restore channel configuration if it was modified
     if (g_channel_configured && g_original_chan_info != nullptr && g_channel > 0)
     {
@@ -283,7 +281,7 @@ BOOL WINAPI ConsoleHandler(DWORD signal)
       {
         std::cout << "Channel configuration restored successfully" << std::endl;
       }
-      
+
       // Clear any channel masks
       res = cbSdkSetChannelMask(0, g_channel, 0);
       if (res != CBSDKRESULT_SUCCESS)
@@ -291,7 +289,7 @@ BOOL WINAPI ConsoleHandler(DWORD signal)
         std::cerr << "WARNING: Failed to clear channel mask on Ctrl+C (code " << res << ")" << std::endl;
       }
     }
-    
+
     stop_processing = true;
     stop_logging = true;
     buffer_cv.notify_all();
@@ -321,12 +319,12 @@ std::string generate_log_filename(int channel)
 {
   // Create data directory if it doesn't exist
   CreateDirectoryA("./data", NULL);
-  
+
   auto now = std::chrono::system_clock::now();
   std::time_t time_t = std::chrono::system_clock::to_time_t(now);
   char time_str[100];
   std::strftime(time_str, sizeof(time_str), "%Y%m%d_%H%M%S", std::localtime(&time_t));
-  
+
   std::ostringstream oss;
   oss << "./data/raw_data_ch" << channel << "_" << time_str << ".bin";
   return oss.str();
@@ -464,7 +462,7 @@ int main(int argc, char *argv[])
     channel = 65;
   }
   std::cout << "Using channel " << channel << " from config.yaml" << std::endl;
-  
+
   // Check if we should save raw data
   enable_logging = get_save_raw_data_from_config(config_path);
   if (enable_logging)
@@ -476,22 +474,37 @@ int main(int argc, char *argv[])
     std::cout << "Raw data logging DISABLED" << std::endl;
   }
 
+  // // ── Open Blackrock CBSDK connection ──────────────────────
+  // std::cout << "Attempting to open CBSDK…" << std::endl;
+  // cbSdkResult res = cbSdkOpen(0, CBSDKCONNECTION_DEFAULT);
+  // if (res != CBSDKRESULT_SUCCESS)
+  // {
+  //   std::cerr << "ERROR: cbSdkOpen failed (code " << res << ")" << std::endl;
+  //   return 1;
+  // }
+  // std::cout << "CBSDK opened successfully!" << std::endl;
+
   // ── Open Blackrock CBSDK connection ──────────────────────
-  std::cout << "Attempting to open CBSDK…" << std::endl;
-  cbSdkResult res = cbSdkOpen(0, CBSDKCONNECTION_DEFAULT);
+  std::cout << "Attempting to open CBSDK with UDP (multi-app safe)…" << std::endl;
+  cbSdkResult res = cbSdkOpen(0, CBSDKCONNECTION_UDP);
   if (res != CBSDKRESULT_SUCCESS)
   {
-    std::cerr << "ERROR: cbSdkOpen failed (code " << res << ")" << std::endl;
-    return 1;
+    std::cout << "UDP failed (code " << res << "), trying Central..." << std::endl;
+    res = cbSdkOpen(0, CBSDKCONNECTION_CENTRAL);
+    if (res != CBSDKRESULT_SUCCESS)
+    {
+      std::cerr << "ERROR: cbSdkOpen failed (code " << res << ")" << std::endl;
+      return 1;
+    }
   }
-  std::cout << "CBSDK opened successfully!" << std::endl;
 
   // ── Print Debug to check connection issues  ──────────────────────
   cbSdkConnectionType conType;
   cbSdkInstrumentType instType;
   cbSdkGetType(0, &conType, &instType);
-  std::cout << "Connection type: " << (conType == CBSDKCONNECTION_CENTRAL ? "Central" : 
-                                      conType == CBSDKCONNECTION_UDP ? "UDP" : "Default") << std::endl;
+  std::cout << "Connection type: " << (conType == CBSDKCONNECTION_CENTRAL ? "Central" : conType == CBSDKCONNECTION_UDP ? "UDP"
+                                                                                                                       : "Default")
+            << std::endl;
 
   // ── Create Rust signal processor ─────────────────────────
   void *rust_processor = create_signal_processor_from_config(config_path);
@@ -502,38 +515,45 @@ int main(int argc, char *argv[])
   }
   log_message(rust_processor, "C++: Signal processor created from config.yaml");
 
-  // ── Configure Blackrock channel ──────────────────────────
+  // // ── Configure Blackrock channel ──────────────────────────
   cbPKT_CHANINFO chan_info;
-  cbSdkGetChannelConfig(0, channel, &chan_info);
-  std::cout << "BEFORE modification - smpgroup: " << chan_info.smpgroup << std::endl;
-  std::cout << "BEFORE modification - ainpopts: " << chan_info.ainpopts << std::endl;
-  
-  res = cbSdkGetChannelConfig(0, channel, &chan_info);
-  if (res != CBSDKRESULT_SUCCESS)
-  {
-    std::cerr << "ERROR: cbSdkGetChannelConfig (code " << res << ")" << std::endl;
-    return 1;
-  }
+  // cbSdkGetChannelConfig(0, channel, &chan_info);
+  // std::cout << "BEFORE modification - smpgroup: " << chan_info.smpgroup << std::endl;
+  // std::cout << "BEFORE modification - ainpopts: " << chan_info.ainpopts << std::endl;
 
-  // Store original configuration for cleanup (global variables for Ctrl+C handler)
-  g_original_chan_info = new cbPKT_CHANINFO(chan_info);
-  g_channel = channel;
-  
-  // Configure for continuous acquisition
-  chan_info.smpgroup = 5; // Continuous 30 kHz
-  std::cout << "AFTER modification - smpgroup: " << chan_info.smpgroup << std::endl;
-  chan_info.ainpopts = 0;
-  res = cbSdkSetChannelConfig(0, channel, &chan_info);
-  if (res != CBSDKRESULT_SUCCESS)
-  {
-    std::cerr << "ERROR: cbSdkSetChannelConfig (code " << res << ")" << std::endl;
-    delete g_original_chan_info;
-    g_original_chan_info = nullptr;
-    return 1;
-  }
-  
-  g_channel_configured = true;
-  log_message(rust_processor, "C++: Channel configured for continuous acquisition");
+  // res = cbSdkGetChannelConfig(0, channel, &chan_info);
+  // if (res != CBSDKRESULT_SUCCESS)
+  // {
+  //   std::cerr << "ERROR: cbSdkGetChannelConfig (code " << res << ")" << std::endl;
+  //   return 1;
+  // }
+
+  // // Store original configuration for cleanup (global variables for Ctrl+C handler)
+  // g_original_chan_info = new cbPKT_CHANINFO(chan_info);
+  // g_channel = channel;
+
+  // // Configure for continuous acquisition
+  // chan_info.smpgroup = 5; // Continuous 30 kHz
+  // std::cout << "AFTER modification - smpgroup: " << chan_info.smpgroup << std::endl;
+  // chan_info.ainpopts = 0;
+  // res = cbSdkSetChannelConfig(0, channel, &chan_info);
+  // if (res != CBSDKRESULT_SUCCESS)
+  // {
+  //   std::cerr << "ERROR: cbSdkSetChannelConfig (code " << res << ")" << std::endl;
+  //   delete g_original_chan_info;
+  //   g_original_chan_info = nullptr;
+  //   return 1;
+  // }
+
+  // g_channel_configured = true;
+  // log_message(rust_processor, "C++: Channel configured for continuous acquisition");
+
+  // Use existing channel configuration without modification
+  std::cout << "Using existing channel configuration (smpgroup: " << chan_info.smpgroup << ")" << std::endl;
+  log_message(rust_processor, "C++: Using existing channel configuration");
+
+  // No modifications made, so no need to restore anything
+  g_channel_configured = false;
 
   // ── Trial configuration ──────────────────────────────────
   // Check trial status before setting
@@ -630,7 +650,7 @@ int main(int argc, char *argv[])
 
   // ── Cleanup ──────────────────────────────────────────────
   log_message(rust_processor, "C++: Shutting down");
-  
+
   // Stop logging thread gracefully (flush remaining data)
   if (enable_logging)
   {
@@ -644,7 +664,7 @@ int main(int argc, char *argv[])
     if (logging_thread.joinable())
       logging_thread.join();
   }
-  
+
   // Restore original channel configuration to prevent persistent effects
   if (g_channel_configured && g_original_chan_info != nullptr)
   {
@@ -658,13 +678,13 @@ int main(int argc, char *argv[])
     {
       std::cout << "Channel configuration restored successfully" << std::endl;
     }
-    
+
     // Clean up global variables
     delete g_original_chan_info;
     g_original_chan_info = nullptr;
     g_channel_configured = false;
   }
-  
+
   for (int i = 0; i < cbNUM_ANALOG_CHANS; ++i)
   {
     free(trial.samples[i]);
