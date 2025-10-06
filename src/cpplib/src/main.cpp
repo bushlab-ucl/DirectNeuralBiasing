@@ -515,8 +515,8 @@ int main(int argc, char *argv[])
   }
   log_message(rust_processor, "C++: Signal processor created from config.yaml");
 
-  // // ── Configure Blackrock channel ──────────────────────────
-  cbPKT_CHANINFO chan_info;
+  // ── Configure Blackrock channel ──────────────────────────
+  // cbPKT_CHANINFO chan_info;
   // cbSdkGetChannelConfig(0, channel, &chan_info);
   // std::cout << "BEFORE modification - smpgroup: " << chan_info.smpgroup << std::endl;
   // std::cout << "BEFORE modification - ainpopts: " << chan_info.ainpopts << std::endl;
@@ -549,24 +549,38 @@ int main(int argc, char *argv[])
   // log_message(rust_processor, "C++: Channel configured for continuous acquisition");
 
   // Use existing channel configuration without modification
-  std::cout << "Using existing channel configuration (smpgroup: " << chan_info.smpgroup << ")" << std::endl;
-  log_message(rust_processor, "C++: Using existing channel configuration");
+  // std::cout << "Using existing channel configuration (smpgroup: " << chan_info.smpgroup << ")" << std::endl;
+  // log_message(rust_processor, "C++: Using existing channel configuration");
 
-  // No modifications made, so no need to restore anything
-  g_channel_configured = false;
+  // // No modifications made, so no need to restore anything
+  // g_channel_configured = false;
 
   // ── Trial configuration ──────────────────────────────────
-  // Check trial status before setting
-  uint32_t bActive = 0;
+  // // Check trial status before setting
+  // uint32_t bActive = 0;
+  // cbSdkGetTrialConfig(0, &bActive);
+  // std::cout << "Trial already active: " << (bActive ? "YES" : "NO") << std::endl;
+  // res = cbSdkSetTrialConfig(0, 1, 0, 0, 0, 0, 0, 0, false, 0, buffer_size, 0, 0, 0, true);
+  // if (res != CBSDKRESULT_SUCCESS)
+  // {
+  //   std::cerr << "ERROR: cbSdkSetTrialConfig (code " << res << ")" << std::endl;
+  //   return 1;
+  // }
+  // log_message(rust_processor, "C++: Trial configured");
+
+  // Check if trial is already configured
+  uint32_t bActive;
   cbSdkGetTrialConfig(0, &bActive);
-  std::cout << "Trial already active: " << (bActive ? "YES" : "NO") << std::endl;
-  res = cbSdkSetTrialConfig(0, 1, 0, 0, 0, 0, 0, 0, false, 0, buffer_size, 0, 0, 0, true);
-  if (res != CBSDKRESULT_SUCCESS)
+
+  if (bActive)
   {
-    std::cerr << "ERROR: cbSdkSetTrialConfig (code " << res << ")" << std::endl;
-    return 1;
+    std::cout << "Warning: Trial already active, using existing configuration" << std::endl;
   }
-  log_message(rust_processor, "C++: Trial configured");
+  else
+  {
+    // Only configure if no existing trial
+    res = cbSdkSetTrialConfig(0, 1, 0, 0, 0, 0, 0, 0, false, 0, buffer_size, 0, 0, 0, true);
+  }
 
   // ── Start logging thread if enabled ──────────────────────
   std::thread logging_thread;
@@ -638,10 +652,10 @@ int main(int argc, char *argv[])
         {
           std::lock_guard<std::mutex> lock(buffer_mutex);
           buffers[filling_buffer_index].ready = true;
+          filling_buffer_index = (filling_buffer_index + 1) % num_buffers; // ← Move inside
         }
         buffer_cv.notify_one();
 
-        filling_buffer_index = (filling_buffer_index + 1) % num_buffers;
         processed += chunk_size;
       }
     }
