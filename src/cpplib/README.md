@@ -4,35 +4,80 @@ This C++ application provides real-time closed-loop stimulation for neural elect
 
 ## Overview
 
-The system implements a dual-buffer architecture for real-time neural signal processing:
+The system implements a modular, thread-safe architecture for real-time neural signal processing:
+
 1. **Data Acquisition Thread**: Continuously captures neural data from Blackrock hardware
 2. **Processing Thread**: Analyzes neural signals and triggers stimulation events
-3. **Audio Scheduling**: Provides precise timing for closed-loop stimulation
+3. **Data Logging Thread** (optional): Saves raw data to disk without blocking real-time processing
+4. **Audio Scheduling**: Provides precise timing for closed-loop stimulation
 
 ## Architecture
 
 ```
-Blackrock Hardware → CBSDK → C++ Data Acquisition → Dual Buffer System → Rust Signal Processor → Audio Stimulation
+Blackrock Hardware → CBSDK → Dual Buffer System → Rust Signal Processor → Audio Stimulation
+                                    ↓
+                            Data Logger (optional)
+```
+
+### Modular Structure
+
+```
+project/
+├── main.cpp                    # Main application orchestration
+├── logger.h                    # Debug logging system with timestamps
+├── config_reader.h             # YAML configuration parser
+├── data_logger.h               # Real-time data logging (queue-based)
+├── buffer_manager.h            # Thread-safe dual buffer system
+├── cbsdk.h                     # Blackrock CBSDK headers
+├── direct_neural_biasing.dll   # Rust signal processing library
+├── config.yaml                 # Signal processing configuration
+└── pink_noise_short.wav        # Audio stimulation file
 ```
 
 ### Key Components
 
-#### 1. Blackrock Integration (CBSDK)
-- Connects to Blackrock neural recording systems via UDP (preferred) or Central
-- Non-invasive approach: uses existing channel configurations to avoid conflicts with recording software
-- Supports both live data streams and nPlay file playback
+#### 1. Logger (logger.h)
 
-#### 2. Dual Buffer System
+- Comprehensive debug logging with timestamps
+- Logs to both console and file
+- Component-tagged messages (CBSDK, Main, Processing, etc.)
+- Thread-safe implementation
+
+#### 2. Config Reader (config_reader.h)
+
+- Parses YAML configuration files
+- Extracts channel number and logging preferences
+- Validates configuration values
+
+#### 3. Buffer Manager (buffer_manager.h)
+
+- Implements thread-safe dual-buffer system
 - **Buffer A** and **Buffer B** alternate between filling and processing
-- Thread-safe synchronization prevents data loss during real-time processing
+- Prevents data loss during real-time processing
 - Fixed buffer size of 4096 samples for consistent latency
 
-#### 3. Rust Signal Processing Engine
+#### 4. Data Logger (data_logger.h)
+
+- Optional raw data recording to binary files
+- Queue-based architecture with backpressure handling
+- **Never drops data** - slows acquisition if disk is too slow
+- Saves to `./data/raw_data_chXX_TIMESTAMP.bin`
+
+#### 5. Blackrock Integration (CBSDK)
+
+- **UDP-first connection strategy**: Avoids conflicts with recording software
+- **Non-invasive approach**: Uses existing channel configurations
+- **Trial detection**: Works with existing trials or creates new ones
+- Supports both live data streams and nPlay file playback
+
+#### 6. Rust Signal Processing Engine
+
 - Loaded as a DLL (`direct_neural_biasing.dll`)
 - Configurable via YAML files for filters, detectors, and triggers
 - Returns precise timestamps for stimulation timing
 
-#### 4. Audio Stimulation
+#### 7. Audio Stimulation
+
 - Schedules audio pulses at precise future timestamps
 - Uses Windows `PlaySound` API for low-latency audio output
 - Asynchronous scheduling prevents blocking the main processing loop
@@ -40,18 +85,20 @@ Blackrock Hardware → CBSDK → C++ Data Acquisition → Dual Buffer System →
 ## Configuration
 
 ### config.yaml Structure
+
 ```yaml
 processor:
   verbose: true
-  fs: 30000.0        # Sampling frequency (Hz)
-  channel: 65        # Blackrock channel number (1-based)
+  fs: 512.0 # Sampling frequency (Hz) - must match channel config!
+  channel: 1 # Blackrock channel number (1-based)
   enable_debug_logging: true
+  save_raw_data: true # Enable raw data logging to ./data/
 
 filters:
   bandpass_filters:
     - id: slow_wave_filter
-      f_low: 0.5       # Hz
-      f_high: 4.0      # Hz
+      f_low: 0.5 # Hz
+      f_high: 4.0 # Hz
 
 detectors:
   wave_peak_detectors:
@@ -64,11 +111,13 @@ triggers:
   pulse_triggers:
     - id: pulse_trigger
       activation_detector_id: slow_wave_detector
-      inhibition_detector_id: ""
       pulse_cooldown_ms: 2000.0
 ```
 
+**Important**: The `fs` parameter must match the actual sampling rate of the channel as configured in Central/nPlay. The application will NOT modify channel configurations.
+
 ### Required Files
+
 - `config.yaml`: Signal processing configuration
 - `direct_neural_biasing.dll`: Rust processing library
 - `pink_noise_short.wav`: Audio stimulation file
@@ -76,146 +125,261 @@ triggers:
 ## Usage
 
 ### Basic Operation
+
 ```bash
-# Ensure files are in the same directory as the executable
+# Ensure all files are in the same directory as the executable
 neural_processor.exe
 ```
 
+### Reading Raw Data Files
+
+The application saves raw data as binary files containing flat arrays of double-precision floats (µV).
+
+**Python:**
+
+```python
+import numpy as np
+data = np.fromfile('data/raw_data_ch1_20250106_143022.bin', dtype=np.float64)
+# data is now a 1D array of voltages in microvolts
+```
+
+**MATLAB:**
+
+```matlab
+fid = fopen('data/raw_data_ch1_20250106_143022.bin', 'r');
+data = fread(fid, Inf, 'double');
+fclose(fid);
+```
+
 ### Graceful Shutdown
-- Press **Ctrl+C** to stop processing and restore system state
-- The application will automatically clean up resources and close connections
+
+- Press **Ctrl+C** to initiate graceful shutdown
+- The application will:
+  - Stop acquiring new data
+  - Flush all remaining data from the logging queue
+  - Close all threads cleanly
+  - Report final statistics
 
 ## Thread Architecture
 
 ### Main Thread (Data Acquisition)
-1. Opens connection to Blackrock system
-2. Configures data acquisition parameters
-3. Continuously fetches neural data in chunks
-4. Converts INT16 samples to double precision (µV)
-5. Fills available buffers in dual-buffer system
+
+1. Opens connection to Blackrock system (UDP → Central fallback)
+2. Verifies channel configuration (non-invasive)
+3. Checks for existing trial configuration
+4. Continuously fetches neural data in chunks
+5. Converts INT16 samples to double precision (µV)
+6. Fills available buffers in dual-buffer system
+7. Queues data for logging (if enabled)
 
 ### Processing Thread
+
 1. Waits for filled buffers from main thread
 2. Passes data to Rust signal processing engine
 3. Receives trigger timestamps for detected events
 4. Schedules audio stimulation at precise future times
 5. Marks buffers as available for refilling
 
-### Audio Threads (Dynamic)
+### Data Logging Thread (optional)
+
+1. Waits for data chunks in queue
+2. Writes chunks to binary file
+3. Applies backpressure if disk is slow (prevents data loss)
+4. Flushes remaining queue on shutdown
+
+### Audio Threads (dynamic)
+
 - Created on-demand for each scheduled audio pulse
 - Sleep until target timestamp, then play audio file
 - Automatically cleaned up after playback
 
-## Buffer Management
-
-The dual-buffer system prevents data loss during real-time processing:
-
-```cpp
-// Simplified buffer logic
-while (acquiring_data) {
-    wait_for_available_buffer();
-    fill_buffer_with_neural_data();
-    mark_buffer_ready();
-    switch_to_next_buffer();
-}
-
-// Processing thread
-while (processing) {
-    wait_for_ready_buffer();
-    process_neural_data();
-    schedule_stimulation_if_needed();
-    mark_buffer_available();
-}
-```
-
 ## Safety Features
 
 ### Recording Software Compatibility
-- **UDP-first connection**: Avoids conflicts with Blackrock's Central application
-- **Non-invasive configuration**: Uses existing channel settings instead of overriding them
-- **Trial configuration checking**: Detects and works with existing data collection setups
+
+The application is designed to run alongside Blackrock's recording software without interference:
+
+- **UDP-first connection**: Attempts UDP before Central to avoid connection conflicts
+- **Non-invasive configuration**: Never modifies channel settings - uses whatever is already configured
+- **Trial configuration checking**: Detects existing trials and uses them instead of creating conflicting configurations
+- **No state restoration**: Since nothing is modified, nothing needs to be restored on exit
 
 ### Error Handling
+
+- Comprehensive debug logging with timestamps and component tags
 - Graceful degradation when no neural data is available
-- Connection type fallback (UDP → Central → Default)
-- Comprehensive error reporting with diagnostic information
+- Connection type fallback (UDP → Central)
+- Detailed error codes and descriptions
 
 ### Resource Management
+
 - Automatic cleanup on Ctrl+C interrupt
 - Thread-safe shutdown procedures
 - Memory management for trial buffers
+- Queue-based logging prevents data loss
 
 ## Performance Considerations
 
 ### Real-Time Requirements
-- **Buffer size**: 4096 samples (~137ms at 30kHz) balances latency and processing efficiency
+
+- **Buffer size**: 4096 samples (~8 seconds at 512Hz, ~137ms at 30kHz)
 - **Processing latency**: Typically <10ms for signal analysis
 - **Stimulation precision**: Sub-millisecond timing accuracy for closed-loop applications
 
+### Data Logging Performance
+
+- **Queue size**: 1000 chunks (~4MB buffer)
+- **Disk requirements**: ~240 KB/s sustained write speed for 30kHz data
+- **Backpressure handling**: Slows acquisition if disk cannot keep up (prevents data loss)
+
 ### CPU Usage
+
 - Main thread: Minimal CPU usage during data acquisition
 - Processing thread: Moderate CPU usage during signal analysis
+- Logging thread: Low CPU usage, I/O bound
 - Audio threads: Negligible CPU usage
+
+## Debug Logging
+
+All operations are logged with timestamps and component tags:
+
+```
+[2025-01-06 14:30:15.123] [INFO] [Main] ===== Application Starting =====
+[2025-01-06 14:30:15.234] [INFO] [ConfigReader] Channel: 1
+[2025-01-06 14:30:15.345] [INFO] [CBSDK] Attempting UDP connection (multi-app safe)
+[2025-01-06 14:30:15.456] [INFO] [CBSDK] Connected via: Central
+[2025-01-06 14:30:15.567] [INFO] [BufferManager] Initialized with 2 buffers of size 4096
+[2025-01-06 14:30:15.678] [INFO] [DataLogger] Starting data logging to: ./data/raw_data_ch1_20250106_143015.bin
+[2025-01-06 14:30:15.789] [INFO] [Main] ===== Entering Main Acquisition Loop =====
+[2025-01-06 14:30:20.123] [DEBUG] [Processing] Chunk processed in 8 ms
+[2025-01-06 14:30:20.234] [INFO] [Audio] Scheduling pulse in 1250 ms
+```
+
+Logs are saved to `./logs/debug_DATE.log`
 
 ## Troubleshooting
 
 ### Common Issues
 
 #### "No trial data available"
-- **Live data**: Check channel connectivity and configuration
-- **nPlay**: Ensure file is properly loaded and playing
-- **Solution**: Verify channel number in `config.yaml` matches connected channels
+
+**Symptoms**: Application runs but reports no data from CBSDK
+**Causes**:
+
+- Channel not properly configured in nPlay/Central
+- Wrong channel number in config.yaml
+- Data file not playing in nPlay
+
+**Solutions**:
+
+1. Verify channel number matches connected/configured channels
+2. Check that data is actually streaming in Central/nPlay
+3. Look at debug logs to see the exact error code
 
 #### "Failed to load Rust DLL"
-- Ensure `direct_neural_biasing.dll` is in the same directory
-- Check that Visual C++ Redistributables are installed
-- Verify DLL architecture matches executable (x64/x86)
+
+**Symptoms**: Application crashes on startup
+**Causes**:
+
+- Missing `direct_neural_biasing.dll`
+- Wrong DLL architecture (x64 vs x86)
+- Missing Visual C++ Redistributables
+
+**Solutions**:
+
+1. Ensure DLL is in the same directory as executable
+2. Verify DLL and executable are both x64 (or both x86)
+3. Install Visual C++ 2019 Redistributables
 
 #### "Connection failed"
-- Verify Blackrock hardware is connected and powered
-- Check that Central application isn't exclusively locking the connection
-- Try different connection types (UDP vs Central)
+
+**Symptoms**: Cannot connect to CBSDK
+**Causes**:
+
+- Blackrock hardware not connected/powered
+- Central application not running
+- NSP not initialized
+
+**Solutions**:
+
+1. Verify hardware is connected and powered
+2. Try opening Central application first
+3. Check hardware status lights
+
+#### Wrong sampling rate / filter frequencies off
+
+**Symptoms**: Signal processing not working correctly
+**Cause**: `fs` in config.yaml doesn't match actual channel sampling rate
+
+**Solution**:
+
+1. Check channel configuration in Central/nPlay
+2. Update `fs` in config.yaml to match
+3. The application will report the channel's smpgroup - look up what sampling rate this corresponds to
 
 #### Audio stimulation not working
-- Ensure `pink_noise_short.wav` exists in the application directory
-- Check Windows audio settings and default playback device
-- Verify audio file format is compatible with PlaySound API
 
-### Debug Output
-The application provides detailed logging:
-- Connection type and status
-- Channel configuration details
-- Buffer processing statistics
-- Trigger event timestamps
-- Error codes and descriptions
+**Symptoms**: No sound when triggers detected
+**Causes**:
 
-### Performance Monitoring
-```
-Processing time: 8 ms
-Scheduling audio pulse in 1250 ms
-Channel 65 sample rate: 30000 Hz
-Trial initialized - Channel count: 1
-```
+- Missing `pink_noise_short.wav`
+- Wrong audio device selected
+- File format incompatible
+
+**Solutions**:
+
+1. Ensure WAV file exists in application directory
+2. Check Windows default audio device
+3. Verify WAV file is PCM format (not compressed)
+
+#### Data logging slowing down acquisition
+
+**Symptoms**: Warning about full log queue, slower processing
+**Cause**: Disk write speed cannot keep up with data rate
+
+**Solutions**:
+
+1. Use faster disk (SSD instead of HDD)
+2. Reduce sampling rate if possible
+3. Disable logging during critical experiments
 
 ## Development Notes
 
 ### Dependencies
+
 - **Windows SDK**: For PlaySound and system APIs
-- **Blackrock CBSDK**: Neural hardware interface
+- **Blackrock CBSDK**: Neural hardware interface (v7.0+)
 - **Rust DLL**: Signal processing engine
 - **C++17**: Modern C++ features for threading and timing
 
 ### Compilation Requirements
+
 - Visual Studio 2019 or newer
 - Blackrock CBSDK headers and libraries
-- Windows 10 SDK
+- Windows 10 SDK (10.0.19041.0 or newer)
+
+### Compilation Command
+
+```bash
+cl /EHsc /std:c++17 main.cpp /I"path/to/cbsdk/include" /link /LIBPATH:"path/to/cbsdk/lib" cbsdk.lib winmm.lib
+```
 
 ### Extension Points
-- **Custom audio**: Replace PlaySound with ASIO or other low-latency audio APIs
-- **Multiple channels**: Extend configuration to process multiple neural channels
-- **Network stimulation**: Replace audio with network commands to stimulation devices
-- **Custom processing**: Modify Rust library for different signal processing algorithms
+
+- **Custom audio**: Replace PlaySound with ASIO for lower latency
+- **Multiple channels**: Extend BufferManager to handle multiple channels
+- **Network stimulation**: Replace audio scheduling with network commands
+- **Custom processing**: Modify Rust library for different algorithms
+- **Real-time visualization**: Add plotting/display thread
 
 ## License
 
 This code is part of the Direct Neural Biasing project developed by the Human Electrophysiology Lab at UCL. See project license for usage terms.
+
+## Citation
+
+If you use this software in your research, please cite:
+
+```
+[Citation information to be added]
+```

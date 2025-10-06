@@ -59,6 +59,20 @@
     "xstring": "cpp",
     "xtr1common": "cpp",
     "xutility": "cpp",
-    "condition_variable": "cpp"
+    "condition_variable": "cpp",
+    "algorithm": "cpp",
+    "array": "cpp",
+    "deque": "cpp",
+    "coroutine": "cpp",
+    "resumable": "cpp",
+    "fstream": "cpp",
+    "functional": "cpp",
+    "future": "cpp",
+    "list": "cpp",
+    "queue": "cpp",
+    "ranges": "cpp",
+    "span": "cpp",
+    "unordered_map": "cpp",
+    "xhash": "cpp"
   }
 }

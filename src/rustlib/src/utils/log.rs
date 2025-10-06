@@ -1,11 +1,11 @@
 // src/utils/log.rs
 
-use std::fs::{OpenOptions, remove_file}; // Import remove_file
-use std::io::{self, Write, ErrorKind}; // Import ErrorKind
-use std::path::Path;
-use std::time::{SystemTime, UNIX_EPOCH};
 use std::collections::HashMap;
+use std::fs::{remove_file, OpenOptions}; // Import remove_file
+use std::io::{self, ErrorKind, Write}; // Import ErrorKind
+use std::path::Path;
 use std::time::Duration;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Generates a formatted timestamp string in the format yyyy-mm-dd_hh-mm-ss
 /// (filesystem-safe, using hyphens instead of colons)
@@ -54,10 +54,7 @@ pub fn log_to_file(filename: &str, message: &str) -> io::Result<()> {
     let path = format!("{}/{}", log_dir, filename);
 
     // Open file in append mode, create if it doesn't exist
-    let mut file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(path)?;
+    let mut file = OpenOptions::new().create(true).append(true).open(path)?;
 
     // Get current timestamp
     let timestamp = SystemTime::now()
@@ -94,10 +91,9 @@ pub fn log_config(filename: &str, config_path: &str, config_yaml: &str) -> io::R
         \n\
         Full Configuration:\n\
         {}",
-        config_path,
-        config_yaml
+        config_path, config_yaml
     );
-    
+
     log_to_file(filename, &config_log)
 }
 
@@ -113,9 +109,9 @@ pub fn log_config(filename: &str, config_path: &str, config_yaml: &str) -> io::R
 ///
 /// * `io::Result<()>` - Success or error result
 pub fn log_trigger_event(
-    filename: &str, 
-    trigger_id: &str, 
-    context_results: &[HashMap<&'static str, f64>]
+    filename: &str,
+    trigger_id: &str,
+    context_results: &[HashMap<&'static str, f64>],
 ) -> io::Result<()> {
     // Get current timestamp for the log
     let timestamp = SystemTime::now()
@@ -169,9 +165,7 @@ pub fn log_trigger_event(
             keys.sort();
 
             for &key in keys {
-                if key.contains("detected")
-                    || key.contains("triggered")
-                    || key.contains("z_score")
+                if key.contains("detected") || key.contains("triggered") || key.contains("z_score")
                 {
                     if let Some(value) = sample_results.get(key) {
                         log_entry.push_str(&format!("  {} = {}\n", key, value));
@@ -186,26 +180,25 @@ pub fn log_trigger_event(
     log_to_file(filename, &log_entry)
 }
 
-/// Logs a message to both terminal and file
+/// Logs a message to terminal only (verbose output)
+/// Does NOT write to file - this is for runtime diagnostics only
 ///
 /// # Arguments
 ///
-/// * `filename` - The name of the log file
-/// * `message` - The message to log
-/// * `enable_file_logging` - Whether to also log to file
+/// * `filename` - Unused (kept for API compatibility)
+/// * `message` - The message to print to terminal
+/// * `enable_terminal_output` - Whether to print to terminal
 ///
 /// # Returns
 ///
 /// * `io::Result<()>` - Success or error result
-pub fn log_verbose(filename: &str, message: &str, enable_file_logging: bool) -> io::Result<()> {
-    // Always print to terminal
-    eprintln!("{}", message);
-    
-    // Also log to file if enabled
-    if enable_file_logging {
-        log_to_file(filename, message)?;
+pub fn log_verbose(_filename: &str, message: &str, enable_terminal_output: bool) -> io::Result<()> {
+    // Only print to terminal if enabled
+    // Never write to file - verbose messages are just for runtime diagnostics
+    if enable_terminal_output {
+        eprintln!("{}", message);
     }
-    
+
     Ok(())
 }
 
@@ -222,10 +215,7 @@ pub fn log_verbose(filename: &str, message: &str, enable_file_logging: bool) -> 
 /// * `io::Result<()>` - Success or error result
 #[allow(dead_code)]
 pub fn log_with_header(filename: &str, header: &str, message: &str) -> io::Result<()> {
-    let formatted_message = format!(
-        "===== {} =====\n{}\n====================",
-        header, message
-    );
+    let formatted_message = format!("===== {} =====\n{}\n====================", header, message);
     log_to_file(filename, &formatted_message)
 }
 
@@ -251,10 +241,7 @@ pub fn log_csv(filename: &str, headers: &[&str], data: &[&str]) -> io::Result<()
     let path = format!("{}/{}", log_dir, filename);
     let file_exists = Path::new(&path).exists();
 
-    let mut file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(path)?;
+    let mut file = OpenOptions::new().create(true).append(true).open(path)?;
 
     // Write headers if file is new
     if !file_exists && !headers.is_empty() {
@@ -281,12 +268,12 @@ pub fn log_csv(filename: &str, headers: &[&str], data: &[&str]) -> io::Result<()
 pub fn delete_log_file(filename: &str) -> io::Result<()> {
     let log_dir = "logs";
     let path = format!("{}/{}", log_dir, filename);
-    
+
     match remove_file(&path) {
         Ok(_) => {
             // File was successfully deleted
             Ok(())
-        },
+        }
         Err(e) => {
             // If the error is NotFound, the file didn't exist, which is fine
             if e.kind() == ErrorKind::NotFound {
