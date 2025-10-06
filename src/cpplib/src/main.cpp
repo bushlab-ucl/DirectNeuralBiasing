@@ -487,26 +487,11 @@ int main(int argc, char *argv[])
   std::cout << "CBSDK opened successfully!" << std::endl;
 
   // ── Print Debug to check connection issues  ──────────────────────
-  // After cbSdkOpen
   cbSdkConnectionType conType;
   cbSdkInstrumentType instType;
   cbSdkGetType(0, &conType, &instType);
   std::cout << "Connection type: " << (conType == CBSDKCONNECTION_CENTRAL ? "Central" : 
                                       conType == CBSDKCONNECTION_UDP ? "UDP" : "Default") << std::endl;
-
-  // Before modifying channel config
-  cbPKT_CHANINFO chan_info;
-  cbSdkGetChannelConfig(0, channel, &chan_info);
-  std::cout << "BEFORE modification - smpgroup: " << chan_info.smpgroup << std::endl;
-  std::cout << "BEFORE modification - ainpopts: " << chan_info.ainpopts << std::endl;
-
-  // After modifying channel config
-  std::cout << "AFTER modification - smpgroup: " << chan_info.smpgroup << std::endl;
-
-  // Check trial status before setting
-  uint32_t bActive = 0;
-  cbSdkGetTrialConfig(0, &bActive);
-  std::cout << "Trial already active: " << (bActive ? "YES" : "NO") << std::endl;
 
   // ── Create Rust signal processor ─────────────────────────
   void *rust_processor = create_signal_processor_from_config(config_path);
@@ -519,6 +504,9 @@ int main(int argc, char *argv[])
 
   // ── Configure Blackrock channel ──────────────────────────
   cbPKT_CHANINFO chan_info;
+  cbSdkGetChannelConfig(0, channel, &chan_info);
+  std::cout << "BEFORE modification - smpgroup: " << chan_info.smpgroup << std::endl;
+  std::cout << "BEFORE modification - ainpopts: " << chan_info.ainpopts << std::endl;
   
   res = cbSdkGetChannelConfig(0, channel, &chan_info);
   if (res != CBSDKRESULT_SUCCESS)
@@ -533,6 +521,7 @@ int main(int argc, char *argv[])
   
   // Configure for continuous acquisition
   chan_info.smpgroup = 5; // Continuous 30 kHz
+  std::cout << "AFTER modification - smpgroup: " << chan_info.smpgroup << std::endl;
   chan_info.ainpopts = 0;
   res = cbSdkSetChannelConfig(0, channel, &chan_info);
   if (res != CBSDKRESULT_SUCCESS)
@@ -547,6 +536,10 @@ int main(int argc, char *argv[])
   log_message(rust_processor, "C++: Channel configured for continuous acquisition");
 
   // ── Trial configuration ──────────────────────────────────
+  // Check trial status before setting
+  uint32_t bActive = 0;
+  cbSdkGetTrialConfig(0, &bActive);
+  std::cout << "Trial already active: " << (bActive ? "YES" : "NO") << std::endl;
   res = cbSdkSetTrialConfig(0, 1, 0, 0, 0, 0, 0, 0, false, 0, buffer_size, 0, 0, 0, true);
   if (res != CBSDKRESULT_SUCCESS)
   {
