@@ -5,6 +5,7 @@ processor:
   channel: 1
   enable_debug_logging: true
   log_context_samples: 3
+  save_raw_data: true
   
 filters:
   bandpass_filters:

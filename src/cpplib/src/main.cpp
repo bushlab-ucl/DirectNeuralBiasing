@@ -49,7 +49,129 @@ std::condition_variable buffer_cv;
 bool stop_processing = false; // Flag to stop the threads
 
 // ──────────────────────────────────────────────────────────────
-//                 Utility: read channel from config.yaml
+//                      Data Logging System (Queue-Based)
+// ──────────────────────────────────────────────────────────────
+struct LogChunk
+{
+  std::vector<double> data;
+};
+
+std::queue<LogChunk> log_queue;
+std::mutex log_queue_mutex;
+std::condition_variable log_queue_cv;
+bool stop_logging = false;
+bool enable_logging = false;
+const size_t MAX_QUEUE_SIZE = 1000; // ~4MB of buffering (1000 chunks * 4096 samples * 8 bytes / chunk)
+
+// Background thread for writing data to file
+void data_logging_thread(const std::string& filename)
+{
+  std::ofstream outfile(filename, std::ios::binary);
+  if (!outfile.is_open())
+  {
+    std::cerr << "ERROR: Failed to open log file: " << filename << std::endl;
+    stop_logging = true;
+    return;
+  }
+
+  std::cout << "Data logging started: " << filename << std::endl;
+  
+  size_t total_samples_written = 0;
+  size_t chunks_written = 0;
+  
+  while (true)
+  {
+    LogChunk chunk;
+    
+    // Wait for data in the queue
+    {
+      std::unique_lock<std::mutex> lock(log_queue_mutex);
+      log_queue_cv.wait(lock, []() {
+        return stop_logging || !log_queue.empty();
+      });
+      
+      // Process remaining queue items even after stop signal
+      if (log_queue.empty())
+      {
+        if (stop_logging)
+          break;
+        else
+          continue;
+      }
+      
+      // Get the next chunk from queue
+      chunk = std::move(log_queue.front());
+      log_queue.pop();
+      
+      // Notify if we were blocking due to full queue
+      if (log_queue.size() < MAX_QUEUE_SIZE)
+      {
+        log_queue_cv.notify_all();
+      }
+    }
+    
+    // Write to file (outside the lock for performance)
+    if (!chunk.data.empty())
+    {
+      outfile.write(reinterpret_cast<const char*>(chunk.data.data()), 
+                    chunk.data.size() * sizeof(double));
+      total_samples_written += chunk.data.size();
+      chunks_written++;
+      
+      // Periodic progress report
+      if (chunks_written % 1000 == 0)
+      {
+        std::cout << "Logged " << chunks_written << " chunks (" 
+                  << (total_samples_written / 30000.0) << " seconds of data)" << std::endl;
+      }
+    }
+  }
+  
+  outfile.close();
+  std::cout << "Data logging stopped. Total samples written: " << total_samples_written 
+            << " (" << (total_samples_written / 30000.0) << " seconds)" << std::endl;
+}
+
+// Add data to logging queue (with backpressure handling)
+void log_data_chunk(const double* data, size_t length)
+{
+  if (!enable_logging)
+    return;
+  
+  std::unique_lock<std::mutex> lock(log_queue_mutex);
+  
+  // Wait if queue is full (applies backpressure to acquisition)
+  if (log_queue.size() >= MAX_QUEUE_SIZE)
+  {
+    static bool warned = false;
+    if (!warned)
+    {
+      std::cerr << "WARNING: Log queue full (" << MAX_QUEUE_SIZE 
+                << " chunks). Waiting for disk I/O to catch up..." << std::endl;
+      std::cerr << "This will slow down real-time acquisition. Consider using a faster disk." << std::endl;
+      warned = true;
+    }
+    
+    // Wait for queue to have space (with timeout to check stop flag)
+    log_queue_cv.wait_for(lock, std::chrono::milliseconds(100), []() {
+      return log_queue.size() < MAX_QUEUE_SIZE || stop_logging;
+    });
+    
+    if (stop_logging)
+      return;
+  }
+  
+  // Create new chunk and copy data
+  LogChunk chunk;
+  chunk.data.assign(data, data + length);
+  log_queue.push(std::move(chunk));
+  
+  // Notify logging thread
+  log_queue_cv.notify_one();
+}
+
+// ──────────────────────────────────────────────────────────────
+//                 Utility: read config from config.yaml
 // ──────────────────────────────────────────────────────────────
 int get_channel_from_config(const std::string &config_path)
 {
@@ -97,6 +219,43 @@ int get_channel_from_config(const std::string &config_path)
   return -1;
 }
 
+bool get_save_raw_data_from_config(const std::string &config_path)
+{
+  std::ifstream inFile(config_path);
+  if (!inFile.is_open())
+  {
+    return false;
+  }
+
+  std::string line;
+  bool in_processor_block = false;
+  while (std::getline(inFile, line))
+  {
+    if (line.find("processor:") != std::string::npos)
+    {
+      in_processor_block = true;
+      continue;
+    }
+    if (in_processor_block)
+    {
+      if (line.find(':') != std::string::npos && line.find_first_not_of(" \t") != std::string::npos && line[0] != ' ' && line[0] != '\t')
+      {
+        break;
+      }
+      auto pos = line.find("save_raw_data:");
+      if (pos != std::string::npos)
+      {
+        std::string value = line.substr(pos + 14); // 14 = len("save_raw_data:")
+        // Trim whitespace
+        value.erase(0, value.find_first_not_of(" \t"));
+        value.erase(value.find_last_not_of(" \t\r\n") + 1);
+        return (value == "true" || value == "True" || value == "TRUE");
+      }
+    }
+  }
+  return false;
+}
+
 // ──────────────────────────────────────────────────────────────
 //                 Windows console Ctrl+C handler
 // ──────────────────────────────────────────────────────────────
@@ -134,7 +293,9 @@ BOOL WINAPI ConsoleHandler(DWORD signal)
     }
     
     stop_processing = true;
+    stop_logging = true;
     buffer_cv.notify_all();
+    log_queue_cv.notify_all();
     return TRUE;
   }
   return FALSE;
@@ -152,6 +313,19 @@ std::string format_time_with_ms(const std::chrono::system_clock::time_point &tim
   auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(time_point.time_since_epoch()) % 1000;
   std::ostringstream oss;
   oss << time_str << '.' << std::setfill('0') << std::setw(3) << ms.count();
+  return oss.str();
+}
+
+// Generate filename with timestamp
+std::string generate_log_filename(int channel)
+{
+  auto now = std::chrono::system_clock::now();
+  std::time_t time_t = std::chrono::system_clock::to_time_t(now);
+  char time_str[100];
+  std::strftime(time_str, sizeof(time_str), "%Y%m%d_%H%M%S", std::localtime(&time_t));
+  
+  std::ostringstream oss;
+  oss << "./raw_data_ch" << channel << "_" << time_str << ".bin";
   return oss.str();
 }
 
@@ -278,6 +452,27 @@ int main(int argc, char *argv[])
     return 1;
   }
 
+  // ── Read configuration ────────────────────────────────────
+  const char *config_path = "./config.yaml";
+  int channel = get_channel_from_config(config_path);
+  if (channel <= 0)
+  {
+    std::cerr << "Falling back to channel 65." << std::endl;
+    channel = 65;
+  }
+  std::cout << "Using channel " << channel << " from config.yaml" << std::endl;
+  
+  // Check if we should save raw data
+  enable_logging = get_save_raw_data_from_config(config_path);
+  if (enable_logging)
+  {
+    std::cout << "Raw data logging ENABLED (queue size: " << MAX_QUEUE_SIZE << " chunks)" << std::endl;
+  }
+  else
+  {
+    std::cout << "Raw data logging DISABLED" << std::endl;
+  }
+
   // ── Open Blackrock CBSDK connection ──────────────────────
   std::cout << "Attempting to open CBSDK…" << std::endl;
   cbSdkResult res = cbSdkOpen(0, CBSDKCONNECTION_DEFAULT);
@@ -287,16 +482,6 @@ int main(int argc, char *argv[])
     return 1;
   }
   std::cout << "CBSDK opened successfully!" << std::endl;
-
-  // ── Read channel from config.yaml ────────────────────────
-  const char *config_path = "./config.yaml";
-  int channel = get_channel_from_config(config_path);
-  if (channel <= 0)
-  {
-    std::cerr << "Falling back to channel 65." << std::endl;
-    channel = 65;
-  }
-  std::cout << "Using channel " << channel << " from config.yaml" << std::endl;
 
   // ── Create Rust signal processor ─────────────────────────
   void *rust_processor = create_signal_processor_from_config(config_path);
@@ -334,9 +519,6 @@ int main(int argc, char *argv[])
   }
   
   g_channel_configured = true;
-
-  // Note: cbSdkSetChannelMask is not needed for continuous acquisition
-  // It's used for trial-based data collection, not continuous streaming
   log_message(rust_processor, "C++: Channel configured for continuous acquisition");
 
   // ── Trial configuration ──────────────────────────────────
@@ -347,6 +529,15 @@ int main(int argc, char *argv[])
     return 1;
   }
   log_message(rust_processor, "C++: Trial configured");
+
+  // ── Start logging thread if enabled ──────────────────────
+  std::thread logging_thread;
+  if (enable_logging)
+  {
+    std::string log_filename = generate_log_filename(channel);
+    logging_thread = std::thread(data_logging_thread, log_filename);
+    log_message(rust_processor, ("C++: Data logging to " + log_filename).c_str());
+  }
 
   // ── Spin-up processing thread ────────────────────────────
   std::thread processing_thread(process_buffer_loop, rust_processor, run_chunk, log_message);
@@ -365,8 +556,12 @@ int main(int argc, char *argv[])
   {
     std::cerr << "ERROR: cbSdkInitTrialData (code " << res << ")" << std::endl;
     stop_processing = true;
+    stop_logging = true;
     buffer_cv.notify_all();
+    log_queue_cv.notify_all();
     processing_thread.join();
+    if (enable_logging && logging_thread.joinable())
+      logging_thread.join();
     return 1;
   }
 
@@ -393,10 +588,14 @@ int main(int argc, char *argv[])
             break;
         }
 
+        // Convert to double and fill buffer
         for (size_t i = 0; i < chunk_size; ++i)
         {
           buffers[filling_buffer_index].data[i] = static_cast<double>(int_samples[processed + i]) * 0.25; // ↦ µV
         }
+
+        // Log data if enabled (with backpressure - will wait if disk is slow)
+        log_data_chunk(buffers[filling_buffer_index].data, chunk_size);
 
         {
           std::lock_guard<std::mutex> lock(buffer_mutex);
@@ -414,6 +613,20 @@ int main(int argc, char *argv[])
   // ── Cleanup ──────────────────────────────────────────────
   log_message(rust_processor, "C++: Shutting down");
   
+  // Stop logging thread gracefully (flush remaining data)
+  if (enable_logging)
+  {
+    std::cout << "Flushing remaining log data..." << std::endl;
+    {
+      std::lock_guard<std::mutex> lock(log_queue_mutex);
+      std::cout << "Log queue size at shutdown: " << log_queue.size() << " chunks" << std::endl;
+    }
+    stop_logging = true;
+    log_queue_cv.notify_all();
+    if (logging_thread.joinable())
+      logging_thread.join();
+  }
+  
   // Restore original channel configuration to prevent persistent effects
   if (g_channel_configured && g_original_chan_info != nullptr)
   {
@@ -427,11 +640,6 @@ int main(int argc, char *argv[])
     {
       std::cout << "Channel configuration restored successfully" << std::endl;
     }
-    
-          // Note: We don't call cbSdkSetChannelMask here because:
-      // 1. We never set channel masks for continuous acquisition
-      // 2. cbSdkSetChannelMask is for trial-based data, not continuous streaming
-      // 3. Calling it unnecessarily could interfere with other applications
     
     // Clean up global variables
     delete g_original_chan_info;
