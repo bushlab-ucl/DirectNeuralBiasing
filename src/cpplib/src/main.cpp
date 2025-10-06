@@ -316,16 +316,19 @@ std::string format_time_with_ms(const std::chrono::system_clock::time_point &tim
   return oss.str();
 }
 
-// Generate filename with timestamp
+// Generate filename with timestamp in data directory
 std::string generate_log_filename(int channel)
 {
+  // Create data directory if it doesn't exist
+  CreateDirectoryA("./data", NULL);
+  
   auto now = std::chrono::system_clock::now();
   std::time_t time_t = std::chrono::system_clock::to_time_t(now);
   char time_str[100];
   std::strftime(time_str, sizeof(time_str), "%Y%m%d_%H%M%S", std::localtime(&time_t));
   
   std::ostringstream oss;
-  oss << "./raw_data_ch" << channel << "_" << time_str << ".bin";
+  oss << "./data/raw_data_ch" << channel << "_" << time_str << ".bin";
   return oss.str();
 }
 
