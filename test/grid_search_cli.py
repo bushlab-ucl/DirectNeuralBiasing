@@ -75,29 +75,29 @@ PLOTS_DIR = Path("plots")
 
 # --- Parameter Grid for Exhaustive Search ---
 # This dictionary defines the search space for the grid search.
-# PARAM_GRID = {
-#     "z_score_threshold": [2.25, 2.5, 2.75, 3.0],
-#     "check_sinusoidness": [True, False],
-#     "f_low": [0.225, 0.25, 0.275],
-#     "f_high": [4.0, 4.25, 4.5, 4.75, 5.0, 5.25],
-#     "min_wave_ms": [250.0],
-#     "max_wave_ms": [1100, 1200, 1300, 1400, 1500],
-#     "z_ied_threshold": [2.75, 3.0, 3.25, 3.5, 3.75],
-#     "refrac_ms": [2250.0, 2500.0, 2750.0, 3000.0],
-#     "sinusoidness_threshold": [0.6, 0.7, 0.8] # Only used when check_sinusoidness is True
-# }
-
 PARAM_GRID = {
-    "z_score_threshold": [2.5, 3.0], # Varying this parameter for the test
-    "check_sinusoidness": [False],
+    "z_score_threshold": [1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0],
+    "check_sinusoidness": [True, False],
     "f_low": [0.25],
     "f_high": [4.0],
     "min_wave_ms": [250.0],
-    "max_wave_ms": [1200],
-    "z_ied_threshold": [3.0],
-    "refrac_ms": [2500.0],
-    "sinusoidness_threshold": [0.0] # Not used when check_sinusoidness is False
+    "max_wave_ms": [1000],
+    "z_ied_threshold": [1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0],
+    "refrac_ms": [2000.0, 2500.0, 3000.0],
+    "sinusoidness_threshold": [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9] # Only used when check_sinusoidness is True
 }
+
+# PARAM_GRID = {
+#     "z_score_threshold": [2.5, 3.0], # Varying this parameter for the test
+#     "check_sinusoidness": [False],
+#     "f_low": [0.25],
+#     "f_high": [4.0],
+#     "min_wave_ms": [250.0],
+#     "max_wave_ms": [1200],
+#     "z_ied_threshold": [3.0],
+#     "refrac_ms": [2500.0],
+#     "sinusoidness_threshold": [0.0] # Not used when check_sinusoidness is False
+# }
 
 # --- Patient Metadata ---
 PATIENT_METADATA = {
@@ -363,7 +363,7 @@ def create_trial_summary(trial_number: int, params: dict, results_per_patient: l
 
 # ───────────────────────── Grid Search Execution ───────────────────
 
-def run_grid_search(patient_ids: List[int], max_workers: int, create_plots: bool, metric: str):
+def run_grid_search(patient_ids: List[int], max_workers: int, create_plots: bool, metric: str, start_trial: int = 0):
     """Run the full grid search for parameter optimization."""
     # Generate all parameter combinations with conditional logic for sinusoidness
     param_combinations = []
@@ -390,15 +390,34 @@ def run_grid_search(patient_ids: List[int], max_workers: int, create_plots: bool
 
     total_trials = len(param_combinations)
 
+    # Skip trials before start_trial
+    if start_trial > 0:
+        param_combinations = param_combinations[start_trial:]
+        print(f"Resuming from trial {start_trial}")
+
     print("=" * 60)
     print("Starting Grid Search")
     print(f"Testing on patients: {patient_ids}")
     print(f"Using {max_workers} parallel workers")
-    print(f"Total parameter combinations to test: {total_trials}")
+    print(f"Total parameter combinations: {total_trials}")
+    if start_trial > 0:
+        print(f"Starting from trial: {start_trial}")
+        print(f"Remaining trials to process: {len(param_combinations)}")
     print("=" * 60)
 
     all_results = []
-    main_bar = tqdm(enumerate(param_combinations), total=total_trials, desc="Grid Search Progress")
+    
+    # Load existing results if resuming
+    summary_csv_path = RESULTS_DIR / "grid_search_summary.csv"
+    if start_trial > 0 and summary_csv_path.exists():
+        existing_df = pd.read_csv(summary_csv_path)
+        all_results = existing_df.to_dict('records')
+        print(f"Loaded {len(all_results)} existing results")
+
+    main_bar = tqdm(enumerate(param_combinations, start=start_trial), 
+                   total=total_trials, 
+                   initial=start_trial,
+                   desc="Grid Search Progress")
 
     for trial_num, params in main_bar:
         cfg = make_cfg(params)
@@ -440,6 +459,10 @@ def run_grid_search(patient_ids: List[int], max_workers: int, create_plots: bool
 
         # Create detailed summary for this trial
         create_trial_summary(trial_num, params, patient_results)
+        
+        # Save results after each trial (for resumability)
+        df_results = pd.DataFrame(all_results)
+        df_results.to_csv(summary_csv_path, index=False, float_format="%.4f")
         
         main_bar.set_postfix(tp=total_tp, fp=total_fp, fn=total_fn, f1=f1)
 
@@ -576,6 +599,7 @@ def main():
     p_search.add_argument("--workers", type=int, default=4, help="Number of parallel workers.")
     p_search.add_argument("--no-plots", action="store_true", help="Skip generating plots for top trials.")
     p_search.add_argument("--metric", default=DEFAULT_METRIC, choices=OPTIMIZATION_METRICS.keys(), help=f"Metric to sort results by (default: {DEFAULT_METRIC}).")
+    p_search.add_argument("--start-trial", type=int, default=0, help="Trial number to start from (for resuming interrupted searches).")
 
     # --- Analyze Command ---
     p_analyze = subparsers.add_parser("analyze", help="Analyze results and show top trials.")
@@ -589,6 +613,7 @@ def main():
     # --- Summary Command ---
     subparsers.add_parser("summary", help="Interactively browse detailed trial summaries.")
 
+
     args = parser.parse_args()
     
     # Ensure output directories exist
@@ -597,7 +622,7 @@ def main():
     
     if args.command == "search":
         patient_ids = [int(x.strip()) for x in args.patients.split(",")]
-        run_grid_search(patient_ids, args.workers, not args.no_plots, args.metric)
+        run_grid_search(patient_ids, args.workers, not args.no_plots, args.metric, args.start_trial)
     elif args.command == "analyze":
         analyze_results(args.top, args.metric)
     elif args.command == "best":
