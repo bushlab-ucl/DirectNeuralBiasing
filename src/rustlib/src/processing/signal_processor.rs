@@ -8,16 +8,20 @@ use std::collections::{HashMap, VecDeque};
 // use std::time;
 
 use colored::Colorize;
+use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 // Uncomment these imports as we'll need them for logging
-use crate::utils::log::{log_to_file, generate_log_filename, log_config, log_trigger_event, log_verbose}; // Import new logging functions
+use crate::utils::log::{
+    generate_log_filename, log_config, log_to_file, log_trigger_event, log_verbose,
+}; // Import new logging functions
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 // use rayon::prelude::*;
 // use std::os::raw::c_void;
 
 use crate::config::load_config;
+use crate::visualization::{plotter::SharedPlotter, VisualizationData};
 
 // -----------------------------------------------------------------------------
 // RUST CORE LOGIC
@@ -47,6 +51,7 @@ pub struct SignalProcessor {
     context_buffer: VecDeque<HashMap<&'static str, f64>>, // Ring buffer for context logging
     context_size: usize,                                  // Number of samples before/after to keep
     log_file_name: String,                                // Log file name for verbose logging
+    visualization_plotter: Option<SharedPlotter>,
 }
 
 // Consider if Keys struct is necessary, or if constants are sufficient
@@ -77,10 +82,10 @@ impl SignalProcessor {
                     format!("Failed to serialize config to YAML: {}", e)
                 }
             };
-            
+
             // Debug: Print to console as well
             eprintln!("Attempting to log config to logs/{}", log_file_name);
-            
+
             match log_config(&log_file_name, config_path, &config_yaml) {
                 Ok(_) => eprintln!("Successfully logged config to logs/{}", log_file_name),
                 Err(e) => eprintln!("Failed to log config to file: {}", e),
@@ -97,6 +102,22 @@ impl SignalProcessor {
             // We can keep setup_logging_thread as a private helper within the impl
             SignalProcessor::setup_logging_thread(rx, log_file_name.clone());
             Some(tx)
+        } else {
+            None
+        };
+
+        // NEW: Setup visualization if enabled
+        let visualization_plotter = if config.visualization.enabled {
+            use crate::visualization::plotter::create_shared_plotter;
+            use crate::visualization::window::spawn_visualization_window;
+
+            let plotter = create_shared_plotter(config.visualization.clone());
+
+            // Spawn the visualization window in a separate thread
+            let plotter_clone = Arc::clone(&plotter);
+            spawn_visualization_window(plotter_clone, config.visualization.clone());
+
+            Some(plotter)
         } else {
             None
         };
@@ -119,6 +140,7 @@ impl SignalProcessor {
             context_buffer: VecDeque::with_capacity(context_size * 2 + 1),
             context_size,
             log_file_name,
+            visualization_plotter,
         };
         // --- End of logic moved from the old `new` function ---
 
@@ -172,9 +194,11 @@ impl SignalProcessor {
     }
 
     // We keep setup_logging_thread as a private helper method
-    fn setup_logging_thread(rx: Receiver<(Vec<HashMap<&'static str, f64>>, String)>, log_file_name: String) {
+    fn setup_logging_thread(
+        rx: Receiver<(Vec<HashMap<&'static str, f64>>, String)>,
+        log_file_name: String,
+    ) {
         thread::spawn(move || {
-
             // remove comments to overwrite logs on each load
             // // --- Call the new function to delete the old log file ---
             // if let Err(e) = crate::utils::log::delete_log_file(log_file_name) {
@@ -199,13 +223,20 @@ impl SignalProcessor {
                 }
             }
             // Log shutdown message when sender is dropped and channel is empty
-            let _ = log_to_file(&log_file_name, "Signal processor trigger logging shut down.");
+            let _ = log_to_file(
+                &log_file_name,
+                "Signal processor trigger logging shut down.",
+            );
         });
     }
 
     /// Logs a message to both terminal and file when verbose logging is enabled
     fn log_verbose(&self, message: &str) {
-        if let Err(e) = log_verbose(&self.log_file_name, message, self.processor_config.enable_debug_logging) {
+        if let Err(e) = log_verbose(
+            &self.log_file_name,
+            message,
+            self.processor_config.enable_debug_logging,
+        ) {
             eprintln!("Failed to log verbose message: {}", e);
         }
     }
@@ -213,7 +244,11 @@ impl SignalProcessor {
     /// Public method to log messages from external code (e.g., C++)
     #[allow(dead_code)]
     pub fn log_message(&self, message: &str) {
-        if let Err(e) = log_verbose(&self.log_file_name, message, self.processor_config.enable_debug_logging) {
+        if let Err(e) = log_verbose(
+            &self.log_file_name,
+            message,
+            self.processor_config.enable_debug_logging,
+        ) {
             eprintln!("Failed to log message from external code: {}", e);
         }
     }
@@ -231,10 +266,14 @@ impl SignalProcessor {
         if !self.filters.contains_key(&filter_id) {
             // Use the processor_config for verbose checking if needed
             if self.processor_config.verbose {
-                self.log_verbose(&format!(
-                    "Warning: Detector '{}' references non-existent filter ID: {}",
-                    id, filter_id
-                ).yellow().to_string());
+                self.log_verbose(
+                    &format!(
+                        "Warning: Detector '{}' references non-existent filter ID: {}",
+                        id, filter_id
+                    )
+                    .yellow()
+                    .to_string(),
+                );
             }
             // Decide if this should be a panic or just a warning + skipping
             // For now, let's keep the panic as it indicates a critical config error
@@ -252,10 +291,14 @@ impl SignalProcessor {
         // Check if the activation detector ID is valid
         if !self.detectors.contains_key(&activation_detector_id) {
             if self.processor_config.verbose {
-                self.log_verbose(&format!(
-                    "Warning: Trigger '{}' references non-existent activation detector ID: {}",
-                    id, activation_detector_id
-                ).yellow().to_string());
+                self.log_verbose(
+                    &format!(
+                        "Warning: Trigger '{}' references non-existent activation detector ID: {}",
+                        id, activation_detector_id
+                    )
+                    .yellow()
+                    .to_string(),
+                );
             }
             panic!(
                 "Trigger references non-existent activation detector ID: {}",
@@ -268,10 +311,14 @@ impl SignalProcessor {
             && !self.detectors.contains_key(&inhibition_detector_id)
         {
             if self.processor_config.verbose {
-                self.log_verbose(&format!(
-                    "Warning: Trigger '{}' references non-existent inhibition detector ID: {}",
-                    id, inhibition_detector_id
-                ).yellow().to_string());
+                self.log_verbose(
+                    &format!(
+                        "Warning: Trigger '{}' references non-existent inhibition detector ID: {}",
+                        id, inhibition_detector_id
+                    )
+                    .yellow()
+                    .to_string(),
+                );
             }
             panic!(
                 "Trigger references non-existent inhibition detector ID: {}",
@@ -281,7 +328,11 @@ impl SignalProcessor {
         // Handle the case where inhibition_detector_id is empty string, which is valid
         if inhibition_detector_id.is_empty() {
             if self.processor_config.verbose {
-                self.log_verbose(&format!("Trigger '{}' has no inhibition detector.", id).blue().to_string());
+                self.log_verbose(
+                    &format!("Trigger '{}' has no inhibition detector.", id)
+                        .blue()
+                        .to_string(),
+                );
             }
         }
 
@@ -303,6 +354,52 @@ impl SignalProcessor {
         if let Some(sender) = &self.log_sender {
             if let Err(e) = sender.send((context, trigger_id)) {
                 eprintln!("{}", format!("Failed to send log event: {}", e).red());
+            }
+        }
+    }
+
+    // NEW: Method to send data to visualization
+    fn update_visualization(&self) {
+        if let Some(ref plotter) = self.visualization_plotter {
+            // Extract raw sample
+            let raw_sample = self
+                .results
+                .get("global:raw_sample")
+                .copied()
+                .unwrap_or(0.0);
+            let timestamp = self
+                .results
+                .get("global:timestamp_ms")
+                .copied()
+                .unwrap_or(0.0);
+
+            // Extract filtered samples
+            let mut filtered_samples = Vec::new();
+            for (filter_id, _) in &self.filters {
+                let key = format!("filters:{}:filtered_sample", filter_id);
+                if let Some(&value) = self.results.get(key.as_str()) {
+                    filtered_samples.push((filter_id.clone(), value));
+                }
+            }
+
+            // Extract detections
+            let mut detections = Vec::new();
+            for (detector_id, _) in &self.detectors {
+                let key = format!("detectors:{}:detected", detector_id);
+                if let Some(&detected) = self.results.get(key.as_str()) {
+                    detections.push((detector_id.clone(), detected > 0.0));
+                }
+            }
+
+            let vis_data = VisualizationData {
+                timestamp,
+                raw_sample,
+                filtered_samples,
+                detections,
+            };
+
+            if let Ok(mut plotter_guard) = plotter.lock() {
+                plotter_guard.add_data(vis_data);
             }
         }
     }
@@ -427,6 +524,9 @@ impl SignalProcessor {
                 }
             }
 
+            // NEW: Update visualization after all processing for this sample
+            self.update_visualization();
+
             output.push(self.results.clone());
             self.index += 1;
         }
@@ -445,19 +545,29 @@ impl SignalProcessor {
         if self.processor_config.verbose {
             // Use processor_config
             let duration_whole = start_time_whole.elapsed();
-            self.log_verbose(&format!("Processed chunk in {:?}", duration_whole).blue().to_string());
+            self.log_verbose(
+                &format!("Processed chunk in {:?}", duration_whole)
+                    .blue()
+                    .to_string(),
+            );
 
             // debug print trigger timestamp option
-            self.log_verbose(&format!("Trigger timestamp option: {:?}", trigger_timestamp_option).color(
-                if trigger_timestamp_option.is_some() {
-                    "green"
-                } else {
-                    "red"
-                }
-            ).to_string());
+            self.log_verbose(
+                &format!("Trigger timestamp option: {:?}", trigger_timestamp_option)
+                    .color(if trigger_timestamp_option.is_some() {
+                        "green"
+                    } else {
+                        "red"
+                    })
+                    .to_string(),
+            );
 
             // debug print output length
-            self.log_verbose(&format!("Output length: {:?}", output.len()).color("yellow").to_string());
+            self.log_verbose(
+                &format!("Output length: {:?}", output.len())
+                    .color("yellow")
+                    .to_string(),
+            );
         }
 
         return (output, trigger_timestamp_option);

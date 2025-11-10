@@ -42,3 +42,14 @@ triggers:
       inhibition_detector_id: ied_detector
       inhibition_cooldown_ms: 2500.0
       pulse_cooldown_ms: 2500.0
+
+visualization:
+  enabled: true                    # Set to false to disable visualization
+  window_width: 1400               # Window width in pixels
+  window_height: 900               # Window height in pixels
+  buffer_size: 5000                # Number of samples to keep in memory for plotting
+  update_interval_ms: 16           # Update interval (~60 FPS)
+  show_raw_signal: true            # Show raw signal plot
+  show_filtered_signals: true      # Show filtered signal plots
+  show_detections: true            # Show detection markers and statistics
+  plot_height_per_signal: 180      # Height of each plot in pixels

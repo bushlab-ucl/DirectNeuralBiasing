@@ -16,6 +16,11 @@ serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.9"
 chrono = "0.4"
 
+# Visualization dependencies
+eframe = "0.28"    # egui framework for native windows
+egui = "0.28"      # Immediate mode GUI library
+egui_plot = "0.28" # Built-in plotting for egui
+
 [build-dependencies]
 maturin = { version = "1.5.1", optional = true }
 
@@ -23,6 +28,7 @@ maturin = { version = "1.5.1", optional = true }
 # Define a 'python' feature to include Python bindings
 default = ["python"]
 python = ["pyo3", "maturin"]
+# visualization = ["eframe", "egui"]
 
 cpp = [] # Exclude Python bindings when building for C++
 
