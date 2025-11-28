@@ -59,15 +59,15 @@ public:
     return -1;
   }
 
-  static bool get_save_raw_data(const std::string &config_path)
+  static int get_setup_sleep_ms(const std::string &config_path)
   {
-    Logger::debug("ConfigReader", "Reading save_raw_data flag from: " + config_path);
+    Logger::debug("ConfigReader", "Reading setup_sleep_ms from: " + config_path);
 
     std::ifstream inFile(config_path);
     if (!inFile.is_open())
     {
-      Logger::warn("ConfigReader", "Could not open config, defaulting save_raw_data to false");
-      return false;
+      Logger::error("ConfigReader", "Failed to open " + config_path);
+      return -1;
     }
 
     std::string line;
@@ -87,20 +87,26 @@ public:
         {
           break;
         }
-        auto pos = line.find("save_raw_data:");
+        auto pos = line.find("setup_sleep_ms:");
         if (pos != std::string::npos)
         {
-          std::string value = line.substr(pos + 14);
-          value.erase(0, value.find_first_not_of(" \t"));
-          value.erase(value.find_last_not_of(" \t\r\n") + 1);
-          bool result = (value == "true" || value == "True" || value == "TRUE");
-          Logger::info("ConfigReader", "save_raw_data: " + std::string(result ? "true" : "false"));
-          return result;
+          std::string num = line.substr(pos + 15);
+          try
+          {
+            int sleep_ms = std::stoi(num);
+            Logger::info("ConfigReader", "setup_sleep_ms: " + std::to_string(sleep_ms));
+            return sleep_ms;
+          }
+          catch (...)
+          {
+            Logger::error("ConfigReader", "Failed to parse setup_sleep_ms number");
+            return -1;
+          }
         }
       }
     }
-    Logger::info("ConfigReader", "save_raw_data not found, defaulting to false");
-    return false;
+    Logger::error("ConfigReader", "No setup_sleep_ms entry found in config");
+    return -1;
   }
 };
 

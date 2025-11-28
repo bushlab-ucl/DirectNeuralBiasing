@@ -2,7 +2,7 @@
 cmake_minimum_required(VERSION 3.15)
 
 # Set the project name
-project(DNB VERSION 1.4.0)
+project(DNB VERSION 1.4.1)
 
 # Add this near the top after project()
 if(MINGW)

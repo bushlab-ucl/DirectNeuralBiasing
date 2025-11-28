@@ -117,6 +117,15 @@ int main(int argc, char *argv[])
   }
   cout << "Using channel: " << channel << endl;
 
+  int sleep_ms = ConfigReader::get_setup_sleep_ms("./config.yaml");
+
+  if (sleep_ms == -1)
+  {
+    // Handle error - maybe use a default value
+    sleep_ms = 1000; // Default to 1 second
+    Logger::warn("Main", "Using default setup_sleep_ms: 1000ms");
+  }
+
   // ── Load Rust DLL ─────────────────────────────────────────
   cout << "Loading Rust DLL..." << endl;
   HINSTANCE hinstLib = LoadLibrary(TEXT("./direct_neural_biasing.dll"));
@@ -165,7 +174,7 @@ int main(int argc, char *argv[])
   }
 
   // Give the system time to initialize
-  this_thread::sleep_for(chrono::milliseconds(500));
+  this_thread::sleep_for(chrono::milliseconds(sleep_ms));
 
   // ── Setup channel (using our reliable code) ───────────────
   cbPKT_CHANINFO chan_info;
@@ -181,6 +190,9 @@ int main(int argc, char *argv[])
     FreeLibrary(hinstLib);
     return 1;
   }
+
+  // Give hardware time to apply settings
+  this_thread::sleep_for(chrono::milliseconds(sleep_ms));
 
   // Check if channel exists and supports analog input
   if (!(chan_info.chancaps & cbCHAN_EXISTS))
@@ -251,7 +263,7 @@ int main(int argc, char *argv[])
   }
 
   // Give system time to start streaming
-  this_thread::sleep_for(chrono::milliseconds(100));
+  this_thread::sleep_for(chrono::milliseconds(sleep_ms));
 
   // ── Main acquisition loop ──────────────────────────────────
   cout << "\n===== Starting data acquisition =====" << endl;
