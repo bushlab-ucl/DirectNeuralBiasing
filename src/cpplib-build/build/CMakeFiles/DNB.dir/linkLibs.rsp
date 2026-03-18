@@ -1,0 +1,1 @@
+  -L"/Users/niels/code/directNeuralBiasing/src/cpplib-build/../Cerelink/CBSDK-7.6.1-win64/lib"  -lcbsdk -lwinmm -lws2_32 -luser32 -lgdi32 -lsetupapi -lole32 -loleaut32 -liphlpapi -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32 

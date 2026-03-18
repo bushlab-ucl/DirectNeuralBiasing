@@ -1,0 +1,6 @@
+output/
+build/
+.git/
+.gitignore
+*.md
+.DS_Store
