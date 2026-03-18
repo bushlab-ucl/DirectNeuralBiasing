@@ -69,7 +69,7 @@ int main(int argc, char *argv[])
   }
 
   // Give hardware time to apply settings
-  this_thread::sleep_for(chrono::milliseconds(100));
+  this_thread::sleep_for(chrono::milliseconds(500));
 
   // Ask to send trials (only continuous data)
   res = cbSdkSetTrialConfig(0, 1, 0, 0, 0, 0, 0, 0, false,
@@ -117,7 +117,7 @@ int main(int argc, char *argv[])
   }
 
   // Give system time to start streaming
-  this_thread::sleep_for(chrono::milliseconds(100));
+  this_thread::sleep_for(chrono::milliseconds(500));
 
   int loop_count = 0;
   int total_samples_received = 0;
