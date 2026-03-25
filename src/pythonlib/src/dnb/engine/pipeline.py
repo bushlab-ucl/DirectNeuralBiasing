@@ -1,7 +1,7 @@
 """Pipeline orchestrator.
 
 Wires together a DataSource, a module chain, and an EventBus into
-a runnable pipeline. Provides run_live() for real-time closed-loop
+a runnable pipeline. Provides run_online() for real-time closed-loop
 operation and run_offline() for batch processing from file.
 """
 
@@ -36,7 +36,7 @@ class Pipeline:
             modules=[WaveletConvolution(), EventDetector()],
         )
         pipeline.on_event("ripple", callback)
-        pipeline.run_live()
+        pipeline.run_online()
 
     Args:
         source: Data source (live or file).
@@ -120,7 +120,7 @@ class Pipeline:
         self._total_events += len(result.events)
         return result
 
-    def run_live(self) -> None:
+    def run_online(self) -> None:
         """Run the pipeline in real-time closed-loop mode.
 
         Continuously reads from the source and processes chunks until
@@ -167,7 +167,7 @@ class Pipeline:
         """Run the pipeline on a file source in batch mode.
 
         Reads the entire source, processes all chunks through the same
-        module chain as run_live(), and returns all detected events.
+        module chain as run_online(), and returns all detected events.
 
         Args:
             output_path: If provided, save events and results to this .npz file.

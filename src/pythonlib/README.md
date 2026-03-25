@@ -10,7 +10,7 @@ Developed by the [Human Electrophysiology Lab](https://bushlab-ucl.github.io) at
 
 The library provides a unified pipeline that works identically in both modes:
 
-- **`run_live()`** — real-time closed-loop processing from Blackrock NSP hardware or NPlay simulator
+- **`run_online()`** — real-time closed-loop processing from Blackrock NSP hardware or NPlay simulator
 - **`run_offline()`** — batch processing from saved files, producing the same outputs
 
 The Python API is designed to mirror the Rust implementation one-to-one, enabling cross-language validation.
@@ -30,7 +30,7 @@ pipeline = Pipeline(
     ],
 )
 pipeline.on_event("ripple", lambda e: print(f"Ripple at {e.timestamp:.3f}s"))
-pipeline.run_live()
+pipeline.run_online()
 ```
 
 ### Offline from saved data
@@ -79,11 +79,11 @@ Source --> RingBuffer --> [Module chain] --> EventBus --> Outputs
 
 ### Data sources
 
-| Source | Class | Description |
-|--------|-------|-------------|
-| NSP hardware | `CerebusSource` | Live from Blackrock Cerebus NSP |
-| NPlay simulator | `NPlaySource` | From NPlay replay instance |
-| Saved file | `FileSource` | From `.npz` files |
+| Source          | Class           | Description                     |
+| --------------- | --------------- | ------------------------------- |
+| NSP hardware    | `CerebusSource` | Live from Blackrock Cerebus NSP |
+| NPlay simulator | `NPlaySource`   | From NPlay replay instance      |
+| Saved file      | `FileSource`    | From `.npz` files               |
 
 All sources implement the `DataSource` ABC and produce `DataChunk` objects with shape `(n_channels, n_samples)`.
 
@@ -91,11 +91,11 @@ All sources implement the `DataSource` ABC and produce `DataChunk` objects with 
 
 Modules are composable and chainable. Each receives a `ProcessResult` from the previous module.
 
-| Module | Description |
-|--------|-------------|
+| Module               | Description                                                                                                       |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `WaveletConvolution` | Complex Morlet wavelets, log-spaced, 1/f-scaled. Produces amplitude + phase at every (channel, freq, time) point. |
-| `PowerEstimator` | Band-specific power from wavelet output (delta, theta, alpha, beta, gamma). |
-| `EventDetector` | Threshold-based event detection on wavelet amplitude envelopes. |
+| `PowerEstimator`     | Band-specific power from wavelet output (delta, theta, alpha, beta, gamma).                                       |
+| `EventDetector`      | Threshold-based event detection on wavelet amplitude envelopes.                                                   |
 
 ### Custom modules
 
@@ -130,12 +130,12 @@ The output is the full analytic signal at every `(channel, frequency, time)` poi
 
 DNB uses `.npz` files with these keys:
 
-| Key | Shape | Description |
-|-----|-------|-------------|
-| `continuous` | `(n_channels, n_samples)` | Raw or processed neural data |
-| `sample_rate` | scalar | Sampling rate in Hz |
-| `channel_ids` | `(n_channels,)` | Optional channel identifiers |
-| `timestamps` | `(n_samples,)` | Optional sample timestamps in seconds |
+| Key           | Shape                     | Description                           |
+| ------------- | ------------------------- | ------------------------------------- |
+| `continuous`  | `(n_channels, n_samples)` | Raw or processed neural data          |
+| `sample_rate` | scalar                    | Sampling rate in Hz                   |
+| `channel_ids` | `(n_channels,)`           | Optional channel identifiers          |
+| `timestamps`  | `(n_samples,)`            | Optional sample timestamps in seconds |
 
 ## Validation (planned)
 

@@ -2,7 +2,7 @@
 
 Reads .npz files (as produced by the original process.py) and presents
 them as a streaming source, yielding one chunk at a time. This allows
-run_offline() to use the exact same pipeline as run_live().
+run_offline() to use the exact same pipeline as run_online().
 """
 
 from __future__ import annotations

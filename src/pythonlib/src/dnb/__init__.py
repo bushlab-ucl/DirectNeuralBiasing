@@ -17,7 +17,7 @@ Quick start:
         ],
     )
     pipeline.on_event("ripple", lambda e: print(f"Ripple at {e.timestamp:.3f}s"))
-    pipeline.run_live()
+    pipeline.run_online()
 """
 
 from dnb.core.types import DataChunk, Event, EventType, PipelineConfig, WaveletResult
