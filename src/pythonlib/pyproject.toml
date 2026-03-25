@@ -1,0 +1,62 @@
+[build-system]
+requires = ["setuptools>=68.0", "setuptools-scm>=8.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "direct-neural-biasing"
+version = "0.1.0"
+description = "Low-latency closed-loop neural signal processing for Blackrock Cerebus devices"
+readme = "README.md"
+license = { text = "CC-BY-NC-4.0" }
+requires-python = ">=3.10"
+authors = [
+    { name = "Human Electrophysiology Lab, UCL" },
+]
+keywords = ["neuroscience", "electrophysiology", "closed-loop", "blackrock", "cerebus"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+    "Programming Language :: Python :: 3",
+]
+
+dependencies = [
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "pycbsdk>=0.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov",
+    "ruff",
+    "mypy",
+]
+validation = [
+    "matplotlib>=3.7",
+    "h5py>=3.8",
+]
+
+[project.urls]
+Homepage = "https://github.com/bushlab-ucl/DirectNeuralBiasing"
+Documentation = "https://bushlab-ucl.github.io"
+Repository = "https://github.com/bushlab-ucl/DirectNeuralBiasing"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

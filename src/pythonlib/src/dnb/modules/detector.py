@@ -1,0 +1,172 @@
+"""Event detection module operating on wavelet-decomposed signals.
+
+Detects neural events (ripples, sharp waves, spindles, etc.) by
+analysing the amplitude and phase output from the WaveletConvolution
+module. Supports threshold-based detection on band-specific amplitude
+envelopes.
+"""
+
+from __future__ import annotations
+
+import logging
+
+import numpy as np
+from numpy.typing import NDArray
+
+from dnb.core.types import Event, EventType, PipelineConfig
+from dnb.modules.base import Module, ProcessResult
+
+logger = logging.getLogger(__name__)
+
+
+class EventDetector(Module):
+    """Detect events from wavelet amplitude envelopes.
+
+    Looks for threshold crossings in the amplitude of specified frequency
+    bands. Events are emitted when the amplitude exceeds threshold_std
+    standard deviations above the running mean.
+
+    Args:
+        event_type: Type of event to emit.
+        freq_range: (low, high) Hz band to monitor. The detector will
+            average amplitude across all wavelet frequencies in this range.
+        threshold_std: Number of standard deviations above mean for detection.
+        min_duration: Minimum event duration in seconds.
+        channels: Which channels to monitor. None = all.
+        cooldown: Minimum seconds between events on the same channel.
+    """
+
+    def __init__(
+        self,
+        event_type: EventType = EventType.THRESHOLD_CROSSING,
+        freq_range: tuple[float, float] = (80.0, 250.0),
+        threshold_std: float = 3.0,
+        min_duration: float = 0.02,
+        channels: list[int] | None = None,
+        cooldown: float = 0.1,
+    ) -> None:
+        self._event_type = event_type
+        self._freq_range = freq_range
+        self._threshold_std = threshold_std
+        self._min_duration = min_duration
+        self._channels = channels
+        self._cooldown = cooldown
+
+        # Running statistics (exponential moving average)
+        self._running_mean: NDArray[np.float64] | None = None
+        self._running_var: NDArray[np.float64] | None = None
+        self._alpha = 0.01  # EMA decay rate
+        self._last_event_time: dict[int, float] = {}
+        self._config: PipelineConfig | None = None
+
+    def configure(self, config: PipelineConfig) -> None:
+        self._config = config
+
+    def process(self, result: ProcessResult) -> ProcessResult:
+        if result.wavelet is None:
+            logger.warning("EventDetector received no wavelet data — skipping.")
+            return result
+
+        wavelet = result.wavelet
+        chunk = result.chunk
+
+        # Find frequency indices within the target range
+        freq_mask = (wavelet.frequencies >= self._freq_range[0]) & (
+            wavelet.frequencies <= self._freq_range[1]
+        )
+        if not np.any(freq_mask):
+            return result
+
+        # Average amplitude across the target frequency band
+        # Shape: (n_channels, n_samples)
+        band_amplitude = np.mean(wavelet.amplitude[:, freq_mask, :], axis=1)
+
+        # Channel selection
+        if self._channels is not None:
+            ch_mask = np.isin(chunk.channel_ids, self._channels)
+            band_amplitude = band_amplitude[ch_mask]
+            ch_ids = chunk.channel_ids[ch_mask]
+        else:
+            ch_ids = chunk.channel_ids
+
+        n_ch = band_amplitude.shape[0]
+
+        # Update running statistics
+        chunk_mean = np.mean(band_amplitude, axis=1)  # (n_ch,)
+        chunk_var = np.var(band_amplitude, axis=1)
+
+        if self._running_mean is None:
+            self._running_mean = chunk_mean.copy()
+            self._running_var = chunk_var.copy()
+        else:
+            # Resize if channel count changed
+            if self._running_mean.shape[0] != n_ch:
+                self._running_mean = chunk_mean.copy()
+                self._running_var = chunk_var.copy()
+            else:
+                self._running_mean = (
+                    self._alpha * chunk_mean + (1 - self._alpha) * self._running_mean
+                )
+                self._running_var = (
+                    self._alpha * chunk_var + (1 - self._alpha) * self._running_var
+                )
+
+        # Threshold detection
+        running_std = np.sqrt(self._running_var)
+        threshold = self._running_mean + self._threshold_std * running_std
+
+        min_samples = int(self._min_duration * chunk.sample_rate)
+        events: list[Event] = []
+
+        for ci in range(n_ch):
+            ch_id = int(ch_ids[ci])
+            above = band_amplitude[ci] > threshold[ci]
+
+            # Find contiguous runs above threshold
+            changes = np.diff(above.astype(np.int8))
+            starts = np.where(changes == 1)[0] + 1
+            stops = np.where(changes == -1)[0] + 1
+
+            # Handle edge cases
+            if above[0]:
+                starts = np.concatenate([[0], starts])
+            if above[-1]:
+                stops = np.concatenate([stops, [len(above)]])
+
+            for start, stop in zip(starts, stops):
+                duration_samp = stop - start
+                if duration_samp < min_samples:
+                    continue
+
+                t = chunk.timestamps[start]
+
+                # Cooldown check
+                last_t = self._last_event_time.get(ch_id, -np.inf)
+                if t - last_t < self._cooldown:
+                    continue
+
+                duration = duration_samp / chunk.sample_rate
+                peak_amp = float(np.max(band_amplitude[ci, start:stop]))
+
+                events.append(
+                    Event(
+                        event_type=self._event_type,
+                        timestamp=t,
+                        channel_id=ch_id,
+                        duration=duration,
+                        metadata={
+                            "peak_amplitude": peak_amp,
+                            "threshold": float(threshold[ci]),
+                            "freq_range": self._freq_range,
+                        },
+                    )
+                )
+                self._last_event_time[ch_id] = t
+
+        result.events.extend(events)
+        return result
+
+    def reset(self) -> None:
+        self._running_mean = None
+        self._running_var = None
+        self._last_event_time.clear()
