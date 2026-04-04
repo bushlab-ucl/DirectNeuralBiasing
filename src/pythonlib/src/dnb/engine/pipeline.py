@@ -84,12 +84,24 @@ class Pipeline:
 
     def _setup(self) -> None:
         """Initialise buffer, connect source, configure modules."""
+        # Connect source first — it may resolve config from file contents.
+        self._source.connect(self._config)
+
+        # If the source provides a resolved config (e.g. FileSource with
+        # actual sample_rate / n_channels from the file), adopt it so that
+        # the ring buffer and all modules use the correct parameters.
+        resolved = getattr(self._source, "resolved_config", None)
+        if resolved is not None:
+            self._config = resolved
+
         self._buffer = RingBuffer(
             n_channels=self._config.n_channels,
             capacity=self._config.buffer_samples,
         )
 
-        self._source.connect(self._config)
+        # Validate module ordering: modules that need wavelet data should
+        # not appear before the module that produces it.
+        self._validate_module_order()
 
         for module in self._modules:
             module.configure(self._config)
@@ -103,11 +115,30 @@ class Pipeline:
             self._config.chunk_duration,
         )
 
+    def _validate_module_order(self) -> None:
+        """Warn if modules that consume wavelet data precede the producer."""
+        from dnb.modules.detector import EventDetector
+        from dnb.modules.power import PowerEstimator
+        from dnb.modules.wavelet import WaveletConvolution
+
+        wavelet_consumers = (EventDetector, PowerEstimator)
+        seen_wavelet_producer = False
+
+        for module in self._modules:
+            if isinstance(module, WaveletConvolution):
+                seen_wavelet_producer = True
+            elif isinstance(module, wavelet_consumers) and not seen_wavelet_producer:
+                logger.warning(
+                    "%s is placed before WaveletConvolution in the module chain. "
+                    "It will receive no wavelet data and silently skip processing.",
+                    type(module).__name__,
+                )
+
     def _process_chunk(self, chunk: DataChunk) -> ProcessResult:
         """Run a single chunk through the module chain."""
         self._buffer.write(chunk.samples)
 
-        result = ProcessResult(chunk=chunk)
+        result = ProcessResult(chunk=chunk, ring_buffer=self._buffer)
 
         for module in self._modules:
             result = module.process(result)

@@ -27,6 +27,11 @@ class FileSource(DataSource):
 
     Optional keys: 'channel_ids', 'timestamps'.
 
+    After connect(), ``resolved_config`` holds a PipelineConfig whose
+    sample_rate, n_channels, and channel_ids reflect the actual file
+    contents.  The Pipeline should use this to configure modules and the
+    ring buffer so there is no mismatch between file and pipeline.
+
     Args:
         path: Path to the .npz file.
     """
@@ -38,7 +43,12 @@ class FileSource(DataSource):
         self._channel_ids: np.ndarray | None = None
         self._read_pos: int = 0
         self._total_samples: int = 0
-        self._config: PipelineConfig | None = None
+        self._resolved_config: PipelineConfig | None = None
+
+    @property
+    def resolved_config(self) -> PipelineConfig | None:
+        """Config reflecting the file's actual parameters, available after connect()."""
+        return self._resolved_config
 
     def connect(self, config: PipelineConfig) -> None:
         if not self._path.exists():
@@ -56,8 +66,9 @@ class FileSource(DataSource):
         else:
             self._channel_ids = np.arange(self._data.shape[0], dtype=np.int32)
 
-        # Override config with file's actual parameters
-        self._config = PipelineConfig(
+        # Build a resolved config that merges file params with user-supplied
+        # timing preferences (buffer_duration, chunk_duration).
+        self._resolved_config = PipelineConfig(
             sample_rate=self._sample_rate,
             n_channels=self._data.shape[0],
             channel_ids=self._channel_ids,
@@ -74,13 +85,13 @@ class FileSource(DataSource):
         )
 
     def read_chunk(self) -> DataChunk | None:
-        if self._data is None or self._config is None:
+        if self._data is None or self._resolved_config is None:
             raise RuntimeError("Source not connected. Call connect() first.")
 
         if self._read_pos >= self._total_samples:
             return None
 
-        chunk_size = self._config.chunk_samples
+        chunk_size = self._resolved_config.chunk_samples
         end = min(self._read_pos + chunk_size, self._total_samples)
         samples = self._data[:, self._read_pos : end]
 

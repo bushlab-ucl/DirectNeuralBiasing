@@ -55,18 +55,6 @@ def load_blackrock(path: str | Path) -> dict[str, NDArray]:
     Raises:
         NotImplementedError: Placeholder until full implementation.
     """
-    # TODO: Implement once brpylib integration is tested against
-    # actual .nev/.ns5 files from the lab's recordings.
-    #
-    # Expected implementation:
-    #   from brpylib import NsxFile, NevFile
-    #   nsx = NsxFile(str(path))
-    #   data = nsx.getdata()
-    #   return {
-    #       "continuous": data["data"].T,  # (n_channels, n_samples)
-    #       "sample_rate": data["samp_per_s"],
-    #       "channel_ids": np.array(data["elec_ids"], dtype=np.int32),
-    #   }
     raise NotImplementedError(
         f"Blackrock file loading not yet implemented for: {path}. "
         "Install brpylib and contribute the integration."

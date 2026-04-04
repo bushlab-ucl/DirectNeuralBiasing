@@ -15,9 +15,14 @@ def _make_chunk(
     n_samples: int = 6000,
     sample_rate: float = 30000.0,
     freq: float | None = None,
+    t_offset: float = 0.0,
 ) -> DataChunk:
-    """Create a test DataChunk, optionally with a pure sine wave."""
-    t = np.arange(n_samples) / sample_rate
+    """Create a test DataChunk, optionally with a pure sine wave.
+
+    Args:
+        t_offset: Starting time in seconds (for multi-chunk sequences).
+    """
+    t = t_offset + np.arange(n_samples) / sample_rate
     if freq is not None:
         samples = np.sin(2 * np.pi * freq * t)[np.newaxis, :].repeat(n_channels, axis=0)
     else:
@@ -103,6 +108,57 @@ class TestWaveletConvolution:
         # Should only process 2 channels
         assert result.wavelet.analytic.shape[0] == 2
 
+    def test_overlap_save_with_ring_buffer(self):
+        """When a ring buffer is provided, edge artefacts should be reduced."""
+        from dnb.core.ring_buffer import RingBuffer
+
+        config = PipelineConfig(sample_rate=1000, n_channels=1, chunk_duration=0.5)
+        wc = WaveletConvolution(freq_min=5, freq_max=100, n_freqs=10, n_cycles_base=3)
+        wc.configure(config)
+
+        # Create a steady 20 Hz sine across two chunks
+        full_t = np.arange(1000) / 1000.0
+        full_signal = np.sin(2 * np.pi * 20 * full_t).reshape(1, -1)
+
+        buf = RingBuffer(n_channels=1, capacity=2000)
+
+        # Process chunk 1 (no history yet)
+        chunk1 = DataChunk(
+            samples=full_signal[:, :500],
+            timestamps=full_t[:500],
+            channel_ids=np.array([0], dtype=np.int32),
+            sample_rate=1000.0,
+        )
+        buf.write(chunk1.samples)
+        r1 = wc.process(ProcessResult(chunk=chunk1, ring_buffer=buf))
+
+        # Process chunk 2 (ring buffer has chunk 1 as history)
+        chunk2 = DataChunk(
+            samples=full_signal[:, 500:],
+            timestamps=full_t[500:],
+            channel_ids=np.array([0], dtype=np.int32),
+            sample_rate=1000.0,
+        )
+        buf.write(chunk2.samples)
+        r2 = wc.process(ProcessResult(chunk=chunk2, ring_buffer=buf))
+
+        # The amplitude at the boundary (start of chunk 2) should be
+        # reasonably smooth — not a sharp transient.  With overlap-save,
+        # the first few samples of chunk 2 should have amplitude close
+        # to the middle of chunk 2 (a steady sine).
+        amp2 = r2.wavelet.amplitude[0, :, :]
+        # Pick the frequency band closest to 20 Hz
+        freq_idx = np.argmin(np.abs(r2.wavelet.frequencies - 20.0))
+        edge_amp = amp2[freq_idx, 0]
+        mid_amp = np.mean(amp2[freq_idx, 100:400])
+
+        # Edge amplitude should be within 50% of mid amplitude
+        # (without overlap-save it would typically be much lower)
+        assert edge_amp > 0.5 * mid_amp, (
+            f"Edge amplitude {edge_amp:.4f} too low vs mid {mid_amp:.4f} — "
+            "overlap-save may not be working"
+        )
+
 
 class TestPowerEstimator:
     def test_band_power_keys(self):
@@ -138,7 +194,11 @@ class TestPowerEstimator:
 
 class TestEventDetector:
     def test_detects_high_amplitude_burst(self):
-        """Inject a loud burst and check that the detector finds it."""
+        """Inject a loud burst and check that the detector finds it.
+
+        We feed several baseline chunks first so the detector's warmup
+        period elapses and running statistics are stable.
+        """
         config = PipelineConfig(sample_rate=1000, n_channels=1, chunk_duration=2.0)
         wc = WaveletConvolution(freq_min=50, freq_max=200, n_freqs=10, n_cycles_base=3)
         det = EventDetector(
@@ -147,17 +207,28 @@ class TestEventDetector:
             threshold_std=2.0,
             min_duration=0.01,
             cooldown=0.05,
+            warmup_chunks=3,
         )
         wc.configure(config)
         det.configure(config)
 
-        # Build signal: noise + loud 120Hz burst in the middle
         rng = np.random.default_rng(123)
         n_samples = 2000
         t = np.arange(n_samples) / 1000.0
-        signal = rng.standard_normal((1, n_samples)) * 0.1
 
-        # Inject burst from 0.8s to 1.2s
+        # Feed several baseline (noise-only) chunks to get past warmup
+        for i in range(4):
+            baseline_chunk = DataChunk(
+                samples=rng.standard_normal((1, n_samples)) * 0.1,
+                timestamps=t + i * 2.0,
+                channel_ids=np.array([0], dtype=np.int32),
+                sample_rate=1000.0,
+            )
+            r = wc.process(ProcessResult(chunk=baseline_chunk))
+            det.process(r)
+
+        # Now build a chunk with a loud 120 Hz burst in the middle
+        signal = rng.standard_normal((1, n_samples)) * 0.1
         burst_start = 800
         burst_end = 1200
         signal[0, burst_start:burst_end] += 5.0 * np.sin(
@@ -166,27 +237,54 @@ class TestEventDetector:
 
         chunk = DataChunk(
             samples=signal,
-            timestamps=t,
+            timestamps=t + 8.0,  # after 4 baseline chunks
             channel_ids=np.array([0], dtype=np.int32),
             sample_rate=1000.0,
         )
 
-        # First chunk to establish baseline
-        baseline_chunk = DataChunk(
-            samples=rng.standard_normal((1, n_samples)) * 0.1,
-            timestamps=t,
-            channel_ids=np.array([0], dtype=np.int32),
-            sample_rate=1000.0,
-        )
-        r0 = wc.process(ProcessResult(chunk=baseline_chunk))
-        det.process(r0)
-
-        # Now the chunk with the burst
         result = wc.process(ProcessResult(chunk=chunk))
         result = det.process(result)
 
         assert len(result.events) > 0, "Should detect at least one event"
         evt = result.events[0]
         assert evt.event_type == EventType.RIPPLE
-        # Event should be roughly in the burst window
-        assert 0.5 < evt.timestamp < 1.5
+        # Event should be roughly in the burst window (accounting for offset)
+        assert 8.0 < evt.timestamp < 10.0
+
+    def test_no_events_during_warmup(self):
+        """The detector should not emit events during the warmup period."""
+        config = PipelineConfig(sample_rate=1000, n_channels=1, chunk_duration=1.0)
+        wc = WaveletConvolution(freq_min=50, freq_max=200, n_freqs=5, n_cycles_base=3)
+        det = EventDetector(
+            event_type=EventType.RIPPLE,
+            freq_range=(80, 200),
+            threshold_std=2.0,
+            warmup_chunks=3,
+        )
+        wc.configure(config)
+        det.configure(config)
+
+        rng = np.random.default_rng(99)
+        n_samples = 1000
+        t = np.arange(n_samples) / 1000.0
+
+        # Feed a chunk with a massive burst — should still be suppressed
+        # during warmup.
+        signal = rng.standard_normal((1, n_samples)) * 0.01
+        signal[0, 400:600] += 100.0 * np.sin(2 * np.pi * 120 * t[400:600])
+
+        all_events = []
+        for i in range(3):
+            chunk = DataChunk(
+                samples=signal.copy(),
+                timestamps=t + i * 1.0,
+                channel_ids=np.array([0], dtype=np.int32),
+                sample_rate=1000.0,
+            )
+            r = wc.process(ProcessResult(chunk=chunk))
+            r = det.process(r)
+            all_events.extend(r.events)
+
+        assert len(all_events) == 0, (
+            f"Expected no events during warmup, got {len(all_events)}"
+        )

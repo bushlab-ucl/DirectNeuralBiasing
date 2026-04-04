@@ -1,18 +1,22 @@
 [build-system]
-requires = ["setuptools>=68.0", "setuptools-scm>=8.0"]
+requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "direct-neural-biasing"
-version = "0.1.0"
+version = "2.0.0"
 description = "Low-latency closed-loop neural signal processing for Blackrock Cerebus devices"
 readme = "README.md"
 license = { text = "CC-BY-NC-4.0" }
 requires-python = ">=3.10"
-authors = [
-    { name = "Human Electrophysiology Lab, UCL" },
+authors = [{ name = "Human Electrophysiology Lab, UCL" }]
+keywords = [
+    "neuroscience",
+    "electrophysiology",
+    "closed-loop",
+    "blackrock",
+    "cerebus",
 ]
-keywords = ["neuroscience", "electrophysiology", "closed-loop", "blackrock", "cerebus"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
@@ -20,23 +24,12 @@ classifiers = [
     "Programming Language :: Python :: 3",
 ]
 
-dependencies = [
-    "numpy>=1.24",
-    "scipy>=1.10",
-    "pycbsdk>=0.3",
-]
+dependencies = ["numpy>=1.24", "scipy>=1.10"]
 
 [project.optional-dependencies]
-dev = [
-    "pytest>=7.0",
-    "pytest-cov",
-    "ruff",
-    "mypy",
-]
-validation = [
-    "matplotlib>=3.7",
-    "h5py>=3.8",
-]
+live = ["pycbsdk>=0.3"]
+dev = ["pytest>=7.0", "pytest-cov", "ruff", "mypy", "build"]
+validation = ["matplotlib>=3.7", "h5py>=3.8"]
 
 [project.urls]
 Homepage = "https://github.com/bushlab-ucl/DirectNeuralBiasing"

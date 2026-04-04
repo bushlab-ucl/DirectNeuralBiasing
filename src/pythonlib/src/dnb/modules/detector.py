@@ -12,11 +12,17 @@ import logging
 
 import numpy as np
 from numpy.typing import NDArray
+from scipy.ndimage import label as ndimage_label
 
 from dnb.core.types import Event, EventType, PipelineConfig
 from dnb.modules.base import Module, ProcessResult
 
 logger = logging.getLogger(__name__)
+
+# Number of chunks used to build up a stable baseline before events
+# are emitted.  During warmup the running mean/var are updated but
+# no threshold crossings are reported.
+_DEFAULT_WARMUP_CHUNKS = 5
 
 
 class EventDetector(Module):
@@ -26,6 +32,10 @@ class EventDetector(Module):
     bands. Events are emitted when the amplitude exceeds threshold_std
     standard deviations above the running mean.
 
+    A brief warmup period (``warmup_chunks`` chunks) is enforced at the
+    start of each run so that the running statistics converge before
+    detection begins.
+
     Args:
         event_type: Type of event to emit.
         freq_range: (low, high) Hz band to monitor. The detector will
@@ -34,6 +44,8 @@ class EventDetector(Module):
         min_duration: Minimum event duration in seconds.
         channels: Which channels to monitor. None = all.
         cooldown: Minimum seconds between events on the same channel.
+        warmup_chunks: Number of initial chunks used only for baseline
+            estimation (no events emitted).
     """
 
     def __init__(
@@ -44,6 +56,7 @@ class EventDetector(Module):
         min_duration: float = 0.02,
         channels: list[int] | None = None,
         cooldown: float = 0.1,
+        warmup_chunks: int = _DEFAULT_WARMUP_CHUNKS,
     ) -> None:
         self._event_type = event_type
         self._freq_range = freq_range
@@ -51,6 +64,7 @@ class EventDetector(Module):
         self._min_duration = min_duration
         self._channels = channels
         self._cooldown = cooldown
+        self._warmup_chunks = warmup_chunks
 
         # Running statistics (exponential moving average)
         self._running_mean: NDArray[np.float64] | None = None
@@ -58,6 +72,7 @@ class EventDetector(Module):
         self._alpha = 0.01  # EMA decay rate
         self._last_event_time: dict[int, float] = {}
         self._config: PipelineConfig | None = None
+        self._chunks_seen: int = 0
 
     def configure(self, config: PipelineConfig) -> None:
         self._config = config
@@ -95,21 +110,22 @@ class EventDetector(Module):
         chunk_mean = np.mean(band_amplitude, axis=1)  # (n_ch,)
         chunk_var = np.var(band_amplitude, axis=1)
 
-        if self._running_mean is None:
+        if self._running_mean is None or self._running_mean.shape[0] != n_ch:
             self._running_mean = chunk_mean.copy()
             self._running_var = chunk_var.copy()
         else:
-            # Resize if channel count changed
-            if self._running_mean.shape[0] != n_ch:
-                self._running_mean = chunk_mean.copy()
-                self._running_var = chunk_var.copy()
-            else:
-                self._running_mean = (
-                    self._alpha * chunk_mean + (1 - self._alpha) * self._running_mean
-                )
-                self._running_var = (
-                    self._alpha * chunk_var + (1 - self._alpha) * self._running_var
-                )
+            self._running_mean = (
+                self._alpha * chunk_mean + (1 - self._alpha) * self._running_mean
+            )
+            self._running_var = (
+                self._alpha * chunk_var + (1 - self._alpha) * self._running_var
+            )
+
+        self._chunks_seen += 1
+
+        # During warmup, update stats only — do not detect events.
+        if self._chunks_seen <= self._warmup_chunks:
+            return result
 
         # Threshold detection
         running_std = np.sqrt(self._running_var)
@@ -122,19 +138,17 @@ class EventDetector(Module):
             ch_id = int(ch_ids[ci])
             above = band_amplitude[ci] > threshold[ci]
 
-            # Find contiguous runs above threshold
-            changes = np.diff(above.astype(np.int8))
-            starts = np.where(changes == 1)[0] + 1
-            stops = np.where(changes == -1)[0] + 1
+            # Use scipy.ndimage.label for robust contiguous-region detection.
+            # This correctly handles all edge cases (signal entirely above
+            # threshold, single-sample dips, etc.).
+            labelled, n_regions = ndimage_label(above)
 
-            # Handle edge cases
-            if above[0]:
-                starts = np.concatenate([[0], starts])
-            if above[-1]:
-                stops = np.concatenate([stops, [len(above)]])
-
-            for start, stop in zip(starts, stops):
+            for region_id in range(1, n_regions + 1):
+                region_indices = np.where(labelled == region_id)[0]
+                start = region_indices[0]
+                stop = region_indices[-1] + 1
                 duration_samp = stop - start
+
                 if duration_samp < min_samples:
                     continue
 
@@ -170,3 +184,4 @@ class EventDetector(Module):
         self._running_mean = None
         self._running_var = None
         self._last_event_time.clear()
+        self._chunks_seen = 0

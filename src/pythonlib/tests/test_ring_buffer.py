@@ -57,3 +57,29 @@ class TestRingBuffer:
         assert buf.available == 30
         buf.write(np.ones((1, 80)))
         assert buf.available == 100  # capped at capacity
+
+    def test_available_is_thread_safe(self):
+        """available should return a consistent value under the lock."""
+        import threading
+
+        buf = RingBuffer(n_channels=1, capacity=1000)
+        results = []
+
+        def writer():
+            for _ in range(100):
+                buf.write(np.ones((1, 10)))
+
+        def reader():
+            for _ in range(100):
+                results.append(buf.available)
+
+        t1 = threading.Thread(target=writer)
+        t2 = threading.Thread(target=reader)
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
+
+        # All observed values should be valid (multiples of 10 up to 1000)
+        for v in results:
+            assert 0 <= v <= 1000

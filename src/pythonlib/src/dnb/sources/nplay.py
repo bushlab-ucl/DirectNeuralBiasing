@@ -51,11 +51,13 @@ class NPlaySource(DataSource):
         self._session = None
         self._config: PipelineConfig | None = None
         self._connected = False
+        self._dropped_packets = 0
 
     def connect(self, config: PipelineConfig) -> None:
         from pycbsdk import Session
 
         self._config = config
+        self._dropped_packets = 0
         self._session = Session(self._protocol)
         self._session.__enter__()
         time.sleep(self._startup_delay)
@@ -69,8 +71,15 @@ class NPlaySource(DataSource):
                 payload = raw[_HEADER_INT16_COUNT:]
                 samples = payload.reshape(config.n_channels, _SAMPLES_PER_PACKET)
                 self._queue.put_nowait((header.time, samples))
-            except (ValueError, queue.Full):
-                pass  # Drop malformed or overflow packets
+            except ValueError as exc:
+                self._dropped_packets += 1
+                logger.debug("Dropped malformed packet: %s", exc)
+            except queue.Full:
+                self._dropped_packets += 1
+                logger.debug(
+                    "Packet queue full — dropped packet (total dropped: %d)",
+                    self._dropped_packets,
+                )
 
         self._connected = True
         logger.info("NPlaySource connected (protocol=%s)", self._protocol)
@@ -120,4 +129,10 @@ class NPlaySource(DataSource):
             self._session.__exit__(None, None, None)
             self._session = None
         self._connected = False
-        logger.info("NPlaySource closed")
+        if self._dropped_packets > 0:
+            logger.warning(
+                "NPlaySource closed — %d packets were dropped during this session",
+                self._dropped_packets,
+            )
+        else:
+            logger.info("NPlaySource closed")

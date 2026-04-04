@@ -45,7 +45,8 @@ class RingBuffer:
     @property
     def available(self) -> int:
         """Number of samples available to read (up to capacity)."""
-        return min(self._total_written, self._capacity)
+        with self._lock:
+            return min(self._total_written, self._capacity)
 
     def write(self, data: NDArray) -> None:
         """Append data to the buffer.

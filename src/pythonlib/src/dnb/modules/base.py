@@ -9,12 +9,15 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from numpy.typing import NDArray
 
 from dnb.core.types import DataChunk, Event, PipelineConfig, WaveletResult
+
+if TYPE_CHECKING:
+    from dnb.core.ring_buffer import RingBuffer
 
 
 @dataclass
@@ -26,12 +29,15 @@ class ProcessResult:
         wavelet: Wavelet decomposition, if computed by this module.
         events: Any events detected during processing.
         data: Arbitrary named arrays for downstream modules.
+        ring_buffer: Reference to the pipeline's ring buffer, allowing
+            modules to read historical samples for overlap/context.
     """
 
     chunk: DataChunk
     wavelet: WaveletResult | None = None
     events: list[Event] = field(default_factory=list)
     data: dict[str, NDArray[np.float64]] = field(default_factory=dict)
+    ring_buffer: RingBuffer | None = None
 
 
 class Module(ABC):

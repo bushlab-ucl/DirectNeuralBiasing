@@ -15,9 +15,14 @@ Design choices:
       high-frequency wavelets are short (good time resolution).
     - FFT-based convolution for efficiency on long chunks.
     - Kernels are pre-computed once in configure().
+    - Overlap-save: when a ring buffer is available, the module reads
+      extra historical samples so that chunk-boundary edge artefacts
+      are confined to the discarded prefix.
 """
 
 from __future__ import annotations
+
+import logging
 
 import numpy as np
 from numpy.typing import NDArray
@@ -25,6 +30,8 @@ from scipy.fft import fft, ifft, next_fast_len
 
 from dnb.core.types import DataChunk, PipelineConfig, WaveletResult
 from dnb.modules.base import Module, ProcessResult
+
+logger = logging.getLogger(__name__)
 
 
 def _make_morlet_kernel(
@@ -74,6 +81,11 @@ class WaveletConvolution(Module):
     (channel, frequency, time) point. Downstream modules can read
     .amplitude, .phase, or .power directly.
 
+    When a ring buffer is available in the ProcessResult, the module
+    automatically prepends historical samples (overlap-save) so that
+    edge artefacts from the FFT convolution fall in the discarded
+    prefix rather than corrupting the output.
+
     Args:
         freq_min: Lowest centre frequency in Hz.
         freq_max: Highest centre frequency in Hz.
@@ -105,6 +117,9 @@ class WaveletConvolution(Module):
         self._kernels_fft: list[NDArray[np.complex128]] = []
         self._n_fft: int = 0
         self._sample_rate: float = 0.0
+        self._max_kernel_len: int = 0
+        # Overlap length: number of prefix samples needed to absorb edge effects
+        self._overlap: int = 0
 
     @property
     def frequencies(self) -> NDArray[np.float64]:
@@ -134,10 +149,23 @@ class WaveletConvolution(Module):
             max_kernel_len = max(max_kernel_len, kernel_len)
         self._max_kernel_len = max_kernel_len
 
+        # The overlap needed is kernel_len - 1 (standard overlap-save).
+        self._overlap = max_kernel_len - 1
+
         # FFT length must fit both the data and the longest kernel
         # for correct linear convolution
         self._n_fft = next_fast_len(config.chunk_samples + max_kernel_len - 1)
         self._precompute_kernels()
+
+        logger.info(
+            "WaveletConvolution configured: %d freqs (%.1f–%.1f Hz), "
+            "overlap=%d samples (%.3fs)",
+            self._n_freqs,
+            self._freq_min,
+            self._freq_max,
+            self._overlap,
+            self._overlap / self._sample_rate,
+        )
 
     def _precompute_kernels(self) -> None:
         """Build frequency-domain wavelet kernels for all bands."""
@@ -150,13 +178,14 @@ class WaveletConvolution(Module):
         chunk = result.chunk
         n_samples = chunk.n_samples
 
-        # Recompute kernels if chunk size changed
-        needed_fft = next_fast_len(n_samples + self._max_kernel_len - 1)
-        if needed_fft != self._n_fft:
-            self._n_fft = needed_fft
-            self._precompute_kernels()
-
-        # Select channels
+        # --- Overlap-save: prepend historical context if available ---
+        # This eliminates edge artefacts at chunk boundaries.  We read
+        # `self._overlap` extra samples from the ring buffer (which
+        # already contains the current chunk written by the pipeline)
+        # and convolve the extended signal.  Only the last `n_samples`
+        # columns of the result are kept — the prefix absorbs the
+        # transient.
+        overlap_used = 0
         if self._channels is not None:
             ch_mask = np.isin(chunk.channel_ids, self._channels)
             data = chunk.samples[ch_mask]
@@ -165,8 +194,28 @@ class WaveletConvolution(Module):
             data = chunk.samples
             ch_ids = chunk.channel_ids
 
+        if result.ring_buffer is not None and self._overlap > 0:
+            avail = result.ring_buffer.available
+            # The ring buffer already contains the current chunk, so we
+            # can read up to (overlap + n_samples) to get the prefix.
+            read_len = min(self._overlap + n_samples, avail)
+            if read_len > n_samples:
+                extended = result.ring_buffer.read(read_len)
+                # Apply channel selection to the extended data
+                if self._channels is not None:
+                    extended = extended[ch_mask]
+                data = extended
+                overlap_used = read_len - n_samples
+
+        n_conv = data.shape[1]
         n_ch = data.shape[0]
         n_freqs = len(self._frequencies)
+
+        # Recompute kernels if convolution size changed
+        needed_fft = next_fast_len(n_conv + self._max_kernel_len - 1)
+        if needed_fft != self._n_fft:
+            self._n_fft = needed_fft
+            self._precompute_kernels()
 
         # FFT of all channels at once: (n_ch, n_fft)
         data_fft = fft(data, n=self._n_fft, axis=1)
@@ -176,7 +225,8 @@ class WaveletConvolution(Module):
         for fi, kernel_fft in enumerate(self._kernels_fft):
             # Multiply in frequency domain, IFFT back
             conv = ifft(data_fft * kernel_fft[np.newaxis, :], axis=1)
-            analytic[:, fi, :] = conv[:, :n_samples]
+            # Discard the overlap prefix — keep only the last n_samples
+            analytic[:, fi, :] = conv[:, overlap_used : overlap_used + n_samples]
 
         wavelet_result = WaveletResult(
             analytic=analytic,
