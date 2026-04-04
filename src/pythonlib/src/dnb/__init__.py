@@ -22,6 +22,7 @@ Quick start:
 
 from dnb.core.types import DataChunk, Event, EventType, PipelineConfig, WaveletResult
 from dnb.engine.pipeline import Pipeline
+from dnb.logging_config import setup_logging
 from dnb.sources.cerebus import CerebusSource
 from dnb.sources.file import FileSource
 from dnb.sources.nplay import NPlaySource
@@ -38,4 +39,5 @@ __all__ = [
     "Pipeline",
     "PipelineConfig",
     "WaveletResult",
+    "setup_logging",
 ]

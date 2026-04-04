@@ -22,6 +22,8 @@ class EventType(Enum):
     SPINDLE = auto()
     THRESHOLD_CROSSING = auto()
     PHASE_LOCK = auto()
+    STIM1 = auto()          # primary stimulation trigger
+    STIM2 = auto()          # secondary stimulation trigger (paired pulse)
     CUSTOM = auto()
 
 
