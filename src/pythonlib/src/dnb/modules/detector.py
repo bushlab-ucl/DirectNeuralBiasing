@@ -93,16 +93,29 @@ class EventDetector(Module):
             return result
 
         # Average amplitude across the target frequency band
-        # Shape: (n_channels, n_samples)
+        # Shape: (n_channels_wavelet, n_samples)
         band_amplitude = np.mean(wavelet.amplitude[:, freq_mask, :], axis=1)
 
-        # Channel selection
-        if self._channels is not None:
-            ch_mask = np.isin(chunk.channel_ids, self._channels)
-            band_amplitude = band_amplitude[ch_mask]
-            ch_ids = chunk.channel_ids[ch_mask]
+        # Channel selection — the wavelet may have already filtered channels
+        # (fewer rows than the chunk). We need to figure out which channel
+        # IDs correspond to the wavelet's rows.
+        n_wavelet_ch = wavelet.analytic.shape[0]
+        if n_wavelet_ch == chunk.n_channels:
+            # Wavelet has all channels — apply our own filter if set
+            if self._channels is not None:
+                ch_mask = np.isin(chunk.channel_ids, self._channels)
+                band_amplitude = band_amplitude[ch_mask]
+                ch_ids = chunk.channel_ids[ch_mask]
+            else:
+                ch_ids = chunk.channel_ids
         else:
-            ch_ids = chunk.channel_ids
+            # Wavelet already selected a subset — use its rows as-is.
+            # Try to recover channel IDs from the chunk if possible.
+            if self._channels is not None:
+                ch_mask = np.isin(chunk.channel_ids, self._channels)
+                ch_ids = chunk.channel_ids[ch_mask][:n_wavelet_ch]
+            else:
+                ch_ids = np.arange(n_wavelet_ch, dtype=np.int32)
 
         n_ch = band_amplitude.shape[0]
 

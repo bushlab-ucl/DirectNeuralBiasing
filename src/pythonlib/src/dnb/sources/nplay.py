@@ -41,7 +41,7 @@ class NPlaySource(DataSource):
         self,
         protocol: str = "NPLAY",
         startup_delay: float = 2.0,
-        queue_maxsize: int = 50_000,
+        queue_maxsize: int = 500_000,
     ) -> None:
         self._protocol = protocol
         self._startup_delay = startup_delay
@@ -87,28 +87,48 @@ class NPlaySource(DataSource):
     def read_chunk(self) -> DataChunk | None:
         """Assemble packets into a chunk of configured duration.
 
-        Blocks until enough packets arrive to fill one chunk, or returns
-        a partial chunk on timeout.
+        Keeps reading from the queue until enough samples have been
+        accumulated to fill one chunk (target = chunk_samples).  Falls
+        back to a short blocking get when the queue is momentarily empty,
+        so we don't spin-wait but also don't give up too early.
         """
         if not self._config:
             raise RuntimeError("Source not connected. Call connect() first.")
 
         target_samples = self._config.chunk_samples
-        packets_needed = max(1, target_samples // _SAMPLES_PER_PACKET)
 
         collected_times: list[int] = []
         collected_samples: list[np.ndarray] = []
+        n_collected = 0
 
-        for _ in range(packets_needed):
-            try:
-                t, s = self._queue.get(timeout=1.0)
-                collected_times.append(t)
-                collected_samples.append(s)
-            except queue.Empty:
+        while n_collected < target_samples:
+            # Try non-blocking drain first
+            drained = 0
+            while n_collected < target_samples:
+                try:
+                    t, s = self._queue.get_nowait()
+                    collected_times.append(t)
+                    collected_samples.append(s)
+                    n_collected += s.shape[1]
+                    drained += 1
+                except queue.Empty:
+                    break
+
+            if n_collected >= target_samples:
                 break
 
-        if not collected_samples:
-            return None
+            # Queue was empty — wait briefly for more packets
+            try:
+                t, s = self._queue.get(timeout=0.05)
+                collected_times.append(t)
+                collected_samples.append(s)
+                n_collected += s.shape[1]
+            except queue.Empty:
+                # If we have nothing at all after waiting, signal no data
+                if not collected_samples:
+                    return None
+                # Otherwise return what we have (end of stream / slow source)
+                break
 
         samples = np.concatenate(collected_samples, axis=1).astype(np.float64)
         n_samples = samples.shape[1]

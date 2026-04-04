@@ -178,14 +178,7 @@ class WaveletConvolution(Module):
         chunk = result.chunk
         n_samples = chunk.n_samples
 
-        # --- Overlap-save: prepend historical context if available ---
-        # This eliminates edge artefacts at chunk boundaries.  We read
-        # `self._overlap` extra samples from the ring buffer (which
-        # already contains the current chunk written by the pipeline)
-        # and convolve the extended signal.  Only the last `n_samples`
-        # columns of the result are kept — the prefix absorbs the
-        # transient.
-        overlap_used = 0
+        # --- Channel selection ---
         if self._channels is not None:
             ch_mask = np.isin(chunk.channel_ids, self._channels)
             data = chunk.samples[ch_mask]
@@ -194,18 +187,28 @@ class WaveletConvolution(Module):
             data = chunk.samples
             ch_ids = chunk.channel_ids
 
+        # --- Overlap-save: prepend exactly self._overlap historical samples ---
+        # This eliminates edge artefacts at chunk boundaries.  We read
+        # (overlap + n_samples) from the ring buffer, which already contains
+        # the current chunk.  Only the last n_samples of the convolution
+        # output are kept — the prefix absorbs the transient.
+        #
+        # Important: we always request exactly self._overlap samples of
+        # history (not more, not less) so the convolution length and FFT
+        # size stay constant across chunks.
+        overlap_used = 0
         if result.ring_buffer is not None and self._overlap > 0:
             avail = result.ring_buffer.available
-            # The ring buffer already contains the current chunk, so we
-            # can read up to (overlap + n_samples) to get the prefix.
-            read_len = min(self._overlap + n_samples, avail)
-            if read_len > n_samples:
-                extended = result.ring_buffer.read(read_len)
-                # Apply channel selection to the extended data
+            want = self._overlap + n_samples
+            if avail >= want:
+                # Full overlap available — normal case after buffer fills
+                extended = result.ring_buffer.read(want)
                 if self._channels is not None:
                     extended = extended[ch_mask]
                 data = extended
-                overlap_used = read_len - n_samples
+                overlap_used = self._overlap
+            # If not enough history yet, just process the chunk as-is
+            # (edge artefacts on early chunks, but consistent amplitude)
 
         n_conv = data.shape[1]
         n_ch = data.shape[0]

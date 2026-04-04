@@ -37,7 +37,7 @@ class CerebusSource(DataSource):
         inst_addr: str = "",
         client_addr: str = "0.0.0.0",
         startup_delay: float = 2.0,
-        queue_maxsize: int = 50_000,
+        queue_maxsize: int = 500_000,
     ) -> None:
         self._inst_addr = inst_addr
         self._client_addr = client_addr
@@ -93,21 +93,35 @@ class CerebusSource(DataSource):
             raise RuntimeError("Source not connected. Call connect() first.")
 
         target_samples = self._config.chunk_samples
-        packets_needed = max(1, target_samples // _SAMPLES_PER_PACKET)
 
         collected_times: list[int] = []
         collected_samples: list[np.ndarray] = []
+        n_collected = 0
 
-        for _ in range(packets_needed):
-            try:
-                t, s = self._queue.get(timeout=1.0)
-                collected_times.append(t)
-                collected_samples.append(s)
-            except queue.Empty:
+        while n_collected < target_samples:
+            # Try non-blocking drain first
+            while n_collected < target_samples:
+                try:
+                    t, s = self._queue.get_nowait()
+                    collected_times.append(t)
+                    collected_samples.append(s)
+                    n_collected += s.shape[1]
+                except queue.Empty:
+                    break
+
+            if n_collected >= target_samples:
                 break
 
-        if not collected_samples:
-            return None
+            # Queue was empty — wait briefly for more packets
+            try:
+                t, s = self._queue.get(timeout=0.05)
+                collected_times.append(t)
+                collected_samples.append(s)
+                n_collected += s.shape[1]
+            except queue.Empty:
+                if not collected_samples:
+                    return None
+                break
 
         samples = np.concatenate(collected_samples, axis=1).astype(np.float64)
         n_samples = samples.shape[1]
