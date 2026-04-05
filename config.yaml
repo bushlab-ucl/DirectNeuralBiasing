@@ -14,7 +14,7 @@ source:
 pipeline:
   sample_rate: 30000         # Hz (overridden by file source if applicable)
   n_channels: 83
-  channel: 5                 # single channel to process (null = all)
+  channel: 1                 # single channel to process (null = all)
   chunk_duration: 0.5        # seconds per processing chunk
   buffer_duration: 10.0      # ring buffer length in seconds
 
