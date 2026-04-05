@@ -1,0 +1,11 @@
+{
+  "z_score_threshold": 2.5,
+  "sinusoidness_threshold": 0.7,
+  "check_sinusoidness": false,
+  "f_low": 0.25,
+  "f_high": 4.5,
+  "min_wave_ms": 250.0,
+  "max_wave_ms": 1200.0,
+  "z_ied_threshold": 3.0,
+  "refrac_ms": 2750.0
+}

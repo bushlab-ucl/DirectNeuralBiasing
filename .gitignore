@@ -3,6 +3,7 @@
 *.csv
 *.bin
 *.zip
+*.npy
 
 #misc
 *.vscode
