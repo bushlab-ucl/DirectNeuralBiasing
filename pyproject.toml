@@ -2,31 +2,22 @@
 requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.backends._legacy:_Backend"
 
+
 [project]
 name = "direct-neural-biasing"
-version = "3.0.0"
+version = "2.0.0"
 description = "Low-latency closed-loop neural signal processing for Blackrock Cerebus devices."
 readme = "README.md"
 license = "CC-BY-NC-4.0"
 requires-python = ">=3.10"
-authors = [
-    {name = "Human Electrophysiology Lab, UCL"},
-]
 
-dependencies = [
-    "numpy>=1.24",
-    "scipy>=1.10",
-    "pyyaml>=6.0",
-]
+authors = [{ name = "Human Electrophysiology Lab, UCL" }]
+
+dependencies = ["numpy>=1.24", "scipy>=1.10", "pyyaml>=6.0"]
 
 [project.optional-dependencies]
 live = ["pycbsdk>=0.3"]
-validation = ["matplotlib>=3.5"]
-dev = [
-    "pytest>=7.0",
-    "matplotlib>=3.5",
-    "jupyter",
-]
+dev = ["matplotlib>=3.5", "jupyter"]
+
 
 [tool.setuptools.packages.find]
-where = ["src"]
