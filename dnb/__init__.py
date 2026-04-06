@@ -29,7 +29,10 @@ from dnb.core.types import DataChunk, Event, EventType, PipelineConfig, WaveletR
 from dnb.engine.pipeline import Pipeline
 from dnb.sources.file import FileSource
 
-__version__ = "3.0.0"
+from importlib.metadata import version
+
+__version__ = version("direct-neural-biasing")
+
 
 __all__ = [
     "DataChunk",

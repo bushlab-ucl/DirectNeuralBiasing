@@ -1,7 +1,6 @@
 [build-system]
-requires = ["setuptools>=68.0", "wheel"]
-build-backend = "setuptools.backends._legacy:_Backend"
-
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "direct-neural-biasing"
@@ -10,14 +9,10 @@ description = "Low-latency closed-loop neural signal processing for Blackrock Ce
 readme = "README.md"
 license = "CC-BY-NC-4.0"
 requires-python = ">=3.10"
-
-authors = [{ name = "Human Electrophysiology Lab, UCL" }]
-
 dependencies = ["numpy>=1.24", "scipy>=1.10", "pyyaml>=6.0"]
 
 [project.optional-dependencies]
 live = ["pycbsdk>=0.3"]
 dev = ["matplotlib>=3.5", "jupyter"]
-
 
 [tool.setuptools.packages.find]
