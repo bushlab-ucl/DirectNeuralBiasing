@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+*.whl
+
+# Environments
+.venv/
+venv/
+.env
+.python-version
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Data
+*.npz
+*.nev
+*.ns5
+*.ns6
+*.bin
+*.csv
+data/
+
+# Runtime outputs
+logs/
+output/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

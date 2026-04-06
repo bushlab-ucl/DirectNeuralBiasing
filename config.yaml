@@ -1,0 +1,72 @@
+# DNB Pipeline Configuration (v3)
+# ================================
+# Architecture: WaveletConvolution → Detectors → StimTrigger
+#
+# Run with: python run.py --config config.yaml
+
+# --- Data source ---
+source:
+  type: nplay               # nplay | cerebus | file
+  # path: "recording.npz"   # required for type: file
+
+# --- Pipeline ---
+pipeline:
+  sample_rate: 30000
+  n_channels: 83
+  chunk_duration: 0.5
+  buffer_duration: 10.0
+
+# --- Downsampler (for live hardware) ---
+downsampler:
+  enabled: true
+  target_rate: 500.0
+
+# --- Wavelet decomposition ---
+# This is the "filter" stage — replaces bandpass filter banks.
+# Produces amplitude + phase at every (channel, freq, time) point.
+wavelet:
+  freq_min: 0.5
+  freq_max: 30.0
+  n_freqs: 10
+  n_cycles_base: 3.0
+
+# --- Target wave detector (activation) ---
+# Watches wavelet phase in the slow oscillation band.
+# Flags samples where phase hits target with sufficient amplitude.
+target_wave:
+  id: slow_wave
+  freq_range: [0.5, 2.0]
+  target_phase: 0.0          # radians (0 = positive peak)
+  phase_tolerance: 0.15      # half-width of phase window (rad)
+  amp_min: 50.0              # minimum SO amplitude (µV)
+  amp_max: 10000.0           # maximum SO amplitude (artifact rejection)
+  warmup_chunks: 10
+  amp_smoothing: 5
+
+# --- Amplitude monitor (inhibition) ---
+# Watches HF power relative to LF — blocks stim during IEDs.
+amplitude_monitor:
+  enabled: true
+  id: ied_monitor
+  freq_range: [10.0, 40.0]   # HF band to monitor
+  ref_freq_range: [0.5, 2.0] # reference band for ratio
+  ratio_max: 0.5             # max HF/LF ratio before inhibit
+  warmup_chunks: 5
+
+# --- Stim trigger ---
+# Combines activation + inhibition with cooldowns.
+# Mirrors the Rust PulseTrigger architecture.
+trigger:
+  activation_detector_id: slow_wave
+  inhibition_detector_id: ied_monitor
+  backoff_s: 5.0             # min seconds between STIM1
+  inhibition_cooldown_s: 5.0 # seconds after IED before allowing stim
+  stim2_delay_s: 0.6
+  stim2_window_s: 2.0
+  event_window_s: 1.0        # ±seconds of raw signal around events
+
+# --- Audio (optional) ---
+audio:
+  wav_path: "assets/pink_noise_short.wav"
+  trigger_on: ["STIM1"]
+  volume: 1.0

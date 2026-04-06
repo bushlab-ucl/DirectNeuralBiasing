@@ -1,0 +1,189 @@
+"""Target wave detector — activation detector for phase-targeted events.
+
+This is the "activation detector" in the Rust architecture. It watches
+the wavelet phase in a configurable frequency band and flags samples
+where the phase hits a target angle with sufficient amplitude.
+
+It does NOT decide whether to stimulate — that's the StimTrigger's job.
+It just says "the slow wave is at the right phase right now."
+
+The detector stores its results in result.detections[self.id] as a dict:
+    {
+        "active": bool,           # any candidate found in this chunk
+        "candidates": [...],      # list of candidate dicts
+        "mean_amplitude": float,  # chunk-level amplitude
+    }
+
+Each candidate dict:
+    {
+        "sample_idx": int,
+        "timestamp": float,
+        "phase": float,
+        "frequency": float,
+        "amplitude": float,
+        "channel_id": int,
+    }
+"""
+
+from __future__ import annotations
+
+import logging
+from math import pi
+
+import numpy as np
+
+from dnb.core.types import PipelineConfig
+from dnb.modules.base import Module, ProcessResult
+
+logger = logging.getLogger(__name__)
+
+
+class TargetWaveDetector(Module):
+    """Wavelet-based phase detector for a target frequency band.
+
+    Monitors instantaneous phase in a specified band and flags samples
+    where phase matches the target within tolerance and amplitude is
+    within bounds.
+
+    This is generic — configure freq_range=(0.5, 2.0) for slow waves,
+    or (4, 8) for theta, etc. The wavelet convolution upstream handles
+    the actual filtering.
+
+    Args:
+        id: Unique identifier for this detector.
+        freq_range: (low_hz, high_hz) band to monitor.
+        target_phase: Phase angle to detect (radians; 0 = positive peak).
+        phase_tolerance: Half-width of phase window (radians).
+        amp_min: Minimum amplitude to accept.
+        amp_max: Maximum amplitude (artifact rejection).
+        warmup_chunks: Initial chunks for baseline (no detections).
+        channels: Which channels to monitor. None = all.
+        amp_smoothing: Chunks to average amplitude over.
+    """
+
+    def __init__(
+        self,
+        id: str = "slow_wave",
+        freq_range: tuple[float, float] = (0.5, 2.0),
+        target_phase: float = 0.0,
+        phase_tolerance: float = 0.15,
+        amp_min: float = 50.0,
+        amp_max: float = 10000.0,
+        warmup_chunks: int = 10,
+        channels: list[int] | None = None,
+        amp_smoothing: int = 5,
+    ) -> None:
+        self.id = id
+        self._freq_range = freq_range
+        self._target_phase = target_phase % (2 * pi)
+        self._phase_tolerance = phase_tolerance
+        self._amp_min = amp_min
+        self._amp_max = amp_max
+        self._warmup_chunks = warmup_chunks
+        self._channels = channels
+        self._amp_smoothing = amp_smoothing
+
+        self._chunks_seen: int = 0
+        self._amp_history: dict[int, list[float]] = {}
+
+    def configure(self, config: PipelineConfig) -> None:
+        logger.info(
+            "TargetWaveDetector '%s': freq=(%.1f, %.1f) Hz, target_phase=%.2f rad, "
+            "amp=(%.0f, %.0f)",
+            self.id, self._freq_range[0], self._freq_range[1],
+            self._target_phase, self._amp_min, self._amp_max,
+        )
+
+    def process(self, result: ProcessResult) -> ProcessResult:
+        if result.wavelet is None:
+            result.detections[self.id] = {"active": False, "candidates": []}
+            return result
+
+        self._chunks_seen += 1
+        if self._chunks_seen <= self._warmup_chunks:
+            result.detections[self.id] = {"active": False, "candidates": [], "warming_up": True}
+            return result
+
+        wavelet = result.wavelet
+        chunk = result.chunk
+
+        # Find frequency indices in our target band
+        so_mask = (
+            (wavelet.frequencies >= self._freq_range[0])
+            & (wavelet.frequencies <= self._freq_range[1])
+        )
+        if not np.any(so_mask):
+            result.detections[self.id] = {"active": False, "candidates": []}
+            return result
+
+        # Amplitude and analytic signal in our band
+        so_amplitude = np.mean(wavelet.amplitude[:, so_mask, :], axis=1)  # (n_ch, n_samples)
+        so_amp_per_freq = np.mean(wavelet.amplitude[:, so_mask, :], axis=2)  # (n_ch, n_so_freqs)
+        so_freqs = wavelet.frequencies[so_mask]
+
+        # Channel selection
+        n_wavelet_ch = wavelet.analytic.shape[0]
+        if n_wavelet_ch == chunk.n_channels and self._channels is not None:
+            ch_mask = np.isin(chunk.channel_ids, self._channels)
+            so_amplitude = so_amplitude[ch_mask]
+            so_amp_per_freq = so_amp_per_freq[ch_mask]
+            ch_ids = chunk.channel_ids[ch_mask]
+            analytic_so = wavelet.analytic[np.ix_(ch_mask, so_mask)]
+        elif self._channels is not None:
+            ch_ids = chunk.channel_ids[:n_wavelet_ch]
+            analytic_so = wavelet.analytic[:, so_mask, :]
+        else:
+            ch_ids = chunk.channel_ids if n_wavelet_ch == chunk.n_channels else np.arange(n_wavelet_ch, dtype=np.int32)
+            analytic_so = wavelet.analytic[:, so_mask, :]
+
+        candidates = []
+
+        for ci in range(so_amplitude.shape[0]):
+            ch_id = int(ch_ids[ci])
+
+            # Pick dominant frequency for this channel
+            best_freq_idx = int(np.argmax(so_amp_per_freq[ci]))
+            best_freq = float(so_freqs[best_freq_idx])
+
+            # Phase at dominant frequency
+            phase = np.angle(analytic_so[ci, best_freq_idx, :]) % (2 * pi)
+
+            # Chunk-level smoothed amplitude
+            chunk_amp = float(np.mean(so_amplitude[ci]))
+            if ch_id not in self._amp_history:
+                self._amp_history[ch_id] = []
+            self._amp_history[ch_id].append(chunk_amp)
+            if len(self._amp_history[ch_id]) > self._amp_smoothing:
+                self._amp_history[ch_id] = self._amp_history[ch_id][-self._amp_smoothing:]
+            mean_amp = float(np.mean(self._amp_history[ch_id]))
+
+            # Amplitude gating
+            if mean_amp < self._amp_min or mean_amp > self._amp_max:
+                continue
+
+            # Phase matching
+            phase_diff = np.abs((phase - self._target_phase) % (2 * pi))
+            phase_diff = np.minimum(phase_diff, 2 * pi - phase_diff)
+            at_target = phase_diff < self._phase_tolerance
+            candidate_indices = np.where(at_target)[0]
+
+            for si in candidate_indices:
+                candidates.append({
+                    "sample_idx": int(si),
+                    "timestamp": float(chunk.timestamps[si]),
+                    "phase": float(phase[si]),
+                    "frequency": best_freq,
+                    "amplitude": mean_amp,
+                    "channel_id": ch_id,
+                })
+
+        result.detections[self.id] = {
+            "active": len(candidates) > 0,
+            "candidates": candidates,
+            "mean_amplitude": float(np.mean(so_amplitude)) if so_amplitude.size > 0 else 0.0,
+        }
+        return result
+
+    def reset(self) -> None:
+        self._chunks_seen = 0
+        self._amp_history.clear()
