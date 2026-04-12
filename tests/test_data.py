@@ -79,7 +79,7 @@ class TestData:
         self,
         snr: float = 5.0,
         n_slow_waves: int = 15,
-        n_ieds: int = 8,
+        n_ieds: int = 40,
         duration_s: float = 120.0,
         sample_rate: float = 1000.0,
         ied_amplitude: float = 3000.0,
