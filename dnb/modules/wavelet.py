@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 def _make_morlet_kernel(
     freq: float, n_cycles: float, sample_rate: float, n_fft: int,
 ) -> NDArray[np.complex128]:
-    """Create a complex Morlet wavelet kernel in frequency domain."""
+    """Create a complex Morlet wavelet kernel in frequency domain (zero-phase)."""
     sigma = n_cycles / (2.0 * np.pi * freq)
     half_len = int(4.0 * sigma * sample_rate)
     t = np.arange(-half_len, half_len + 1) / sample_rate
@@ -34,7 +34,12 @@ def _make_morlet_kernel(
     wavelet = np.exp(2j * np.pi * freq * t) * np.exp(-(t ** 2) / (2.0 * sigma ** 2))
     wavelet /= np.sqrt(np.sum(np.abs(wavelet) ** 2))
 
-    return fft(wavelet, n=n_fft)
+    # Wrap kernel so t=0 is at index 0 (zero-phase alignment).
+    # Positive-time part at start, negative-time part wraps to end.
+    kernel = np.zeros(n_fft, dtype=np.complex128)
+    kernel[:half_len + 1] = wavelet[half_len:]
+    kernel[n_fft - half_len:] = wavelet[:half_len]
+    return fft(kernel)
 
 
 class WaveletConvolution(Module):
@@ -93,9 +98,13 @@ class WaveletConvolution(Module):
             kernel_len = 2 * int(4.0 * sigma * self._sample_rate) + 1
             max_kernel_len = max(max_kernel_len, kernel_len)
         self._max_kernel_len = max_kernel_len
-        self._overlap = max_kernel_len - 1
+        self._overlap = (max_kernel_len - 1) // 2
 
-        self._n_fft = next_fast_len(config.chunk_samples + max_kernel_len - 1)
+        self._min_warmup_chunks = int(np.ceil(
+            (self._overlap + config.chunk_samples) / config.chunk_samples
+        ))
+
+        self._n_fft = next_fast_len(config.chunk_samples + self._max_kernel_len - 1)
         self._precompute_kernels()
 
         logger.info(
@@ -155,6 +164,7 @@ class WaveletConvolution(Module):
         result.wavelet = WaveletResult(
             analytic=analytic, frequencies=self._frequencies, chunk=chunk,
         )
+        result.wavelet_settled = (overlap_used > 0)
         return result
 
     def reset(self) -> None:

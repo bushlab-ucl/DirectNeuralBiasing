@@ -140,15 +140,15 @@ class StimTrigger(Module):
             last_inh = self._last_inhibition_time.get(ch_id, -np.inf)
             if ch_candidates and ch_candidates[0]["timestamp"] - last_inh < self._inhibition_cooldown_s:
                 continue
-
-            # --- STIM2 check (before STIM1) ---
+            
+            # --- STIM2 check ---
+            stim2_fired = False
             if ch_id in self._awaiting_stim2:
                 stim1_t = self._awaiting_stim2[ch_id]
                 for c in ch_candidates:
                     t = c["timestamp"]
                     dt = t - stim1_t
-                    if dt < self._stim2_delay_s:
-                        continue
+                    if dt < self._stim2_delay_s: continue
                     if dt > self._stim2_delay_s + self._stim2_window_s:
                         del self._awaiting_stim2[ch_id]
                         break
@@ -165,8 +165,11 @@ class StimTrigger(Module):
                     ))
                     del self._awaiting_stim2[ch_id]
                     logger.info("STIM2 ch=%d t=%.3fs delay=%.3fs", ch_id, t, dt)
+                    stim2_fired = True
                     break
-                continue  # Don't also check STIM1 this chunk
+
+            if stim2_fired:
+                continue
 
             # --- STIM1 check ---
             last_stim = self._last_stim1_time.get(ch_id, -np.inf)
