@@ -1,21 +1,21 @@
 """N-pulse stimulation trigger.
 
 Detects a single slow wave via the activation detector, logs a
-SLOW_WAVE event, then schedules n audio stimulations at the next n
-predicted positive peaks (phase=0 rad) based on the detected frequency.
+SLOW_WAVE event, then fires n audio stimulations starting at the
+detected upwave and continuing at predicted future positive peaks.
 
     n_pulses=0  →  detection only: emit SLOW_WAVE, no STIM events
-    n_pulses=1  →  detect, emit SLOW_WAVE, schedule 1 STIM at next
-                   predicted peak: t0 + 1/freq
-    n_pulses=3  →  detect, emit SLOW_WAVE, schedule 3 STIMs at
-                   t0 + 1/freq, t0 + 2/freq, t0 + 3/freq
+    n_pulses=1  →  detect, emit SLOW_WAVE + 1 STIM immediately
+                   (at the detected upwave)
+    n_pulses=3  →  detect, emit SLOW_WAVE + STIM immediately,
+                   then 2 more STIMs at t0 + 1/freq, t0 + 2/freq
 
-The detection itself is never a stimulation — it's just the trigger
-for scheduling future stims. This matters because in closed-loop the
-detection happens mid-cycle; the stim needs to land on the next peak.
+The first stim fires at the detection itself (the current upwave).
+Additional stims are scheduled at predicted future peaks using the
+detected frequency.
 
 STIM events carry metadata:
-    pulse_index: 1-indexed (1 = first stim, 2 = second, ...)
+    pulse_index: 1-indexed (1 = immediate stim, 2 = next peak, ...)
     n_pulses: total scheduled
     frequency: detected SW frequency used for scheduling
     detection_time: timestamp of the SLOW_WAVE detection
@@ -116,7 +116,7 @@ class StimTrigger(Module):
                 t = sched.stim_times[sched.next_idx]
                 if t > chunk_time:
                     break  # not yet
-                pulse_num = sched.next_idx + 1  # 1-indexed
+                pulse_num = sched.next_idx + 2  # pulse 1 already emitted
                 events.append(Event(
                     event_type=EventType.STIM,
                     timestamp=t,
@@ -187,17 +187,36 @@ class StimTrigger(Module):
                 ch_id, t0, freq, c.get("amplitude", 0), self._n_pulses,
             )
 
-            # Schedule future stims at predicted peaks
+            # Schedule stims: k=0 at detection (immediate), k=1.. at future peaks
             if self._n_pulses > 0 and freq > 0:
                 period = 1.0 / freq
-                # k=1..n_pulses: next n positive peaks after detection
-                stim_times = [t0 + k * period for k in range(1, self._n_pulses + 1)]
-                self._schedules[ch_id] = _PulseSchedule(
-                    stim_times=stim_times,
-                    frequency=freq,
-                    detection_time=t0,
-                    next_idx=0,
+
+                # Pulse 1 fires immediately at the detected upwave
+                events.append(Event(
+                    event_type=EventType.STIM,
+                    timestamp=t0,
+                    channel_id=ch_id,
+                    metadata={
+                        "pulse_index": 1,
+                        "n_pulses": self._n_pulses,
+                        "frequency": freq,
+                        "detection_time": t0,
+                    },
+                ))
+                logger.info(
+                    "STIM 1/%d ch=%d t=%.3fs (immediate)",
+                    self._n_pulses, ch_id, t0,
                 )
+
+                # Pulses 2..n at predicted future peaks
+                if self._n_pulses > 1:
+                    stim_times = [t0 + k * period for k in range(1, self._n_pulses)]
+                    self._schedules[ch_id] = _PulseSchedule(
+                        stim_times=stim_times,
+                        frequency=freq,
+                        detection_time=t0,
+                        next_idx=0,
+                    )
 
         result.events.extend(events)
         return result

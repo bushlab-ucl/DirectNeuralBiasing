@@ -78,10 +78,8 @@ Source → [Downsampler] → WaveletConvolution → Detectors → StimTrigger �
 
 The pipeline emits two event types:
 
-- **`SLOW_WAVE`** — a detection. Logged, never triggers audio. Always emitted when the detector finds a candidate at the target phase with sufficient amplitude.
-- **`STIM`** — an audio stimulation scheduled at a predicted future positive peak. `pulse_index` is 1-indexed. These trigger the `AudioStimulator`.
-
-The detection itself is never a stimulation — it's the trigger for scheduling future stims. This matters because in closed-loop the detection happens mid-cycle; the stim needs to land on the next peak.
+- **`SLOW_WAVE`** — a detection. Logged always. Never triggers audio.
+- **`STIM`** — an audio stimulation. `pulse_index` is 1-indexed. Pulse 1 fires immediately at the detected upwave; pulses 2+ fire at predicted future peaks. These trigger the `AudioStimulator`.
 
 &nbsp;
 
@@ -89,13 +87,15 @@ The detection itself is never a stimulation — it's the trigger for scheduling 
 
 The `StimTrigger` supports configurable n-pulse stimulation:
 
-| `n_pulses` | Behaviour                                                           |
-| ---------- | ------------------------------------------------------------------- |
-| `0`        | Detection only — emit `SLOW_WAVE`, no `STIM` events                 |
-| `1`        | Detect, schedule 1 stim at next predicted peak: `t₀ + 1/freq`       |
-| `3`        | Detect, schedule 3 stims at next 3 peaks: `t₀ + k/freq` for k=1,2,3 |
+| `n_pulses` | Behaviour                                                                                  |
+| ---------- | ------------------------------------------------------------------------------------------ |
+| `0`        | Detection only — emit `SLOW_WAVE`, no `STIM` events                                        |
+| `1`        | Detect, emit `SLOW_WAVE` + 1 `STIM` immediately at the detected upwave                     |
+| `3`        | Detect, emit `SLOW_WAVE` + `STIM` immediately, then 2 more at `t₀ + 1/freq`, `t₀ + 2/freq` |
 
-Once the slow wave frequency is known from the first detection, subsequent stim times are predictable — no need to re-detect.
+The first stim fires at the detection itself (the current upwave).
+Additional stims are scheduled at predicted future peaks using the
+detected frequency.
 
 &nbsp;
 
