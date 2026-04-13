@@ -95,7 +95,7 @@ class StimTrigger(Module):
 
         events: list[Event] = []
 
-        # --- Handle inhibition: cancel all pending schedules ---
+        # --- Handle inhibition: cancel pending schedules, start cooldown ---
         if inhibition_active:
             for ch_id in list(self._schedules):
                 sched = self._schedules[ch_id]
@@ -105,9 +105,11 @@ class StimTrigger(Module):
                     remaining, ch_id,
                 )
                 del self._schedules[ch_id]
-                self._last_inhibition_time[ch_id] = chunk_time
-            for c in candidates:
-                self._last_inhibition_time[c["channel_id"]] = chunk_time
+            # Set cooldown for all channels in this chunk — even if no
+            # candidates are present yet. This ensures an IED arriving
+            # before a SW still blocks the upcoming detection.
+            for ch_id in result.chunk.channel_ids:
+                self._last_inhibition_time[int(ch_id)] = chunk_time
 
         # --- Emit scheduled stims whose time has arrived ---
         for ch_id in list(self._schedules):
