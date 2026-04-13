@@ -111,29 +111,31 @@ class AmplitudeMonitor(Module):
 
         self._chunks_seen += 1
 
-        # Track power history for adaptive thresholding
-        self._power_history.append(power)
-        if len(self._power_history) > self._baseline_chunks:
-            self._power_history = self._power_history[-self._baseline_chunks:]
-
         # Warmup — accumulate baseline, don't flag
         if self._chunks_seen <= self._warmup_chunks:
+            self._power_history.append(power)
+            if len(self._power_history) > self._baseline_chunks:
+                self._power_history = self._power_history[-self._baseline_chunks:]
             result.detections[self.id] = {
                 "active": False, "power": power, "warming_up": True,
             }
             return result
 
-        # Determine if active
+        # Determine if active — compare against PREVIOUS baseline,
+        # before this chunk's power contaminates the threshold.
         if self._threshold is not None:
-            # Absolute threshold mode
             active = power > self._threshold
         else:
-            # Adaptive: mean + n_std * std of history
             hist = np.array(self._power_history)
             baseline_mean = float(np.mean(hist))
             baseline_std = float(np.std(hist))
             adaptive_thresh = baseline_mean + self._adaptive_n_std * baseline_std
             active = power > adaptive_thresh
+
+        # Now add current power to history for future chunks
+        self._power_history.append(power)
+        if len(self._power_history) > self._baseline_chunks:
+            self._power_history = self._power_history[-self._baseline_chunks:]
 
         result.detections[self.id] = {"active": active, "power": power}
         return result
