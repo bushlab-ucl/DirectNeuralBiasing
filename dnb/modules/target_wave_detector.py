@@ -95,7 +95,7 @@ class TargetWaveDetector(Module):
         )
 
     def process(self, result: ProcessResult) -> ProcessResult:
-        if result.wavelet is None or not getattr(result, 'wavelet_settled', True):
+        if result.wavelet is None or not result.wavelet_settled:
             result.detections[self.id] = {"active": False, "candidates": []}
             return result
 

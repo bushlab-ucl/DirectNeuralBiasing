@@ -88,20 +88,21 @@ def build_modules(cfg: dict[str, Any]) -> list:
         amp_smoothing=int(tw.get("amp_smoothing", 5)),
     ))
 
-    # Amplitude monitor (inhibition, optional)
+    # Amplitude monitor (IED inhibition, optional)
     if "amplitude_monitor" in cfg:
         am = cfg["amplitude_monitor"]
         if am.get("enabled", True):
             kwargs = {
                 "id": am.get("id", "ied_monitor"),
-                "freq_range": tuple(am.get("freq_range", [10.0, 40.0])),
-                "warmup_chunks": int(am.get("warmup_chunks", 5)),
+                "freq_range": tuple(am.get("freq_range", [80.0, 120.0])),
+                "warmup_chunks": int(am.get("warmup_chunks", 20)),
+                "baseline_chunks": int(am.get("baseline_chunks", 100)),
+                "filter_order": int(am.get("filter_order", 4)),
             }
-            if "ref_freq_range" in am:
-                kwargs["ref_freq_range"] = tuple(am["ref_freq_range"])
-                kwargs["ratio_max"] = float(am.get("ratio_max", 0.5))
             if "threshold" in am:
                 kwargs["threshold"] = float(am["threshold"])
+            else:
+                kwargs["adaptive_n_std"] = float(am.get("adaptive_n_std", 3.0))
             modules.append(AmplitudeMonitor(**kwargs))
 
     # Stim trigger
@@ -114,11 +115,9 @@ def build_modules(cfg: dict[str, Any]) -> list:
     modules.append(StimTrigger(
         activation_detector_id=tr.get("activation_detector_id", "slow_wave"),
         inhibition_detector_id=inh_id,
+        n_pulses=int(tr.get("n_pulses", 1)),
         backoff_s=float(tr.get("backoff_s", 5.0)),
         inhibition_cooldown_s=float(tr.get("inhibition_cooldown_s", 5.0)),
-        stim2_delay_s=float(tr.get("stim2_delay_s", 0.6)),
-        stim2_window_s=float(tr.get("stim2_window_s", 2.0)),
-        event_window_s=float(tr.get("event_window_s", 1.0)),
     ))
 
     # Audio (optional)
@@ -127,7 +126,7 @@ def build_modules(cfg: dict[str, Any]) -> list:
         wav_path = a.get("wav_path")
         if wav_path and Path(wav_path).exists():
             from dnb.core.types import EventType
-            trigger_names = a.get("trigger_on", ["STIM1"])
+            trigger_names = a.get("trigger_on", ["STIM"])
             modules.append(AudioStimulator(
                 wav_path=wav_path,
                 trigger_on=tuple(EventType[n.upper()] for n in trigger_names),

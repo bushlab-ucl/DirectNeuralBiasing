@@ -70,15 +70,16 @@ def main():
                                        target_phase=pi, phase_tolerance=0.3,
                                        amp_min=50.0, warmup_chunks=3),
                     StimTrigger(activation_detector_id="slow_wave",
-                                inhibition_detector_id=None, backoff_s=3.0),
+                                inhibition_detector_id=None,
+                                n_pulses=1, backoff_s=3.0),
                 ],
                 config=PipelineConfig(sample_rate=1000, n_channels=1, chunk_duration=0.5),
             )
             dets = pipe.run_offline()
-            s1 = [e for e in dets if e.event_type == EventType.STIM1]
+            detections = [e for e in dets if e.event_type == EventType.SLOW_WAVE]
             sw = [e for e in gt if e.metadata.get("type") == "SW"]
             anns = [Annotation(timestamp=e.timestamp, channel=e.channel_id, event_type="SW") for e in sw]
-            r = validate(s1, anns, time_tolerance=0.5)
+            r = validate(detections, anns, time_tolerance=0.5)
             m = r.metrics
             print(f"{actual:6.1f} {m['precision']:6.3f} {m['recall']:6.3f} "
                   f"{m['f1']:6.3f} {m['true_positives']:4.0f} {m['false_positives']:4.0f} "

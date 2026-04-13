@@ -1,72 +1,58 @@
-# DNB Pipeline Configuration (v3)
-# ================================
-# Architecture: WaveletConvolution → Detectors → StimTrigger
-#
-# Run with: python run.py --config config.yaml
+# DNB pipeline configuration
+# ─────────────────────────────────────────────────────────
+# This file drives both run.py and can be loaded in notebooks
+# via dnb.config.build_pipeline().
 
-# --- Data source ---
-source:
-  type: nplay               # nplay | cerebus | file
-  # path: "recording.npz"   # required for type: file
-
-# --- Pipeline ---
 pipeline:
-  sample_rate: 30000
-  n_channels: 83
-  chunk_duration: 0.5
+  sample_rate: 30000.0       # hardware rate (downsampler reduces to 500 Hz)
+  n_channels: 1
   buffer_duration: 10.0
+  chunk_duration: 0.5
 
-# --- Downsampler (for live hardware) ---
+source:
+  type: file                 # file | nplay | cerebus
+  path: data/recording.npz
+
 downsampler:
   enabled: true
   target_rate: 500.0
 
-# --- Wavelet decomposition ---
-# This is the "filter" stage — replaces bandpass filter banks.
-# Produces amplitude + phase at every (channel, freq, time) point.
 wavelet:
   freq_min: 0.5
   freq_max: 4.0
   n_freqs: 10
   n_cycles_base: 3.0
 
-# --- Target wave detector (activation) ---
-# Watches wavelet phase in the slow oscillation band.
-# Flags samples where phase hits target with sufficient amplitude.
 target_wave:
   id: slow_wave
   freq_range: [0.5, 4.0]
-  target_phase: 0.0          # radians (0 = positive peak)
-  phase_tolerance: 0.05      # half-width of phase window (rad)
-  amp_min: 1000.0              # minimum SO amplitude (µV)
-  amp_max: 10000.0           # maximum SO amplitude (artifact rejection)
+  target_phase: 0.0          # 0 = positive peak
+  phase_tolerance: 0.05
+  amp_min: 1000.0
+  amp_max: 10000.0
   warmup_chunks: 10
   amp_smoothing: 5
 
-# --- Amplitude monitor (inhibition) ---
-# Watches HF power relative to LF — blocks stim during IEDs.
 amplitude_monitor:
   enabled: true
   id: ied_monitor
-  freq_range: [80.0,120.0]   # HF band to monitor
-  ref_freq_range: [0.5, 4.0] # reference band for ratio
-  ratio_max: 0.5             # max HF/LF ratio before inhibit
-  warmup_chunks: 10
+  freq_range: [80.0, 120.0]  # broadband IED power check
+  # threshold: 500.0          # uncomment for absolute mode
+  adaptive_n_std: 3.0         # adaptive: mean + 3σ
+  warmup_chunks: 20
+  baseline_chunks: 100
 
-# --- Stim trigger ---
-# Combines activation + inhibition with cooldowns.
-# Mirrors the Rust PulseTrigger architecture.
 trigger:
   activation_detector_id: slow_wave
   inhibition_detector_id: ied_monitor
-  backoff_s: 5.0             # min seconds between STIM1
-  inhibition_cooldown_s: 5.0 # seconds after IED before allowing stim
-  stim2_delay_s: 0.6
-  stim2_window_s: 2.0
-  event_window_s: 1.0        # ±seconds of raw signal around events
+  n_pulses: 1                # 0=none, 1=single, n>1=n-pulse
+  backoff_s: 5.0
+  inhibition_cooldown_s: 5.0
 
-# --- Audio (optional) ---
-audio:
-  wav_path: "assets/pink_noise_short.wav"
-  trigger_on: ["STIM1"]
-  volume: 1.0
+# audio:
+#   wav_path: assets/pink_noise_short.wav
+#   trigger_on: [STIM]
+#   volume: 1.0
+
+validation:
+  snr_levels: [1.0, 2.0, 3.0, 5.0, 10.0]

@@ -17,8 +17,7 @@ from numpy.typing import NDArray
 
 class EventType(Enum):
     """Categories of detected neural events."""
-    STIM1 = auto()          # primary stimulation trigger
-    STIM2 = auto()          # paired pulse
+    STIM = auto()           # stimulation trigger (pulse_index in metadata)
     SLOW_WAVE = auto()      # slow wave candidate (from TargetWaveDetector)
     IED = auto()            # interictal epileptiform discharge
     CUSTOM = auto()

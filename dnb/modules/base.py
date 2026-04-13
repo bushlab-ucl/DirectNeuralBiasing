@@ -32,6 +32,8 @@ class ProcessResult:
     Attributes:
         chunk: The (possibly resampled) data chunk.
         wavelet: Wavelet decomposition, if computed.
+        wavelet_settled: True once overlap-save has enough history.
+            Detectors should skip chunks where this is False.
         events: Events detected so far in this chunk.
         detections: Named boolean/float flags set by detectors,
             read by the trigger module. Maps detector_id → per-sample
@@ -41,6 +43,7 @@ class ProcessResult:
     """
     chunk: DataChunk
     wavelet: WaveletResult | None = None
+    wavelet_settled: bool = False
     events: list[Event] = field(default_factory=list)
     detections: dict[str, dict] = field(default_factory=dict)
     ring_buffer: RingBuffer | None = None

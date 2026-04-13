@@ -27,7 +27,7 @@ class AudioStimulator(Module):
     def __init__(
         self,
         wav_path: str | Path,
-        trigger_on: tuple[EventType, ...] = (EventType.STIM1,),
+        trigger_on: tuple[EventType, ...] = (EventType.STIM,),
         volume: float = 1.0,
     ) -> None:
         self._wav_path = Path(wav_path)
@@ -74,7 +74,11 @@ class AudioStimulator(Module):
         return result
 
     def _play(self, event: Event) -> None:
-        logger.info("AUDIO STIM #%d (%s) t=%.3fs", self._stim_count, event.event_type.name, event.timestamp)
+        pulse_idx = event.metadata.get("pulse_index", 0)
+        logger.info(
+            "AUDIO STIM #%d (pulse %d) t=%.3fs",
+            self._stim_count, pulse_idx, event.timestamp,
+        )
         if self._audio_data is None or not self._sa_available:
             return
 

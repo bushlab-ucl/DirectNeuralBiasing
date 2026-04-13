@@ -1,25 +1,33 @@
-"""Stimulation trigger — combines detectors to decide when to fire.
+"""N-pulse stimulation trigger.
 
-This is the direct equivalent of the Rust PulseTrigger. It reads from
-an activation detector (e.g. TargetWaveDetector) and an optional
-inhibition detector (e.g. AmplitudeMonitor), applies cooldowns, and
-emits STIM1/STIM2 events.
+Detects a single slow wave via the activation detector, logs a
+SLOW_WAVE event, then schedules n audio stimulations at the next n
+predicted positive peaks (phase=0 rad) based on the detected frequency.
 
-The separation is key: detectors say "I see something", the trigger
-decides "should we act on it?"
+    n_pulses=0  →  detection only: emit SLOW_WAVE, no STIM events
+    n_pulses=1  →  detect, emit SLOW_WAVE, schedule 1 STIM at next
+                   predicted peak: t0 + 1/freq
+    n_pulses=3  →  detect, emit SLOW_WAVE, schedule 3 STIMs at
+                   t0 + 1/freq, t0 + 2/freq, t0 + 3/freq
 
-Logic (mirrors the Rust version):
-    1. If inhibition detector is active → reset cooldown, do not fire
-    2. If activation detector has candidates AND pulse cooldown elapsed
-       → fire STIM1, start pulse cooldown, schedule STIM2 window
-    3. STIM2 fires when next activation candidate appears within the
-       STIM2 acceptance window
+The detection itself is never a stimulation — it's just the trigger
+for scheduling future stims. This matters because in closed-loop the
+detection happens mid-cycle; the stim needs to land on the next peak.
+
+STIM events carry metadata:
+    pulse_index: 1-indexed (1 = first stim, 2 = second, ...)
+    n_pulses: total scheduled
+    frequency: detected SW frequency used for scheduling
+    detection_time: timestamp of the SLOW_WAVE detection
+
+Inhibition: if the IED monitor is active, cancel all pending stims
+and start a cooldown period.
 """
 
 from __future__ import annotations
 
 import logging
-from typing import Any
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -29,85 +37,53 @@ from dnb.modules.base import Module, ProcessResult
 logger = logging.getLogger(__name__)
 
 
+@dataclass
+class _PulseSchedule:
+    """Pending pulse schedule for one channel."""
+    stim_times: list[float]         # scheduled stim timestamps (1-indexed)
+    frequency: float                # detected SW frequency
+    detection_time: float           # time of the SLOW_WAVE detection
+    next_idx: int = 0               # index into stim_times for next to emit
+
+
 class StimTrigger(Module):
-    """Pulse trigger combining activation and inhibition detectors.
+    """N-pulse trigger combining activation and inhibition detectors.
 
     Args:
         activation_detector_id: ID of the detector providing candidates.
         inhibition_detector_id: ID of the inhibition detector (or None).
-        backoff_s: Minimum seconds between STIM1 events (pulse cooldown).
-        inhibition_cooldown_s: Seconds to wait after inhibition before allowing stim.
-        stim2_delay_s: Delay after STIM1 before STIM2 window opens.
-        stim2_window_s: Duration of the STIM2 acceptance window.
-        event_window_s: ±seconds of raw signal to capture around events.
+        n_pulses: Number of stimulation pulses per detection (0=none).
+        backoff_s: Minimum seconds between detection sequences.
+        inhibition_cooldown_s: Seconds to wait after inhibition before
+            allowing new detections.
     """
 
     def __init__(
         self,
         activation_detector_id: str = "slow_wave",
         inhibition_detector_id: str | None = "ied_monitor",
+        n_pulses: int = 1,
         backoff_s: float = 5.0,
         inhibition_cooldown_s: float = 5.0,
-        stim2_delay_s: float = 0.6,
-        stim2_window_s: float = 2.0,
-        event_window_s: float = 1.0,
     ) -> None:
         self._act_id = activation_detector_id
         self._inh_id = inhibition_detector_id
+        self._n_pulses = n_pulses
         self._backoff_s = backoff_s
         self._inhibition_cooldown_s = inhibition_cooldown_s
-        self._stim2_delay_s = stim2_delay_s
-        self._stim2_window_s = stim2_window_s
-        self._event_window_s = event_window_s
 
         # Per-channel state
-        self._last_stim1_time: dict[int, float] = {}
+        self._last_detection_time: dict[int, float] = {}
         self._last_inhibition_time: dict[int, float] = {}
-        self._awaiting_stim2: dict[int, float] = {}  # ch_id → stim1 time
+        self._schedules: dict[int, _PulseSchedule] = {}
 
     def configure(self, config: PipelineConfig) -> None:
         logger.info(
-            "StimTrigger: activation='%s', inhibition='%s', backoff=%.1fs",
-            self._act_id, self._inh_id or "none", self._backoff_s,
+            "StimTrigger: activation='%s', inhibition='%s', "
+            "n_pulses=%d, backoff=%.1fs",
+            self._act_id, self._inh_id or "none",
+            self._n_pulses, self._backoff_s,
         )
-
-    def _extract_window(
-        self, result: ProcessResult, event_time: float, channel_id: int,
-    ) -> NDArray | None:
-        """Extract ±event_window_s of raw signal around the event."""
-        if self._event_window_s <= 0 or result.ring_buffer is None:
-            return None
-
-        sr = result.chunk.sample_rate
-        half_win = int(self._event_window_s * sr)
-        total_win = 2 * half_win + 1
-        avail = result.ring_buffer.available
-
-        if avail < total_win:
-            return None
-
-        try:
-            chunk_end_time = result.chunk.timestamps[-1]
-            samples_after_event = max(0, int((chunk_end_time - event_time) * sr))
-            read_len = max(samples_after_event + half_win + 1, total_win)
-            read_len = min(read_len, avail)
-
-            if read_len < total_win:
-                return None
-
-            window_data = result.ring_buffer.read(read_len)
-            ch_indices = np.where(result.chunk.channel_ids == channel_id)[0]
-            ch_idx = ch_indices[0] if len(ch_indices) > 0 else 0
-
-            event_pos = read_len - samples_after_event - 1
-            start = max(0, event_pos - half_win)
-            end = min(window_data.shape[1], event_pos + half_win + 1)
-
-            if end - start < half_win or ch_idx >= window_data.shape[0]:
-                return None
-            return window_data[ch_idx, start:end].copy()
-        except (ValueError, IndexError):
-            return None
 
     def process(self, result: ProcessResult) -> ProcessResult:
         activation = result.detections.get(self._act_id, {})
@@ -115,101 +91,118 @@ class StimTrigger(Module):
 
         inhibition_active = inhibition.get("active", False)
         candidates = activation.get("candidates", [])
-
-        if not candidates and not inhibition_active:
-            # Nothing happening — check for stim2 window expiry
-            self._expire_stim2(result.chunk.timestamps[-1] if result.chunk.n_samples > 0 else 0)
-            return result
+        chunk_time = result.chunk.timestamps[-1] if result.chunk.n_samples > 0 else 0.0
 
         events: list[Event] = []
 
-        # Group candidates by channel
-        by_channel: dict[int, list[dict]] = {}
-        for c in candidates:
-            by_channel.setdefault(c["channel_id"], []).append(c)
-
-        for ch_id, ch_candidates in by_channel.items():
-            # --- Inhibition check ---
-            if inhibition_active:
-                self._last_inhibition_time[ch_id] = ch_candidates[0]["timestamp"]
-                # Clear any pending STIM2
-                self._awaiting_stim2.pop(ch_id, None)
-                continue
-
-            # Check inhibition cooldown
-            last_inh = self._last_inhibition_time.get(ch_id, -np.inf)
-            if ch_candidates and ch_candidates[0]["timestamp"] - last_inh < self._inhibition_cooldown_s:
-                continue
-            
-            # --- STIM2 check ---
-            stim2_fired = False
-            if ch_id in self._awaiting_stim2:
-                stim1_t = self._awaiting_stim2[ch_id]
-                for c in ch_candidates:
-                    t = c["timestamp"]
-                    dt = t - stim1_t
-                    if dt < self._stim2_delay_s: continue
-                    if dt > self._stim2_delay_s + self._stim2_window_s:
-                        del self._awaiting_stim2[ch_id]
-                        break
-
-                    meta = {**c, "stim1_time": stim1_t, "delay": dt}
-                    raw_win = self._extract_window(result, t, ch_id)
-                    if raw_win is not None:
-                        meta["raw_window"] = raw_win
-                        meta["raw_window_sr"] = result.chunk.sample_rate
-
-                    events.append(Event(
-                        event_type=EventType.STIM2, timestamp=t,
-                        channel_id=ch_id, metadata=meta,
-                    ))
-                    del self._awaiting_stim2[ch_id]
-                    logger.info("STIM2 ch=%d t=%.3fs delay=%.3fs", ch_id, t, dt)
-                    stim2_fired = True
-                    break
-
-            if stim2_fired:
-                continue
-
-            # --- STIM1 check ---
-            last_stim = self._last_stim1_time.get(ch_id, -np.inf)
-
-            for c in ch_candidates:
-                t = c["timestamp"]
-                if t - last_stim < self._backoff_s:
-                    continue
-
-                meta = dict(c)
-                raw_win = self._extract_window(result, t, ch_id)
-                if raw_win is not None:
-                    meta["raw_window"] = raw_win
-                    meta["raw_window_sr"] = result.chunk.sample_rate
-
-                events.append(Event(
-                    event_type=EventType.STIM1, timestamp=t,
-                    channel_id=ch_id, metadata=meta,
-                ))
-                self._last_stim1_time[ch_id] = t
-                self._awaiting_stim2[ch_id] = t
+        # --- Handle inhibition: cancel all pending schedules ---
+        if inhibition_active:
+            for ch_id in list(self._schedules):
+                sched = self._schedules[ch_id]
+                remaining = len(sched.stim_times) - sched.next_idx
                 logger.info(
-                    "STIM1 ch=%d t=%.3fs phase=%.2f amp=%.1f",
-                    ch_id, t, c.get("phase", 0), c.get("amplitude", 0),
+                    "Inhibition — cancelling %d pending stim(s) on ch=%d",
+                    remaining, ch_id,
                 )
-                break  # One STIM1 per chunk per channel
+                del self._schedules[ch_id]
+                self._last_inhibition_time[ch_id] = chunk_time
+            for c in candidates:
+                self._last_inhibition_time[c["channel_id"]] = chunk_time
+
+        # --- Emit scheduled stims whose time has arrived ---
+        for ch_id in list(self._schedules):
+            sched = self._schedules[ch_id]
+            while sched.next_idx < len(sched.stim_times):
+                t = sched.stim_times[sched.next_idx]
+                if t > chunk_time:
+                    break  # not yet
+                pulse_num = sched.next_idx + 1  # 1-indexed
+                events.append(Event(
+                    event_type=EventType.STIM,
+                    timestamp=t,
+                    channel_id=ch_id,
+                    metadata={
+                        "pulse_index": pulse_num,
+                        "n_pulses": self._n_pulses,
+                        "frequency": sched.frequency,
+                        "detection_time": sched.detection_time,
+                    },
+                ))
+                logger.info(
+                    "STIM %d/%d ch=%d t=%.3fs (freq=%.2f Hz)",
+                    pulse_num, self._n_pulses, ch_id, t, sched.frequency,
+                )
+                sched.next_idx += 1
+
+            # Clean up completed schedules
+            if sched.next_idx >= len(sched.stim_times):
+                del self._schedules[ch_id]
+
+        # --- If inhibition is active, skip new detections ---
+        if inhibition_active:
+            result.events.extend(events)
+            return result
+
+        # --- Process new candidates ---
+        seen_channels: set[int] = set()
+        for c in candidates:
+            ch_id = c["channel_id"]
+            if ch_id in seen_channels:
+                continue
+            seen_channels.add(ch_id)
+
+            # Already have a schedule running for this channel?
+            if ch_id in self._schedules:
+                continue
+
+            # Backoff check
+            last_det = self._last_detection_time.get(ch_id, -np.inf)
+            if c["timestamp"] - last_det < self._backoff_s:
+                continue
+
+            # Inhibition cooldown check
+            last_inh = self._last_inhibition_time.get(ch_id, -np.inf)
+            if c["timestamp"] - last_inh < self._inhibition_cooldown_s:
+                continue
+
+            # --- New detection ---
+            t0 = c["timestamp"]
+            freq = c["frequency"]
+            self._last_detection_time[ch_id] = t0
+
+            # Always emit a SLOW_WAVE event for the detection
+            events.append(Event(
+                event_type=EventType.SLOW_WAVE,
+                timestamp=t0,
+                channel_id=ch_id,
+                metadata={
+                    "phase": c.get("phase", 0.0),
+                    "frequency": freq,
+                    "amplitude": c.get("amplitude", 0.0),
+                    "n_pulses": self._n_pulses,
+                },
+            ))
+            logger.info(
+                "SLOW_WAVE detected ch=%d t=%.3fs freq=%.2f Hz amp=%.1f → %d stim(s)",
+                ch_id, t0, freq, c.get("amplitude", 0), self._n_pulses,
+            )
+
+            # Schedule future stims at predicted peaks
+            if self._n_pulses > 0 and freq > 0:
+                period = 1.0 / freq
+                # k=1..n_pulses: next n positive peaks after detection
+                stim_times = [t0 + k * period for k in range(1, self._n_pulses + 1)]
+                self._schedules[ch_id] = _PulseSchedule(
+                    stim_times=stim_times,
+                    frequency=freq,
+                    detection_time=t0,
+                    next_idx=0,
+                )
 
         result.events.extend(events)
         return result
 
-    def _expire_stim2(self, current_time: float) -> None:
-        """Remove expired STIM2 windows."""
-        expired = [
-            ch for ch, t in self._awaiting_stim2.items()
-            if current_time - t > self._stim2_delay_s + self._stim2_window_s
-        ]
-        for ch in expired:
-            del self._awaiting_stim2[ch]
-
     def reset(self) -> None:
-        self._last_stim1_time.clear()
+        self._last_detection_time.clear()
         self._last_inhibition_time.clear()
-        self._awaiting_stim2.clear()
+        self._schedules.clear()

@@ -100,10 +100,6 @@ class WaveletConvolution(Module):
         self._max_kernel_len = max_kernel_len
         self._overlap = (max_kernel_len - 1) // 2
 
-        self._min_warmup_chunks = int(np.ceil(
-            (self._overlap + config.chunk_samples) / config.chunk_samples
-        ))
-
         self._n_fft = next_fast_len(config.chunk_samples + self._max_kernel_len - 1)
         self._precompute_kernels()
 
