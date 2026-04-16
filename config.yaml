@@ -38,7 +38,7 @@ wavelet:
 target_wave:
   id: slow_wave
   freq_range: [0.5, 4.0]
-  detection_phase: 3pi/2       # 3π/2 = rising zero crossing (¼ period before peak)
+  detection_phase: pi       # π = trough (where we want to detect)
   phase_tolerance: 0.05
   amp_min: 1000.0
   amp_max: 10000.0
