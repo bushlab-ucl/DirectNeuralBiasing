@@ -257,9 +257,13 @@ def run_live(cfg: dict, args: argparse.Namespace):
                 if chunk is None:
                     time.sleep(0.001)
                     continue
-                pipeline._process_chunk(chunk)
-                status.on_chunk()
+                result = pipeline._process_chunk(chunk)
+                if result is not None:
+                    status.on_chunk()
         finally:
+            # Flush the last pending chunk
+            pipeline._flush_pending()
+
             elapsed = time.perf_counter() - t_start
             signal.signal(signal.SIGINT, original_handler)
             if scheduler:

@@ -27,6 +27,14 @@ The detector only cares about detection_phase. It emits candidates
 with enough metadata (phase, frequency, timestamp) for the StimTrigger
 to predict when stim_phase will occur.
 
+v2 changes:
+    - Removed amplitude smoothing across chunks. The wavelet's Gaussian
+      envelope already provides temporal smoothing; additional chunk-level
+      smoothing delayed detection of transient slow waves and has no
+      equivalent in the TWave algorithm (Wong et al., Li et al.).
+    - Amplitude gating now uses instantaneous (per-chunk) wavelet
+      amplitude, matching the TWave approach.
+
 Stores results in result.detections[self.id]:
     {
         "active": bool,
@@ -40,7 +48,7 @@ Each candidate dict:
         "timestamp": float,
         "phase": float,           # actual phase at detection
         "frequency": float,       # instantaneous dominant frequency
-        "amplitude": float,       # smoothed amplitude
+        "amplitude": float,       # instantaneous wavelet amplitude
         "channel_id": int,
     }
 """
@@ -77,7 +85,8 @@ class TargetWaveDetector(Module):
         amp_max: Maximum amplitude (artifact rejection).
         warmup_chunks: Initial chunks for baseline (no detections).
         channels: Which channels to monitor. None = all.
-        amp_smoothing: Chunks to average amplitude over.
+        amp_smoothing: DEPRECATED — ignored. Kept for config
+            compatibility. Amplitude gating uses instantaneous values.
     """
 
     def __init__(
@@ -90,7 +99,7 @@ class TargetWaveDetector(Module):
         amp_max: float = 10000.0,
         warmup_chunks: int = 10,
         channels: list[int] | None = None,
-        amp_smoothing: int = 5,
+        amp_smoothing: int | None = None,  # deprecated, ignored
     ) -> None:
         self.id = id
         self._freq_range = freq_range
@@ -100,10 +109,15 @@ class TargetWaveDetector(Module):
         self._amp_max = amp_max
         self._warmup_chunks = warmup_chunks
         self._channels = channels
-        self._amp_smoothing = amp_smoothing
 
         self._chunks_seen: int = 0
-        self._amp_history: dict[int, list[float]] = {}
+
+        if amp_smoothing is not None:
+            logger.info(
+                "TargetWaveDetector '%s': amp_smoothing=%d is deprecated "
+                "and ignored. Using instantaneous amplitude.",
+                id, amp_smoothing,
+            )
 
     def configure(self, config: PipelineConfig) -> None:
         logger.info(
@@ -161,24 +175,21 @@ class TargetWaveDetector(Module):
         for ci in range(so_amplitude.shape[0]):
             ch_id = int(ch_ids[ci])
 
-            # Pick dominant frequency for this channel
+            # Pick dominant frequency for this channel (highest amplitude)
             best_freq_idx = int(np.argmax(so_amp_per_freq[ci]))
             best_freq = float(so_freqs[best_freq_idx])
 
             # Phase at dominant frequency
             phase = np.angle(analytic_so[ci, best_freq_idx, :]) % (2 * pi)
 
-            # Chunk-level smoothed amplitude
+            # Instantaneous amplitude — use the chunk mean at dominant freq.
+            # This is the wavelet envelope amplitude, already temporally
+            # smoothed by the Morlet Gaussian window. No additional
+            # cross-chunk smoothing needed.
             chunk_amp = float(np.mean(so_amplitude[ci]))
-            if ch_id not in self._amp_history:
-                self._amp_history[ch_id] = []
-            self._amp_history[ch_id].append(chunk_amp)
-            if len(self._amp_history[ch_id]) > self._amp_smoothing:
-                self._amp_history[ch_id] = self._amp_history[ch_id][-self._amp_smoothing:]
-            mean_amp = float(np.mean(self._amp_history[ch_id]))
 
-            # Amplitude gating
-            if mean_amp < self._amp_min or mean_amp > self._amp_max:
+            # Amplitude gating (instantaneous, no smoothing)
+            if chunk_amp < self._amp_min or chunk_amp > self._amp_max:
                 continue
 
             # Phase matching against detection_phase
@@ -193,7 +204,7 @@ class TargetWaveDetector(Module):
                     "timestamp": float(chunk.timestamps[si]),
                     "phase": float(phase[si]),
                     "frequency": best_freq,
-                    "amplitude": mean_amp,
+                    "amplitude": chunk_amp,
                     "channel_id": ch_id,
                 })
 
@@ -206,4 +217,3 @@ class TargetWaveDetector(Module):
 
     def reset(self) -> None:
         self._chunks_seen = 0
-        self._amp_history.clear()

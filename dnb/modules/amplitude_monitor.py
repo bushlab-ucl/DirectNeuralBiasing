@@ -4,15 +4,15 @@ Simple inhibition detector: bandpass the raw signal (e.g. 80–120 Hz),
 compute RMS power, threshold it. If power exceeds threshold, set
 active=True to block stimulation.
 
-This operates independently of the wavelet decomposition — IEDs are
-broadband events best caught with a straightforward power check, not
-time-frequency analysis.
+Baseline handling (v2 — drift-resistant):
+    The adaptive baseline previously suffered from drift: detected IEDs
+    got added to the running history, which inflated both the mean and
+    (especially) the std, causing the threshold to creep upward over
+    time until subsequent IEDs no longer tripped it.
 
-Stores results in result.detections[self.id]:
-    {
-        "active": bool,         # inhibition triggered this chunk
-        "power": float,         # RMS power in the monitored band
-    }
+    Fix: chunks flagged as 'active' are excluded from the baseline
+    history. Only non-IED chunks contribute. Baseline stays stable
+    regardless of IED density.
 """
 
 from __future__ import annotations
@@ -31,20 +31,19 @@ logger = logging.getLogger(__name__)
 class AmplitudeMonitor(Module):
     """Broadband power monitor for IED detection / stimulus inhibition.
 
-    Bandpasses the raw signal into a target band (default 80–120 Hz),
-    computes RMS power, and flags chunks where it exceeds threshold.
+    Bandpasses the signal into a target band (default 80–120 Hz),
+    computes RMS power, flags chunks where it exceeds threshold.
 
-    The threshold can be set as an absolute value, or left as None
-    to use an adaptive threshold based on a running baseline
-    (mean + n_std * std of recent chunks).
+    Adaptive mode uses `mean + n_std * std` of recent *non-active* chunks.
+    Active chunks are excluded from the baseline to prevent drift.
 
     Args:
         id: Unique identifier for this detector.
         freq_range: (low_hz, high_hz) bandpass range.
-        threshold: Absolute RMS power threshold. If None, uses adaptive.
-        adaptive_n_std: Number of stds above baseline mean for adaptive mode.
-        warmup_chunks: Initial chunks to accumulate baseline (no detections).
-        baseline_chunks: Number of recent chunks to track for adaptive baseline.
+        threshold: Absolute RMS power threshold. None = adaptive.
+        adaptive_n_std: Stds above baseline mean for adaptive mode.
+        warmup_chunks: Initial chunks to accumulate baseline.
+        baseline_chunks: Number of recent non-active chunks tracked.
         filter_order: Butterworth filter order.
     """
 
@@ -103,10 +102,7 @@ class AmplitudeMonitor(Module):
 
         chunk = result.chunk
 
-        # Bandpass the raw signal
         filtered = sosfilt(self._sos, chunk.samples, axis=1)
-
-        # RMS power across all channels and samples
         power = float(np.sqrt(np.mean(filtered ** 2)))
 
         self._chunks_seen += 1
@@ -121,21 +117,25 @@ class AmplitudeMonitor(Module):
             }
             return result
 
-        # Determine if active — compare against PREVIOUS baseline,
-        # before this chunk's power contaminates the threshold.
+        # Compare against baseline from previous non-active chunks.
         if self._threshold is not None:
             active = power > self._threshold
         else:
-            hist = np.array(self._power_history)
-            baseline_mean = float(np.mean(hist))
-            baseline_std = float(np.std(hist))
-            adaptive_thresh = baseline_mean + self._adaptive_n_std * baseline_std
-            active = power > adaptive_thresh
+            if len(self._power_history) == 0:
+                active = False
+            else:
+                hist = np.array(self._power_history)
+                baseline_mean = float(np.mean(hist))
+                baseline_std = float(np.std(hist))
+                adaptive_thresh = baseline_mean + self._adaptive_n_std * baseline_std
+                active = power > adaptive_thresh
 
-        # Now add current power to history for future chunks
-        self._power_history.append(power)
-        if len(self._power_history) > self._baseline_chunks:
-            self._power_history = self._power_history[-self._baseline_chunks:]
+        # Drift fix: only add to history if NOT active.
+        # IED chunks don't contaminate the baseline.
+        if not active:
+            self._power_history.append(power)
+            if len(self._power_history) > self._baseline_chunks:
+                self._power_history = self._power_history[-self._baseline_chunks:]
 
         result.detections[self.id] = {"active": active, "power": power}
         return result

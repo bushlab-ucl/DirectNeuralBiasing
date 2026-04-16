@@ -2,6 +2,16 @@
 
 Wires together a DataSource, module chain, and EventBus into a
 runnable pipeline. Supports both run_online() and run_offline().
+
+The pipeline is intentionally simple — it writes each chunk to the ring
+buffer and runs it through the module chain. Any delay needed for
+symmetric overlap-save is managed internally by WaveletConvolution,
+which stashes one chunk and outputs results for the previous chunk.
+This keeps the pipeline independent of module implementation details
+and works correctly regardless of whether a Downsampler is present.
+
+At end-of-stream, the pipeline calls flush() on the wavelet to process
+its final stashed chunk, then runs downstream modules on the result.
 """
 
 from __future__ import annotations
@@ -103,6 +113,43 @@ class Pipeline:
         self._total_events += len(result.events)
         return result
 
+    def _flush(self) -> ProcessResult | None:
+        """Flush any internally-buffered data from modules at end-of-stream.
+
+        Currently only the WaveletConvolution has a flush() method (for its
+        internal one-chunk delay). We call it, then run the remaining
+        downstream modules on the result.
+        """
+        from dnb.modules.wavelet import WaveletConvolution
+
+        wavelet_idx = None
+        for i, module in enumerate(self._modules):
+            if isinstance(module, WaveletConvolution):
+                wavelet_idx = i
+                break
+
+        if wavelet_idx is None:
+            return None
+
+        # Create a result with the last ring buffer state
+        # (chunk will be replaced by wavelet.flush)
+        result = ProcessResult(chunk=None, ring_buffer=self._buffer)
+        result = self._modules[wavelet_idx].flush(result)
+
+        if result.chunk is None:
+            return None  # wavelet had nothing stashed
+
+        # Run downstream modules (everything after wavelet)
+        for module in self._modules[wavelet_idx + 1:]:
+            result = module.process(result)
+
+        for event in result.events:
+            self._event_bus.publish(event)
+
+        self._chunk_count += 1
+        self._total_events += len(result.events)
+        return result
+
     def run_online(self) -> None:
         """Run in real-time closed-loop mode until Ctrl+C or stop()."""
         self._setup()
@@ -125,6 +172,7 @@ class Pipeline:
                     continue
                 self._process_chunk(chunk)
         finally:
+            self._flush()
             elapsed = time.perf_counter() - t_start
             signal.signal(signal.SIGINT, original_handler)
             self._teardown()
@@ -154,6 +202,12 @@ class Pipeline:
                 if progress_callback is not None:
                     prog = getattr(self._source, "progress", 0.0)
                     progress_callback(prog)
+
+            # Flush the wavelet's internal buffer
+            flush_result = self._flush()
+            if flush_result is not None:
+                all_events.extend(flush_result.events)
+
         finally:
             elapsed = time.perf_counter() - t_start
             self._teardown()

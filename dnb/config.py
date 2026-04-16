@@ -103,7 +103,7 @@ def build_modules(cfg: dict[str, Any]) -> list:
         amp_min=float(tw.get("amp_min", 50.0)),
         amp_max=float(tw.get("amp_max", 10000.0)),
         warmup_chunks=int(tw.get("warmup_chunks", 10)),
-        amp_smoothing=int(tw.get("amp_smoothing", 5)),
+        # amp_smoothing is deprecated and ignored
     ))
 
     # Amplitude monitor (IED inhibition, optional)

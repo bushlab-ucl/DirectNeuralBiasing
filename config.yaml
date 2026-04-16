@@ -1,12 +1,12 @@
 # DNB pipeline configuration
 # ─────────────────────────────────────────────────────────
 # Phase-prediction scheduling:
-#   detection_phase = 3π/2 (rising zero crossing) — detect here
-#   stim_phase = 0 (positive peak)                — stimulate here
+#   detection_phase = π (trough)     — detect here
+#   stim_phase = 0 (positive peak)   — stimulate here
 #
-#   Lead time = quarter period (detection → stim):
-#     At 1 Hz:   250 ms
-#     At 0.5 Hz: 500 ms
+#   Lead time = half period (detection → stim):
+#     At 1 Hz:   500 ms
+#     At 0.5 Hz: 1000 ms
 #
 #   Phase map:  0=peak  π/2=falling  π=trough  3π/2=rising  2π=peak
 
@@ -33,17 +33,18 @@ wavelet:
   freq_min: 0.5
   freq_max: 4.0
   n_freqs: 10
-  n_cycles_base: 3.0
+  n_cycles_base: 1.5         # keep low for real-time latency
+                              # 1.5 cycles at 0.5 Hz ≈ 1.9s kernel half-len
+                              # (TWave uses ~1 cycle equivalent via truncation)
 
 target_wave:
   id: slow_wave
   freq_range: [0.5, 4.0]
-  detection_phase: pi       # π = trough (where we want to detect)
+  detection_phase: pi         # π = trough
   phase_tolerance: 0.05
   amp_min: 1000.0
   amp_max: 10000.0
   warmup_chunks: 10
-  amp_smoothing: 5
 
 amplitude_monitor:
   enabled: true
@@ -58,9 +59,11 @@ trigger:
   activation_detector_id: slow_wave
   inhibition_detector_id: ied_monitor
   n_pulses: 1                # 0=detect-only, 1=single, n>1=n-pulse
-  stim_phase: 0.0            # 0 = positive peak (where we want to stimulate)
+  stim_phase: 0.0            # 0 = positive peak
   backoff_s: 5.0
-  inhibition_cooldown_s: 5.0
+  inhibition_cooldown_s: 1.0 # brief cooldown — gate at moment of stim,
+                              # not a multi-second block. Mirrors TWave's
+                              # per-stim HF/LF ratio gate approach.
 
 audio:
   wav_path: assets/pink_noise_short.wav
