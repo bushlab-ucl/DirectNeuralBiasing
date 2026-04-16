@@ -1,24 +1,30 @@
-"""N-pulse stimulation trigger.
+"""N-pulse stimulation trigger with phase-prediction scheduling.
 
-Detects a single slow wave via the activation detector, logs a
-SLOW_WAVE event, then fires n audio stimulations starting at the
-detected upwave and continuing at predicted future positive peaks.
+The core idea:
+    1. The detector fires at detection_phase (e.g. π = trough)
+    2. This trigger computes when stim_phase (e.g. 0 = positive peak)
+       will occur, using the detected frequency
+    3. Stims are scheduled at predicted future times
 
-    n_pulses=0  →  detection only: emit SLOW_WAVE, no STIM events
-    n_pulses=1  →  detect, emit SLOW_WAVE + 1 STIM immediately
-                   (at the detected upwave)
-    n_pulses=3  →  detect, emit SLOW_WAVE + STIM immediately,
-                   then 2 more STIMs at t0 + 1/freq, t0 + 2/freq
+Phase prediction:
+    Given detection at phase φ_det with frequency f, the time until
+    stim_phase φ_stim is:
 
-The first stim fires at the detection itself (the current upwave).
-Additional stims are scheduled at predicted future peaks using the
-detected frequency.
+        Δφ = (φ_stim - φ_det) mod 2π
+        Δt = Δφ / (2π × f)
 
-STIM events carry metadata:
-    pulse_index: 1-indexed (1 = immediate stim, 2 = next peak, ...)
-    n_pulses: total scheduled
-    frequency: detected SW frequency used for scheduling
-    detection_time: timestamp of the SLOW_WAVE detection
+    Pulse k (0-indexed) fires at:  t_det + Δt + k/f
+
+    So if we detect at the trough (π) and want to stim at the peak (0):
+        Δφ = (0 - π) mod 2π = π
+        Δt = π / (2π × f) = 1/(2f) = half a period
+
+    This gives us half a period of lead time to schedule the stim.
+
+Event types:
+    SLOW_WAVE — detection event. Always logged. Carries detection metadata.
+    STIM — scheduled stimulation. pulse_index is 1-indexed.
+           Pulse 1 is the first predicted peak after detection.
 
 Inhibition: if the IED monitor is active, cancel all pending stims
 and start a cooldown period.
@@ -28,6 +34,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from math import pi
 
 import numpy as np
 
@@ -37,22 +44,40 @@ from dnb.modules.base import Module, ProcessResult
 logger = logging.getLogger(__name__)
 
 
+def _phase_delay(detection_phase: float, stim_phase: float, frequency: float) -> float:
+    """Compute time from detection_phase to stim_phase at given frequency.
+
+    Returns delay in seconds. Always positive (wraps around the cycle).
+    """
+    delta_phi = (stim_phase - detection_phase) % (2 * pi)
+    if delta_phi < 1e-6:
+        # Same phase — schedule one full period ahead
+        delta_phi = 2 * pi
+    return delta_phi / (2 * pi * frequency)
+
+
 @dataclass
 class _PulseSchedule:
     """Pending pulse schedule for one channel."""
-    stim_times: list[float]         # scheduled stim timestamps (1-indexed)
+    stim_times: list[float]         # scheduled stim timestamps
     frequency: float                # detected SW frequency
     detection_time: float           # time of the SLOW_WAVE detection
+    n_pulses: int                   # total pulses scheduled
     next_idx: int = 0               # index into stim_times for next to emit
 
 
 class StimTrigger(Module):
-    """N-pulse trigger combining activation and inhibition detectors.
+    """N-pulse trigger with phase-prediction scheduling.
+
+    Detects slow waves via the activation detector (at detection_phase),
+    predicts when stim_phase will occur, and schedules n_pulses stims
+    at predicted positive peaks.
 
     Args:
         activation_detector_id: ID of the detector providing candidates.
         inhibition_detector_id: ID of the inhibition detector (or None).
         n_pulses: Number of stimulation pulses per detection (0=none).
+        stim_phase: Phase at which to stimulate (radians, default 0 = peak).
         backoff_s: Minimum seconds between detection sequences.
         inhibition_cooldown_s: Seconds to wait after inhibition before
             allowing new detections.
@@ -63,12 +88,14 @@ class StimTrigger(Module):
         activation_detector_id: str = "slow_wave",
         inhibition_detector_id: str | None = "ied_monitor",
         n_pulses: int = 1,
+        stim_phase: float = 0.0,
         backoff_s: float = 5.0,
         inhibition_cooldown_s: float = 5.0,
     ) -> None:
         self._act_id = activation_detector_id
         self._inh_id = inhibition_detector_id
         self._n_pulses = n_pulses
+        self._stim_phase = stim_phase % (2 * pi)
         self._backoff_s = backoff_s
         self._inhibition_cooldown_s = inhibition_cooldown_s
 
@@ -80,9 +107,10 @@ class StimTrigger(Module):
     def configure(self, config: PipelineConfig) -> None:
         logger.info(
             "StimTrigger: activation='%s', inhibition='%s', "
-            "n_pulses=%d, backoff=%.1fs",
+            "n_pulses=%d, stim_phase=%.2f rad (%.0f°), backoff=%.1fs",
             self._act_id, self._inh_id or "none",
-            self._n_pulses, self._backoff_s,
+            self._n_pulses, self._stim_phase,
+            self._stim_phase * 180 / pi, self._backoff_s,
         )
 
     def process(self, result: ProcessResult) -> ProcessResult:
@@ -105,9 +133,7 @@ class StimTrigger(Module):
                     remaining, ch_id,
                 )
                 del self._schedules[ch_id]
-            # Set cooldown for all channels in this chunk — even if no
-            # candidates are present yet. This ensures an IED arriving
-            # before a SW still blocks the upcoming detection.
+            # Set cooldown for all channels in this chunk
             for ch_id in result.chunk.channel_ids:
                 self._last_inhibition_time[int(ch_id)] = chunk_time
 
@@ -118,21 +144,22 @@ class StimTrigger(Module):
                 t = sched.stim_times[sched.next_idx]
                 if t > chunk_time:
                     break  # not yet
-                pulse_num = sched.next_idx + 2  # pulse 1 already emitted
+                pulse_num = sched.next_idx + 1
                 events.append(Event(
                     event_type=EventType.STIM,
                     timestamp=t,
                     channel_id=ch_id,
                     metadata={
                         "pulse_index": pulse_num,
-                        "n_pulses": self._n_pulses,
+                        "n_pulses": sched.n_pulses,
                         "frequency": sched.frequency,
                         "detection_time": sched.detection_time,
+                        "scheduled": True,
                     },
                 ))
                 logger.info(
-                    "STIM %d/%d ch=%d t=%.3fs (freq=%.2f Hz)",
-                    pulse_num, self._n_pulses, ch_id, t, sched.frequency,
+                    "STIM %d/%d ch=%d t=%.3fs (scheduled, freq=%.2f Hz)",
+                    pulse_num, sched.n_pulses, ch_id, t, sched.frequency,
                 )
                 sched.next_idx += 1
 
@@ -168,57 +195,78 @@ class StimTrigger(Module):
                 continue
 
             # --- New detection ---
-            t0 = c["timestamp"]
+            t_det = c["timestamp"]
             freq = c["frequency"]
-            self._last_detection_time[ch_id] = t0
+            det_phase = c["phase"]
+            self._last_detection_time[ch_id] = t_det
 
-            # Always emit a SLOW_WAVE event for the detection
+            # Compute time from detection to first stim (phase prediction)
+            delay_to_stim = _phase_delay(det_phase, self._stim_phase, freq)
+            period = 1.0 / freq
+
+            # Always emit a SLOW_WAVE event at the detection time
             events.append(Event(
                 event_type=EventType.SLOW_WAVE,
-                timestamp=t0,
+                timestamp=t_det,
                 channel_id=ch_id,
                 metadata={
-                    "phase": c.get("phase", 0.0),
+                    "detection_phase": det_phase,
+                    "stim_phase": self._stim_phase,
                     "frequency": freq,
                     "amplitude": c.get("amplitude", 0.0),
                     "n_pulses": self._n_pulses,
+                    "delay_to_stim_ms": delay_to_stim * 1000,
                 },
             ))
             logger.info(
-                "SLOW_WAVE detected ch=%d t=%.3fs freq=%.2f Hz amp=%.1f → %d stim(s)",
-                ch_id, t0, freq, c.get("amplitude", 0), self._n_pulses,
+                "SLOW_WAVE ch=%d t=%.3fs det_phase=%.2f freq=%.2f Hz amp=%.1f "
+                "→ %d stim(s), first in %.0fms",
+                ch_id, t_det, det_phase, freq, c.get("amplitude", 0),
+                self._n_pulses, delay_to_stim * 1000,
             )
 
-            # Schedule stims: k=0 at detection (immediate), k=1.. at future peaks
+            # Schedule stims at predicted future peak(s)
             if self._n_pulses > 0 and freq > 0:
-                period = 1.0 / freq
+                stim_times = [
+                    t_det + delay_to_stim + k * period
+                    for k in range(self._n_pulses)
+                ]
 
-                # Pulse 1 fires immediately at the detected upwave
-                events.append(Event(
-                    event_type=EventType.STIM,
-                    timestamp=t0,
-                    channel_id=ch_id,
-                    metadata={
-                        "pulse_index": 1,
-                        "n_pulses": self._n_pulses,
-                        "frequency": freq,
-                        "detection_time": t0,
-                    },
-                ))
-                logger.info(
-                    "STIM 1/%d ch=%d t=%.3fs (immediate)",
-                    self._n_pulses, ch_id, t0,
+                self._schedules[ch_id] = _PulseSchedule(
+                    stim_times=stim_times,
+                    frequency=freq,
+                    detection_time=t_det,
+                    n_pulses=self._n_pulses,
+                    next_idx=0,
                 )
 
-                # Pulses 2..n at predicted future peaks
-                if self._n_pulses > 1:
-                    stim_times = [t0 + k * period for k in range(1, self._n_pulses)]
-                    self._schedules[ch_id] = _PulseSchedule(
-                        stim_times=stim_times,
-                        frequency=freq,
-                        detection_time=t0,
-                        next_idx=0,
+                # Check if any stims are already due (within this chunk)
+                sched = self._schedules[ch_id]
+                while sched.next_idx < len(sched.stim_times):
+                    t = sched.stim_times[sched.next_idx]
+                    if t > chunk_time:
+                        break
+                    pulse_num = sched.next_idx + 1
+                    events.append(Event(
+                        event_type=EventType.STIM,
+                        timestamp=t,
+                        channel_id=ch_id,
+                        metadata={
+                            "pulse_index": pulse_num,
+                            "n_pulses": self._n_pulses,
+                            "frequency": freq,
+                            "detection_time": t_det,
+                            "scheduled": True,
+                        },
+                    ))
+                    logger.info(
+                        "STIM %d/%d ch=%d t=%.3fs (immediate, freq=%.2f Hz)",
+                        pulse_num, self._n_pulses, ch_id, t, freq,
                     )
+                    sched.next_idx += 1
+
+                if sched.next_idx >= len(sched.stim_times):
+                    del self._schedules[ch_id]
 
         result.events.extend(events)
         return result

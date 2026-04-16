@@ -1,26 +1,46 @@
 """Target wave detector — activation detector for phase-targeted events.
 
-This is the "activation detector" in the Rust architecture. It watches
-the wavelet phase in a configurable frequency band and flags samples
-where the phase hits a target angle with sufficient amplitude.
+This is the "activation detector" in the pipeline. It watches the
+wavelet phase in a configurable frequency band and flags samples where
+the phase hits a **detection** angle with sufficient amplitude.
 
-It does NOT decide whether to stimulate — that's the StimTrigger's job.
-It just says "the slow wave is at the right phase right now."
+IMPORTANT DISTINCTION:
+    detection_phase  — the phase at which we *detect* the slow wave
+                       (default 3π/2 = rising zero crossing, giving
+                       a quarter-period of lead time to schedule the
+                       stim at the upcoming positive peak)
+    stim_phase       — the phase at which we *want to stimulate*
+                       (default 0 = positive peak, set on StimTrigger)
 
-The detector stores its results in result.detections[self.id] as a dict:
+Phase map (for sin-convention signals):
+    0      = positive peak
+    π/2    = falling zero crossing
+    π      = trough (negative peak)
+    3π/2   = rising zero crossing  ← default detection point
+    2π/0   = positive peak (stim target)
+
+Detecting at 3π/2 gives quarter-period lead time:
+    At 1 Hz:   250 ms before the peak
+    At 0.5 Hz: 500 ms before the peak
+
+The detector only cares about detection_phase. It emits candidates
+with enough metadata (phase, frequency, timestamp) for the StimTrigger
+to predict when stim_phase will occur.
+
+Stores results in result.detections[self.id]:
     {
-        "active": bool,           # any candidate found in this chunk
-        "candidates": [...],      # list of candidate dicts
-        "mean_amplitude": float,  # chunk-level amplitude
+        "active": bool,
+        "candidates": [...],
+        "mean_amplitude": float,
     }
 
 Each candidate dict:
     {
         "sample_idx": int,
         "timestamp": float,
-        "phase": float,
-        "frequency": float,
-        "amplitude": float,
+        "phase": float,           # actual phase at detection
+        "frequency": float,       # instantaneous dominant frequency
+        "amplitude": float,       # smoothed amplitude
         "channel_id": int,
     }
 """
@@ -42,17 +62,16 @@ class TargetWaveDetector(Module):
     """Wavelet-based phase detector for a target frequency band.
 
     Monitors instantaneous phase in a specified band and flags samples
-    where phase matches the target within tolerance and amplitude is
-    within bounds.
-
-    This is generic — configure freq_range=(0.5, 2.0) for slow waves,
-    or (4, 8) for theta, etc. The wavelet convolution upstream handles
-    the actual filtering.
+    where phase matches the detection_phase within tolerance and
+    amplitude is within bounds.
 
     Args:
         id: Unique identifier for this detector.
         freq_range: (low_hz, high_hz) band to monitor.
-        target_phase: Phase angle to detect (radians; 0 = positive peak).
+        detection_phase: Phase angle to detect at (radians).
+            Default 3π/2 (rising zero crossing) — gives a
+            quarter-period of lead time to predict and schedule
+            the upcoming positive peak for stimulation.
         phase_tolerance: Half-width of phase window (radians).
         amp_min: Minimum amplitude to accept.
         amp_max: Maximum amplitude (artifact rejection).
@@ -65,7 +84,7 @@ class TargetWaveDetector(Module):
         self,
         id: str = "slow_wave",
         freq_range: tuple[float, float] = (0.5, 2.0),
-        target_phase: float = 0.0,
+        detection_phase: float = 3 * pi / 2,
         phase_tolerance: float = 0.15,
         amp_min: float = 50.0,
         amp_max: float = 10000.0,
@@ -75,7 +94,7 @@ class TargetWaveDetector(Module):
     ) -> None:
         self.id = id
         self._freq_range = freq_range
-        self._target_phase = target_phase % (2 * pi)
+        self._detection_phase = detection_phase % (2 * pi)
         self._phase_tolerance = phase_tolerance
         self._amp_min = amp_min
         self._amp_max = amp_max
@@ -88,10 +107,11 @@ class TargetWaveDetector(Module):
 
     def configure(self, config: PipelineConfig) -> None:
         logger.info(
-            "TargetWaveDetector '%s': freq=(%.1f, %.1f) Hz, target_phase=%.2f rad, "
-            "amp=(%.0f, %.0f)",
+            "TargetWaveDetector '%s': freq=(%.1f, %.1f) Hz, "
+            "detection_phase=%.2f rad (%.0f°), amp=(%.0f, %.0f)",
             self.id, self._freq_range[0], self._freq_range[1],
-            self._target_phase, self._amp_min, self._amp_max,
+            self._detection_phase, self._detection_phase * 180 / pi,
+            self._amp_min, self._amp_max,
         )
 
     def process(self, result: ProcessResult) -> ProcessResult:
@@ -161,8 +181,8 @@ class TargetWaveDetector(Module):
             if mean_amp < self._amp_min or mean_amp > self._amp_max:
                 continue
 
-            # Phase matching
-            phase_diff = np.abs((phase - self._target_phase) % (2 * pi))
+            # Phase matching against detection_phase
+            phase_diff = np.abs((phase - self._detection_phase) % (2 * pi))
             phase_diff = np.minimum(phase_diff, 2 * pi - phase_diff)
             at_target = phase_diff < self._phase_tolerance
             candidate_indices = np.where(at_target)[0]

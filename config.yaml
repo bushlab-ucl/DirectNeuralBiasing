@@ -1,7 +1,14 @@
 # DNB pipeline configuration
 # ─────────────────────────────────────────────────────────
-# This file drives both run.py and can be loaded in notebooks
-# via dnb.config.build_pipeline().
+# Phase-prediction scheduling:
+#   detection_phase = 3π/2 (rising zero crossing) — detect here
+#   stim_phase = 0 (positive peak)                — stimulate here
+#
+#   Lead time = quarter period (detection → stim):
+#     At 1 Hz:   250 ms
+#     At 0.5 Hz: 500 ms
+#
+#   Phase map:  0=peak  π/2=falling  π=trough  3π/2=rising  2π=peak
 
 pipeline:
   sample_rate: 30000.0       # hardware rate (downsampler reduces to 500 Hz)
@@ -9,9 +16,14 @@ pipeline:
   buffer_duration: 10.0
   chunk_duration: 0.5
 
+# ── Source ────────────────────────────────────────────────
+# type: file | nplay | cerebus | auto
+
 source:
-  type: file                 # file | nplay | cerebus
-  path: data/recording.npz
+  type: nplay                # ← change to 'cerebus' at hospital
+  # path: data/recording.npz
+  # inst_addr: ""
+  # client_addr: "0.0.0.0"
 
 downsampler:
   enabled: true
@@ -26,7 +38,7 @@ wavelet:
 target_wave:
   id: slow_wave
   freq_range: [0.5, 4.0]
-  target_phase: 0.0          # 0 = positive peak
+  detection_phase: 3pi/2       # 3π/2 = rising zero crossing (¼ period before peak)
   phase_tolerance: 0.05
   amp_min: 1000.0
   amp_max: 10000.0
@@ -36,23 +48,20 @@ target_wave:
 amplitude_monitor:
   enabled: true
   id: ied_monitor
-  freq_range: [80.0, 120.0]  # broadband IED power check
+  freq_range: [80.0, 120.0]
   # threshold: 500.0          # uncomment for absolute mode
-  adaptive_n_std: 3.0         # adaptive: mean + 3σ
+  adaptive_n_std: 3.0
   warmup_chunks: 20
   baseline_chunks: 100
 
 trigger:
   activation_detector_id: slow_wave
   inhibition_detector_id: ied_monitor
-  n_pulses: 1                # 0=none, 1=single, n>1=n-pulse
+  n_pulses: 1                # 0=detect-only, 1=single, n>1=n-pulse
+  stim_phase: 0.0            # 0 = positive peak (where we want to stimulate)
   backoff_s: 5.0
   inhibition_cooldown_s: 5.0
 
-# audio:
-#   wav_path: assets/pink_noise_short.wav
-#   trigger_on: [STIM]
-#   volume: 1.0
-
-validation:
-  snr_levels: [1.0, 2.0, 3.0, 5.0, 10.0]
+audio:
+  wav_path: assets/pink_noise_short.wav
+  volume: 1.0

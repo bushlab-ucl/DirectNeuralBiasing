@@ -46,6 +46,24 @@ def build_pipeline_config(cfg: dict[str, Any]) -> PipelineConfig:
     )
 
 
+def _parse_phase(value) -> float:
+    """Parse a phase value — supports 'pi', '3pi/2', '0', '3.14', etc."""
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        s = value.strip().lower().replace(" ", "")
+        if s == "pi":
+            return pi
+        if s == "3pi/2" or s == "3*pi/2" or s == "1.5pi" or s == "1.5*pi":
+            return 3 * pi / 2
+        if s == "pi/2" or s == "pi*0.5":
+            return pi / 2
+        if s == "0" or s == "0.0":
+            return 0.0
+        return float(s)
+    return float(value)
+
+
 def build_modules(cfg: dict[str, Any]) -> list:
     """Build the module chain from config sections.
 
@@ -80,7 +98,7 @@ def build_modules(cfg: dict[str, Any]) -> list:
     modules.append(TargetWaveDetector(
         id=tw.get("id", "slow_wave"),
         freq_range=tuple(tw.get("freq_range", [0.5, 2.0])),
-        target_phase=float(tw.get("target_phase", 0.0)),
+        detection_phase=_parse_phase(tw.get("detection_phase", 3 * pi / 2)),
         phase_tolerance=float(tw.get("phase_tolerance", 0.15)),
         amp_min=float(tw.get("amp_min", 50.0)),
         amp_max=float(tw.get("amp_max", 10000.0)),
@@ -116,11 +134,12 @@ def build_modules(cfg: dict[str, Any]) -> list:
         activation_detector_id=tr.get("activation_detector_id", "slow_wave"),
         inhibition_detector_id=inh_id,
         n_pulses=int(tr.get("n_pulses", 1)),
+        stim_phase=_parse_phase(tr.get("stim_phase", 0.0)),
         backoff_s=float(tr.get("backoff_s", 5.0)),
         inhibition_cooldown_s=float(tr.get("inhibition_cooldown_s", 5.0)),
     ))
 
-    # Audio (optional)
+    # Audio (optional — only for offline playback, live uses StimScheduler)
     if "audio" in cfg:
         a = cfg["audio"]
         wav_path = a.get("wav_path")
