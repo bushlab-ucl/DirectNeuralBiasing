@@ -1,14 +1,14 @@
 # DNB pipeline configuration
-# ─────────────────────────────────────────────────────────
+# ---------------------------------------------------------
 # Phase-prediction scheduling:
-#   detection_phase = π (trough)     — detect here
-#   stim_phase = 0 (positive peak)   — stimulate here
+#   detection_phase = pi (trough)    -- detect here
+#   stim_phase = 0 (positive peak)   -- stimulate here
 #
-#   Lead time = half period (detection → stim):
+#   Lead time = half period (detection -> stim):
 #     At 1 Hz:   500 ms
 #     At 0.5 Hz: 1000 ms
 #
-#   Phase map:  0=peak  π/2=falling  π=trough  3π/2=rising  2π=peak
+#   Phase map:  0=peak  pi/2=falling  pi=trough  3pi/2=rising  2pi=peak
 
 pipeline:
   sample_rate: 30000.0       # hardware rate (downsampler reduces to 500 Hz)
@@ -16,11 +16,11 @@ pipeline:
   buffer_duration: 10.0
   chunk_duration: 0.5
 
-# ── Source ────────────────────────────────────────────────
+# -- Source ------------------------------------------------
 # type: file | nplay | cerebus | auto
 
 source:
-  type: nplay                # ← change to 'cerebus' at hospital
+  type: nplay                # change to 'cerebus' at hospital
   # path: data/recording.npz
   # inst_addr: ""
   # client_addr: "0.0.0.0"
@@ -34,13 +34,13 @@ wavelet:
   freq_max: 4.0
   n_freqs: 10
   n_cycles_base: 1.5         # keep low for real-time latency
-                              # 1.5 cycles at 0.5 Hz ≈ 1.9s kernel half-len
+                              # 1.5 cycles at 0.5 Hz ~ 1.9s kernel half-len
                               # (TWave uses ~1 cycle equivalent via truncation)
 
 target_wave:
   id: slow_wave
   freq_range: [0.5, 4.0]
-  detection_phase: pi         # π = trough
+  detection_phase: pi         # pi = trough
   phase_tolerance: 0.05
   amp_min: 1000.0
   amp_max: 10000.0
@@ -61,7 +61,7 @@ trigger:
   n_pulses: 1                # 0=detect-only, 1=single, n>1=n-pulse
   stim_phase: 0.0            # 0 = positive peak
   backoff_s: 5.0
-  inhibition_cooldown_s: 1.0 # brief cooldown — gate at moment of stim,
+  inhibition_cooldown_s: 1.0 # brief cooldown -- gate at moment of stim,
                               # not a multi-second block. Mirrors TWave's
                               # per-stim HF/LF ratio gate approach.
 

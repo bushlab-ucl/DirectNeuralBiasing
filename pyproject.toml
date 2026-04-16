@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "direct-neural-biasing"
-version = "2.0.16"
+version = "2.0.17"
 description = "Low-latency closed-loop neural signal processing for Blackrock Cerebus devices."
 readme = "README.md"
 license = "CC-BY-NC-4.0"

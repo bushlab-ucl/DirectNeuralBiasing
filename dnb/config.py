@@ -24,11 +24,11 @@ logger = logging.getLogger(__name__)
 
 
 def load_config(path: str | Path) -> dict[str, Any]:
-    """Load a YAML config file."""
+    """Load a YAML config file (UTF-8 encoded)."""
     path = Path(path)
     if not path.exists():
         raise FileNotFoundError(f"Config not found: {path}")
-    with open(path, "r") as f:
+    with open(path, "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
     if not isinstance(cfg, dict):
         raise ValueError(f"Config must be a YAML mapping, got {type(cfg).__name__}")
