@@ -25,23 +25,6 @@ Installs numpy, scipy, pyyaml and makes `import dnb` work.
 
 &nbsp;
 
-### Hospital machine setup
-
-```bash
-python -m venv .venv
-.venv\Scripts\activate          # Windows
-pip install -e ".[dev,live]"
-```
-
-No build tools needed beyond pip.
-Everything is declared in `pyproject.toml`.
-
-&nbsp;
-
----
-
-&nbsp;
-
 ## Architecture
 
 Single-channel pipeline. One hardware channel is selected at the source;
