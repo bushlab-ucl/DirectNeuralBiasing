@@ -20,8 +20,8 @@ pipeline:
 # type: file | nplay | cerebus
 
 source:
-  type: nplay                # change to 'cerebus' at hospital
-  # path: data/recording.npz
+  type: file                # change to 'cerebus' at hospital
+  path: D:\DanH\20190122-065346-004.npz
   # inst_addr: ""
   # client_addr: "0.0.0.0"
 
@@ -39,10 +39,10 @@ target_wave:
   id: slow_wave
   freq_range: [0.5, 4.0]
   detection_phase: pi         # pi = trough
-  phase_tolerance: 0.01
+  phase_tolerance: 0.05
   z_score_threshold: 1.0     # adaptive — z-score above rolling baseline
                               # replaces fixed amp_min/amp_max
-  warmup_chunks: 10
+  warmup_chunks: 20
 
 amplitude_monitor:
   enabled: true
@@ -50,7 +50,7 @@ amplitude_monitor:
   freq_range: [80.0, 120.0]
   # threshold: 500.0          # uncomment for absolute mode
   adaptive_n_std: 5.0
-  warmup_chunks: 10
+  warmup_chunks: 20
 
 trigger:
   activation_detector_id: slow_wave
