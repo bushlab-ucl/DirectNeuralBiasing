@@ -1,19 +1,11 @@
-# Offline Validation — Quick Start
+# direct-neural-biasing
 
-This folder contains everything needed to run the slow-wave detector
-on existing recordings and produce detection logs for visual validation.
+Low-latency closed-loop neural signal processing for Blackrock Cerebus devices.
 
-&nbsp;
+Developed by the [Human Electrophysiology Lab](https://bushlab-ucl.github.io) at UCL.
 
----
-
-&nbsp;
-
-## What you need
-
-- Python 3.11+ (already on the lab machine)
-- The `DirectNeuralBiasing` repo (already cloned)
-- One or more `.ns6` or `.npz` recordings
+**CereLink SDK** · [GitHub](https://github.com/CerebusOSS/CereLink) · [Wiki](https://github.com/CerebusOSS/CereLink/wiki)  
+**pycbsdk** · [GitHub](https://github.com/CerebusOSS/pycbsdk)
 
 &nbsp;
 
@@ -21,42 +13,40 @@ on existing recordings and produce detection logs for visual validation.
 
 &nbsp;
 
-## Setup (one time only)
-
-Open a terminal in the `DirectNeuralBiasing` directory:
+## Install
 
 ```bash
-python -m venv .venv
-.venv\Scripts\activate
+git clone https://github.com/bushlab-ucl/DirectNeuralBiasing
+cd DirectNeuralBiasing
+pip install -e .
+```
+
+Installs numpy, scipy, pyyaml and makes `import dnb` work.
+
+For development (adds matplotlib + jupyter):
+
+```bash
 pip install -e ".[dev]"
 ```
 
-This installs the library and Jupyter. Takes about 30 seconds.
-
-&nbsp;
-
----
-
-&nbsp;
-
-## Step 1 — Convert .ns6 to .npz
-
-If your recordings are `.ns6` files (Blackrock native format), convert
-them first. If you already have `.npz` files, skip this step.
+For live hardware (adds pycbsdk):
 
 ```bash
-python validation/ns6_to_npz.py  D:\recordings\20190122-065346-004.ns6
+pip install -e ".[live]"
 ```
 
-This creates `20190122-065346-004.npz` in the same directory.
-The sample rate, channel labels, and scale factors are read from
-the `.ns6` header automatically.
+&nbsp;
 
-To convert to µV directly (larger files, but no scale factor to worry about):
+### Hospital machine setup
 
 ```bash
-python validation/ns6_to_npz.py  D:\recordings\20190122-065346-004.ns6  --uv
+python -m venv .venv
+.venv\Scripts\activate          # Windows
+pip install -e ".[dev,live]"
 ```
+
+No build tools needed beyond pip.
+Everything is declared in `pyproject.toml`.
 
 &nbsp;
 
@@ -64,43 +54,247 @@ python validation/ns6_to_npz.py  D:\recordings\20190122-065346-004.ns6  --uv
 
 &nbsp;
 
-## Step 2 — Edit the notebook
+## Architecture
+
+Single-channel pipeline. One hardware channel is selected at the source;
+all processing is 1D.
+
+```
+Source → Downsampler → RingBuffer → WaveletConvolution → Detectors → StimTrigger → [Audio]
+```
+
+One shared ring buffer at the analysis rate (500 Hz). The downsampler
+transforms the chunk, the pipeline writes it into the buffer, the wavelet
+reads a sliding window from the buffer. No internal delays, no flush logic.
+
+&nbsp;
+
+| Module               | Role                                                                |
+| -------------------- | ------------------------------------------------------------------- |
+| `Downsampler`        | Decimate hardware rate (30 kHz) to analysis rate (500 Hz)           |
+| `WaveletConvolution` | Sliding-window Morlet convolution → amplitude + phase               |
+| `TargetWaveDetector` | **Activation** — crossing-based phase detection with z-score gating |
+| `AmplitudeMonitor`   | **Inhibition** — broadband power monitor for IED rejection          |
+| `StimTrigger`        | Phase-prediction scheduling, emits stims at exact predicted times   |
+
+&nbsp;
+
+### How it works
+
+**Detection and stimulation happen at different phases.**
+
+Detect the slow wave at the trough (π) and stimulate at the positive
+peak (0). The trigger uses the detected frequency to compute when
+the peak will occur and emits a STIM event with the exact predicted
+timestamp.
+
+```
+Detect at trough (π)  →  predict 500ms to peak (0)  →  schedule stim
+```
+
+Phase map: `0=peak  π/2=falling  π=trough  3π/2=rising  2π=peak`
+
+Default config: `detection_phase=π`, `stim_phase=0`.
+At 1 Hz, the lead time is half a period = 500 ms.
+
+&nbsp;
+
+### Events
+
+- **`SLOW_WAVE`** — detection at `detection_phase`. Metadata:
+  `frequency`, `amplitude`, `delay_to_stim_ms`.
+- **`STIM`** — stimulation at predicted `stim_phase`. Metadata:
+  `pulse_index` (1-indexed), `frequency`, `detection_time`.
+
+&nbsp;
+
+### N-pulse stimulation
+
+| `n_pulses` | Behaviour                                        |
+| ---------- | ------------------------------------------------ |
+| `0`        | Detection only — `SLOW_WAVE` events, no `STIM`   |
+| `1`        | `SLOW_WAVE` + 1 `STIM` at next predicted peak    |
+| `3`        | `SLOW_WAVE` + 3 `STIM` at next 3 predicted peaks |
+
+All stim events are emitted immediately with their exact predicted
+timestamps. In live mode, `StimScheduler` fires audio at those times.
+
+&nbsp;
+
+---
+
+&nbsp;
+
+## Data format
+
+### Blackrock .ns6
+
+The native recording format. Convert to `.npz` for offline processing:
 
 ```bash
-jupyter notebook validation/batch-processing.ipynb
+python ns6_to_npz.py recording.ns6
+python ns6_to_npz.py recording.ns6 --uv    # store as float32 µV
 ```
 
-In the **config cell**, edit two things:
+### .npz (ns6-converted)
 
-### 1. File list
+Produced by `ns6_to_npz.py`. `FileSource` reads this automatically.
 
-Point `FILES` at your `.npz` files. Use full paths:
+- `data` — `(n_samples, n_channels)` int16
+- `fs` — sample rate (Hz), scalar
+- `scale_factors` — `(n_channels,)` float64, multiply int16 → µV
+- `electrode_ids` — `(n_channels,)` int32
+- `labels` — `(n_channels,)` str
+
+### .npz (synthetic)
+
+Produced by the validation tools. Also read automatically by `FileSource`.
+
+- `continuous` — `(n_channels, n_samples)` or `(n_samples,)` float64
+- `sample_rate` — scalar
+
+The pipeline extracts one channel via `PipelineConfig.channel_id`
+(default 0).
+
+&nbsp;
+
+---
+
+&nbsp;
+
+## Offline validation
+
+### Batch processing — real data
+
+The notebook `validation/batch-processing.ipynb` processes a list of
+`.npz` recordings. For each file it:
+
+1. Runs the full pipeline (with and without IED inhibition)
+2. Saves a `_detections.csv` with sample indices at the **original
+   hardware rate** — for visual validation against the raw recording
+3. Produces a 3-panel report figure (stim-triggered average, phase
+   polar plot, fired vs blocked stim counts)
+4. Optionally plots every individual detection with context
+
+See `validation/README.md` for step-by-step instructions.
+
+### Smoke tests — synthetic data
+
+The notebook `tests/offline-smoke-tests.ipynb` validates the pipeline
+on synthetic data:
+
+1. **Clean sine** — phase detection and stim timing on a known waveform
+2. **Synthetic SWs** — planted slow waves in pink noise, F1 score
+3. **N-pulse** — n=0, n=1, n=3 modes
+4. **IED inhibition** — stim counts with/without `AmplitudeMonitor`
+5. **Detection report** — stim-triggered average, phase accuracy
+
+&nbsp;
+
+---
+
+&nbsp;
+
+## Running the pipeline
+
+### From Python
 
 ```python
-FILES = [
-    Path('D:/recordings/20190122-065346-004.npz'),
-    Path('D:/recordings/20190123-071200-001.npz'),
-]
+from math import pi
+from dnb import Pipeline, FileSource, PipelineConfig, EventType
+from dnb.modules import (
+    WaveletConvolution, TargetWaveDetector, AmplitudeMonitor, StimTrigger,
+    Downsampler,
+)
+
+pipeline = Pipeline(
+    source=FileSource("recording.npz"),
+    modules=[
+        Downsampler(target_rate=500.0),
+        WaveletConvolution(freq_min=0.5, freq_max=4.0, n_freqs=20, n_cycles_base=1.0),
+        TargetWaveDetector(
+            id="slow_wave", freq_range=(0.5, 4.0),
+            detection_phase=pi, phase_tolerance=0.05, z_score_threshold=1.0,
+        ),
+        AmplitudeMonitor(id="ied_monitor", freq_range=(80.0, 120.0), adaptive_n_std=5.0),
+        StimTrigger(
+            activation_detector_id="slow_wave", inhibition_detector_id="ied_monitor",
+            detection_phase=pi, stim_phase=0.0, n_pulses=1, backoff_s=2.5,
+        ),
+    ],
+    config=PipelineConfig(sample_rate=30000, channel_id=0, chunk_duration=0.1),
+)
+
+events = pipeline.run_offline()
+detections = [e for e in events if e.event_type == EventType.SLOW_WAVE]
+stims = [e for e in events if e.event_type == EventType.STIM]
 ```
 
-### 2. Channel
-
-Set `CHANNEL_ID` to the channel you want to analyse:
+### From config file
 
 ```python
-CHANNEL_ID = 0
+from dnb.config import build_pipeline
+pipeline = build_pipeline("config.yaml")
+events = pipeline.run_offline()
 ```
 
-Channel numbering starts at 0. To check what channels are available:
+### From command line
 
-```python
-import numpy as np
-data = np.load('D:/recordings/20190122-065346-004.npz', allow_pickle=True)
-print(f"Channels: {data['data'].shape[1]}")
-print(f"Labels: {data['labels']}")
+```bash
+python run.py --config config.yaml --offline
+python run.py --config config.yaml --offline --detect-only
+python run.py --config config.yaml --offline --channel 5
 ```
 
-Everything else has sensible defaults. You can leave it alone.
+&nbsp;
+
+---
+
+&nbsp;
+
+## Modules
+
+### Downsampler
+
+Decimates from hardware rate to analysis rate using `scipy.signal.decimate`.
+Transforms the chunk only — the pipeline handles all ring buffer writes.
+
+### WaveletConvolution
+
+Complex Morlet wavelets with log-spaced centre frequencies and 1/f-scaled
+cycle counts. Sliding-window convolution from the shared ring buffer.
+Auto-detects actual sample rate from incoming chunks.
+
+`n_cycles_base` controls the time-frequency tradeoff. Lower = faster
+settling (good for real-time). Higher = better frequency resolution.
+
+### TargetWaveDetector
+
+Crossing-based phase detector. Finds where the wavelet phase crosses
+`detection_phase` within each chunk. Wrap-artifact rejection distinguishes
+real crossings from 2π boundary effects.
+
+Amplitude gating via rolling z-score (Welford's algorithm):
+`z_score_threshold=1.0` for adaptive, `amp_min=X` for fixed.
+
+### AmplitudeMonitor
+
+Broadband power monitor for IED detection. Bandpass filter built lazily
+from the actual chunk sample rate. Adaptive threshold via rolling z-score
+baseline.
+
+### StimTrigger
+
+Phase-prediction scheduling. Uses the **target** `detection_phase` for
+delay calculation (not the noisy measured phase). All stim events emitted
+immediately with exact predicted timestamps.
+
+`Δt = (stim_phase - detection_phase) mod 2π / (2π × f)`
+
+### StimScheduler
+
+Daemon thread for live operation. Receives STIM events, sleeps until
+their exact timestamps, fires audio.
 
 &nbsp;
 
@@ -108,20 +302,13 @@ Everything else has sensible defaults. You can leave it alone.
 
 &nbsp;
 
-## Step 3 — Run all cells
+## Data sources
 
-Click **Cell → Run All** (or Shift+Enter through each cell).
-
-For each file the notebook will:
-
-1. Print detection and stim counts
-2. Save a `_detections.csv` to the output directory
-3. Show a 3-panel report figure and save it as `_report.png`
-
-At the end, a summary table shows all files.
-
-The last cell plots every individual detection with context.
-Set `MAX_EVENTS = 20` or similar if you don't want hundreds of plots.
+| Source          | Class           | Install                    |
+| --------------- | --------------- | -------------------------- |
+| .npz file       | `FileSource`    | —                          |
+| NPlay simulator | `NPlaySource`   | `pip install -e ".[live]"` |
+| Cerebus NSP     | `CerebusSource` | `pip install -e ".[live]"` |
 
 &nbsp;
 
@@ -129,103 +316,40 @@ Set `MAX_EVENTS = 20` or similar if you don't want hundreds of plots.
 
 &nbsp;
 
-## Step 4 — Validate detections
-
-The key output is the `_detections.csv` file. It looks like this:
+## Repo structure
 
 ```
-event_type,  timestamp_s,  sample_index,  frequency_hz,  amplitude,  ...
-SLOW_WAVE,   12.3400,      370200,        0.850,         1543.2,     ...
-STIM,        12.9290,      387870,        0.850,         ,           ...
-SLOW_WAVE,   17.8600,      535800,        1.120,         2105.7,     ...
-...
+DirectNeuralBiasing/
+│
+├── dnb/                      the library
+│   ├── core/                 types, ring buffer
+│   ├── engine/               pipeline, event bus
+│   ├── modules/              wavelet, detectors, trigger, audio
+│   ├── sources/              file, live (NPlay / Cerebus)
+│   └── validation/           synthetic data, ground truth matching
+│
+├── validation/
+│   ├── batch-processing.ipynb
+│   ├── ns6_to_npz.py
+│   └── README.md             ← start here for offline processing
+│
+├── tests/
+│   ├── offline-smoke-tests.ipynb
+│   └── test_data.py
+│
+├── config.yaml
+├── run.py
+├── pyproject.toml
+├── README.md
+└── LICENSE
 ```
 
-The `sample_index` column is at the **original hardware rate** (e.g. 30 kHz).
-Use it to jump directly to that sample in your recording viewer and check
-whether the detection looks like a real slow wave.
-
 &nbsp;
 
 ---
 
 &nbsp;
 
-## The report figure
+## License
 
-Each file gets a 3-panel figure:
-
-**(a) Stim-triggered average** — every detected slow wave aligned at the
-predicted stim time (t=0). Individual trials in colour, mean in black.
-If the pipeline is working, the mean should peak at t=0 (we're stimulating
-at the predicted positive peak). The signal is bandpass filtered to the
-slow oscillation band (0.5–4 Hz).
-
-**(b) Phase polar plot** — where in the slow-wave cycle each stim actually
-lands. Green line = target (0° = peak). Red line = actual mean.
-If phase accuracy is good, the red bars cluster around 0° and the error
-is small.
-
-**(c) Fired vs blocked** — how many stims fired vs how many were blocked
-by IED inhibition. The pipeline runs twice per file: once with the
-`AmplitudeMonitor` (IED rejection) and once without. The difference is
-the blocked count.
-
-&nbsp;
-
----
-
-&nbsp;
-
-## Tuning parameters
-
-If too many or too few detections, these are the knobs to turn:
-
-| Parameter            | Default | Effect                                             |
-| -------------------- | ------- | -------------------------------------------------- |
-| `Z_SCORE_THRESHOLD`  | 1.0     | Higher = fewer detections (only large SWs)         |
-| `BACKOFF_S`          | 2.5     | Minimum gap between detections (seconds)           |
-| `IED_ADAPTIVE_N_STD` | 5.0     | Higher = less aggressive IED blocking              |
-| `PHASE_TOLERANCE`    | 0.05    | How close to π the phase must be to trigger        |
-| `N_CYCLES_BASE`      | 1.0     | Higher = better frequency resolution, more latency |
-
-&nbsp;
-
----
-
-&nbsp;
-
-## Troubleshooting
-
-**"No sample rate key"** — the `.npz` file wasn't produced by `ns6_to_npz.py`.
-Re-convert from `.ns6`, or check what keys are in the file:
-
-```python
-import numpy as np
-data = np.load('file.npz', allow_pickle=True)
-print(list(data.keys()))
-```
-
-**0 detections** — try lowering `Z_SCORE_THRESHOLD` to 0.5, or check that
-`CHANNEL_ID` points to a channel with actual neural data.
-
-**Too many detections** — raise `Z_SCORE_THRESHOLD` to 1.5 or 2.0,
-or increase `BACKOFF_S`.
-
-**MemoryError on large files** — long recordings (hours) at 30 kHz use a lot
-of RAM. Consider splitting the `.ns6` file, or converting with `--uv` and
-using a machine with more memory.
-
-&nbsp;
-
----
-
-&nbsp;
-
-## Files in this directory
-
-| File                     | What it does             |
-| ------------------------ | ------------------------ |
-| `batch-processing.ipynb` | Main notebook — run this |
-| `ns6_to_npz.py`          | Convert .ns6 → .npz      |
-| `README.md`              | This file                |
+CC-BY-NC-4.0
