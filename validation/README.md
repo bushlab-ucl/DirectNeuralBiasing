@@ -1,6 +1,6 @@
 # Running the offline detector on your recordings
 
-Hey Dan — this walks you through running the slow-wave detector on
+This walks you through running the slow-wave detector on
 real `.ns6` recordings and getting detection logs you can validate by eye.
 
 The whole thing is one Jupyter notebook. You edit two lines at the top
