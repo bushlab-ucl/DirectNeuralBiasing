@@ -18,9 +18,9 @@ a CSV per file with sample indices you can look up in the raw recording.
 You only need to do this once. In the `DirectNeuralBiasing` directory:
 
 ```bash
-git clone https://github.com/bushlab-ucl/DirectNeuralBiasing
-cd DirectNeuralBiasing
-pip install -e .
+$ git clone https://github.com/bushlab-ucl/DirectNeuralBiasing
+$ cd DirectNeuralBiasing
+$ pip install -e .
 ```
 
 &nbsp;
@@ -32,7 +32,7 @@ pip install -e .
 ## 1. Convert your .ns6 files
 
 ```bash
-python validation/ns6_to_npz.py  D:\recordings\20190122-065346-004.ns6
+$ python validation/ns6_to_npz.py D:\recordings\20190122-065346-004.ns6
 ```
 
 Creates a `.npz` next to the original. Reads the sample rate, channel
@@ -50,8 +50,8 @@ Note: it doesn't matter what the source format is. I can easliy whip up another 
 ## 2. Open the notebook
 
 ```bash
-cd validation
-jupyter lab
+$ cd validation
+$ jupyter lab
 ```
 
 &nbsp;
