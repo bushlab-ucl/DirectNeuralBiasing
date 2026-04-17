@@ -81,44 +81,49 @@ def inject_ied(
     duration_ms: float = 500.0,
     seed: int | None = None,
 ) -> Event:
-    """Plant a synthetic IED as a broadband transient.
-
-    Superposes Gabor atoms at 5–70 Hz, each with an envelope width
-    matched to its frequency.  Low-freq atoms give the event its
-    ~400 ms temporal footprint; high-freq atoms sharpen the peak.
-    """
+    """Plant a synthetic IED as a realistic Spike-and-Wave complex."""
     rng = np.random.default_rng(seed)
     dur_s = duration_ms / 1000.0
 
-    start_idx = max(0, int((time_s - dur_s * 0.3) * sample_rate))
-    end_idx = min(signal.shape[1], int((time_s + dur_s * 0.7) * sample_rate))
+    # Shift window slightly to accommodate the trailing slow wave
+    start_idx = max(0, int((time_s - dur_s * 0.2) * sample_rate))
+    end_idx = min(signal.shape[1], int((time_s + dur_s * 0.8) * sample_rate))
     n = end_idx - start_idx
 
     if n > 0:
         t = np.arange(n) / sample_rate
-        t_peak = dur_s * 0.3
-
-        #              freq    sigma    weight
-        atoms = [
-            (  3.0,   0.120,   0.70),   # dominant — broad deflection
-            (  8.0,   0.055,   0.50),   # theta body
-            ( 18.0,   0.025,   0.30),   # sharpens the peak
-            ( 40.0,   0.012,   0.15),   # adds edge
-            ( 70.0,   0.005,   0.05),   # subtle crispness
-        ]
+        t_spike = dur_s * 0.2
+        
+        # Delay the slow wave by ~60-100ms after the spike
+        wave_delay = rng.uniform(0.06, 0.10) 
+        t_wave = t_spike + wave_delay
 
         ied = np.zeros(n)
-        for f, s, w in atoms:
-            f_j = f * (1.0 + (rng.random() - 0.5) * 0.25)
-            s_j = s * (1.0 + (rng.random() - 0.5) * 0.20)
-            ph  = rng.uniform(-0.3, 0.3)
-            env = np.exp(-((t - t_peak) ** 2) / (2 * s_j ** 2))
-            ied += w * env * np.cos(2 * pi * f_j * (t - t_peak) + ph)
 
-        # Scale to peak-to-peak amplitude
+        # 1. THE SPIKE (High-frequency, phase-locked, short duration)
+        # Using negative cosines because surface IEDs are typically electronegative peaks
+        spike_atoms = [
+            (15.0, 0.015, 0.50),  # Base sharpness
+            (30.0, 0.008, 0.30),  # Mid sharpness
+            (60.0, 0.004, 0.20),  # Extreme crispness
+        ]
+        for f, s, w in spike_atoms:
+            # No random phase here! We want them perfectly aligned
+            env = np.exp(-((t - t_spike) ** 2) / (2 * s ** 2))
+            ied -= w * env * np.cos(2 * pi * f * (t - t_spike))
+
+        # 2. THE SLOW WAVE (Low-frequency, delayed, broad duration)
+        # Typically a positive-going deflection following the negative spike
+        wave_f = rng.uniform(2.5, 4.0)
+        wave_s = 0.08
+        wave_env = np.exp(-((t - t_wave) ** 2) / (2 * wave_s ** 2))
+        ied += 0.8 * wave_env * np.cos(2 * pi * wave_f * (t - t_wave))
+
+        # Scale to the requested peak-to-peak amplitude
         ptp = np.max(ied) - np.min(ied)
         if ptp > 0:
             ied *= amplitude / ptp
+            
         signal[channel, start_idx:end_idx] += ied
 
     return Event(
