@@ -100,11 +100,11 @@ def inject_ied(
 
         #              freq    sigma    weight
         atoms = [
-            (  5.0,   0.080,   0.35),
-            ( 14.0,   0.035,   0.50),
-            ( 30.0,   0.016,   0.55),
-            ( 50.0,   0.009,   0.25),
-            ( 70.0,   0.005,   0.10),
+            (  3.0,   0.120,   0.70),   # dominant — broad deflection
+            (  8.0,   0.055,   0.50),   # theta body
+            ( 18.0,   0.025,   0.30),   # sharpens the peak
+            ( 40.0,   0.012,   0.15),   # adds edge
+            ( 70.0,   0.005,   0.05),   # subtle crispness
         ]
 
         ied = np.zeros(n)
