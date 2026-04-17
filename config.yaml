@@ -1,14 +1,12 @@
-# DNB pipeline configuration
+# DNB pipeline configuration — TWave-style detection
 # ---------------------------------------------------------
-# Phase-prediction scheduling:
-#   detection_phase = pi (trough)    -- detect here
-#   stim_phase = 0 (positive peak)   -- stimulate here
+# TWave: wavelet phase at most recent sample, predict forward
+# to target phase, multi-feature validation.
 #
-#   Lead time = half period (detection -> stim):
-#     At 1 Hz:   500 ms
-#     At 0.5 Hz: 1000 ms
+# target_phase = 0 (positive peak / up-state) — stimulate here
+# prediction_limit = 150ms max lookahead
 #
-#   Phase map:  0=peak  pi/2=falling  pi=trough  3pi/2=rising  2pi=peak
+# Phase map:  0=peak  π/2=falling  π=trough  3π/2=rising  2π=peak
 
 pipeline:
   sample_rate: 30000.0       # hardware rate (downsampler reduces to 500 Hz)
@@ -17,13 +15,9 @@ pipeline:
   chunk_duration: 0.1
 
 # -- Source ------------------------------------------------
-# type: file | nplay | cerebus
-
 source:
-  type: file                # change to 'cerebus' at hospital
+  type: file
   path: D:\DanH\20190122-065346-004.npz
-  # inst_addr: ""
-  # client_addr: "0.0.0.0"
 
 downsampler:
   enabled: true
@@ -35,31 +29,37 @@ wavelet:
   n_freqs: 20
   n_cycles_base: 1.0         # keep low for real-time latency
 
+# -- TWave detector ----------------------------------------
 target_wave:
   id: slow_wave
-  freq_range: [0.5, 4.0]
-  detection_phase: pi         # pi = trough
-  phase_tolerance: 0.05
-  z_score_threshold: 1.0     # adaptive — z-score above rolling baseline
-                              # replaces fixed amp_min/amp_max
+  freq_range: [0.5, 2.0]
+  target_phase: 0.0           # 0 = positive peak (up-state)
+  prediction_limit_s: 0.15    # 150ms max lookahead (TWave default)
+  amp_min: 75.0               # µV — TWave default
+  amp_max: 300.0              # µV — TWave default
+  hilo_ratio_max: 0.15        # high/low freq ratio — IED rejection
+  hilo_boundary_hz: 10.0      # boundary for hi/lo split
+  template_threshold: 0.8     # sinusoidal match quality
+  template_window_s: 2.0      # seconds of signal for template match
   warmup_chunks: 20
 
+# -- IED inhibition (secondary safety net) -----------------
 amplitude_monitor:
   enabled: true
   id: ied_monitor
   freq_range: [80.0, 120.0]
-  # threshold: 500.0          # uncomment for absolute mode
   adaptive_n_std: 5.0
   warmup_chunks: 20
 
+# -- Trigger -----------------------------------------------
 trigger:
   activation_detector_id: slow_wave
   inhibition_detector_id: ied_monitor
-  n_pulses: 1                # 0=detect-only, 1=single, n>1=n-pulse
-  stim_phase: 0.0            # 0 = positive peak
+  n_pulses: 1
   backoff_s: 2.5
   inhibition_cooldown_s: 2.5
 
+# -- Audio -------------------------------------------------
 audio:
   wav_path: assets/pink_noise_short.wav
   volume: 1.0

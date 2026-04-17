@@ -4,7 +4,7 @@ from dnb.modules.base import Module, ProcessResult
 from dnb.modules.downsampler import Downsampler
 from dnb.modules.stim_scheduler import StimScheduler
 from dnb.modules.stim_trigger import StimTrigger
-from dnb.modules.target_wave_detector import TargetWaveDetector
+from dnb.modules.twave_detector import TWaveDetector
 from dnb.modules.wavelet import WaveletConvolution
 
 __all__ = [
@@ -15,6 +15,6 @@ __all__ = [
     "ProcessResult",
     "StimScheduler",
     "StimTrigger",
-    "TargetWaveDetector",
+    "TWaveDetector",
     "WaveletConvolution",
 ]

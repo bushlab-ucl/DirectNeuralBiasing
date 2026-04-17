@@ -70,7 +70,7 @@ def build_modules(cfg: dict[str, Any]) -> list:
     from dnb.modules.audio_stim import AudioStimulator
     from dnb.modules.downsampler import Downsampler
     from dnb.modules.stim_trigger import StimTrigger
-    from dnb.modules.target_wave_detector import TargetWaveDetector
+    from dnb.modules.twave_detector import TWaveDetector
     from dnb.modules.wavelet import WaveletConvolution
 
     modules = []
@@ -86,30 +86,33 @@ def build_modules(cfg: dict[str, Any]) -> list:
     modules.append(WaveletConvolution(
         freq_min=float(w.get("freq_min", 0.5)),
         freq_max=float(w.get("freq_max", 30.0)),
-        n_freqs=int(w.get("n_freqs", 10)),
-        n_cycles_base=float(w.get("n_cycles_base", 3.0)),
+        n_freqs=int(w.get("n_freqs", 20)),
+        n_cycles_base=float(w.get("n_cycles_base", 1.0)),
     ))
 
-    # Target wave detector (activation)
+    # TWave detector (replaces TargetWaveDetector)
     tw = cfg.get("target_wave", {})
     detector_kwargs = {
         "id": tw.get("id", "slow_wave"),
         "freq_range": tuple(tw.get("freq_range", [0.5, 2.0])),
-        "detection_phase": _parse_phase(tw.get("detection_phase", pi)),
-        "phase_tolerance": float(tw.get("phase_tolerance", 0.05)),
-        "warmup_chunks": int(tw.get("warmup_chunks", 10)),
+        "target_phase": _parse_phase(tw.get("target_phase", 0.0)),
+        "prediction_limit_s": float(tw.get("prediction_limit_s", 0.15)),
+        "amp_min": float(tw.get("amp_min", 75.0)),
+        "amp_max": float(tw.get("amp_max", 300.0)),
+        "warmup_chunks": int(tw.get("warmup_chunks", 20)),
     }
 
-    # Prefer z_score_threshold (adaptive). Fall back to amp_min/amp_max if specified.
-    if "z_score_threshold" in tw:
-        detector_kwargs["z_score_threshold"] = float(tw["z_score_threshold"])
-    elif "amp_min" in tw:
-        detector_kwargs["amp_min"] = float(tw["amp_min"])
-        detector_kwargs["amp_max"] = float(tw.get("amp_max", 10000.0))
-    else:
-        detector_kwargs["z_score_threshold"] = 1.0  # default adaptive
+    # Optional validation features (can be disabled with null)
+    if "hilo_ratio_max" in tw:
+        detector_kwargs["hilo_ratio_max"] = tw["hilo_ratio_max"]  # None disables
+    if "hilo_boundary_hz" in tw:
+        detector_kwargs["hilo_boundary_hz"] = float(tw["hilo_boundary_hz"])
+    if "template_threshold" in tw:
+        detector_kwargs["template_threshold"] = tw["template_threshold"]  # None disables
+    if "template_window_s" in tw:
+        detector_kwargs["template_window_s"] = float(tw["template_window_s"])
 
-    modules.append(TargetWaveDetector(**detector_kwargs))
+    modules.append(TWaveDetector(**detector_kwargs))
 
     # Amplitude monitor (IED inhibition, optional)
     if "amplitude_monitor" in cfg:
@@ -127,7 +130,7 @@ def build_modules(cfg: dict[str, Any]) -> list:
                 kwargs["adaptive_n_std"] = float(am.get("adaptive_n_std", 3.0))
             modules.append(AmplitudeMonitor(**kwargs))
 
-    # Stim trigger
+    # Stim trigger (simplified — no phase delay calculation)
     tr = cfg.get("trigger", {})
     inh_id = tr.get("inhibition_detector_id")
     if inh_id is None and "amplitude_monitor" in cfg and cfg["amplitude_monitor"].get("enabled", True):
@@ -137,8 +140,6 @@ def build_modules(cfg: dict[str, Any]) -> list:
         activation_detector_id=tr.get("activation_detector_id", "slow_wave"),
         inhibition_detector_id=inh_id,
         n_pulses=int(tr.get("n_pulses", 1)),
-        stim_phase=_parse_phase(tr.get("stim_phase", 0.0)),
-        detection_phase=_parse_phase(tw.get("detection_phase", pi)),
         backoff_s=float(tr.get("backoff_s", 5.0)),
         inhibition_cooldown_s=float(tr.get("inhibition_cooldown_s", 5.0)),
     ))
