@@ -50,7 +50,8 @@ Note: it doesn't matter what the source format is. I can easliy whip up another 
 ## 2. Open the notebook
 
 ```bash
-jupyter notebook validation/batch-processing.ipynb
+cd validation
+jupyter lab
 ```
 
 &nbsp;
