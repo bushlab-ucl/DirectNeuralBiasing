@@ -1,15 +1,4 @@
-"""Validate detected events against ground truth annotations.
-
-Computes precision, recall, F1 by matching pipeline detections to
-known events via nearest-neighbour within a time tolerance.
-
-Usage:
-    from dnb.validation.ground_truth import validate, Annotation
-
-    annotations = [Annotation(timestamp=t, ...) for t in gt_times]
-    report = validate(detections, annotations)
-    print(report.summary())
-"""
+"""Validate detected events against ground truth annotations."""
 
 from __future__ import annotations
 
@@ -17,7 +6,6 @@ import json
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
 import numpy as np
 
@@ -28,7 +16,6 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class Annotation:
-    """A single ground truth annotation."""
     timestamp: float
     duration: float = 0.0
     channel: int = 0
@@ -38,7 +25,6 @@ class Annotation:
 
 @dataclass
 class MatchedEvent:
-    """A detection matched to a ground truth annotation."""
     detection: Event
     annotation: Annotation
     time_error: float
@@ -46,7 +32,6 @@ class MatchedEvent:
 
 @dataclass
 class ValidationReport:
-    """Full validation report with metrics."""
     matched: list[MatchedEvent] = field(default_factory=list)
     false_positives: list[Event] = field(default_factory=list)
     false_negatives: list[Annotation] = field(default_factory=list)
@@ -56,16 +41,13 @@ class ValidationReport:
         tp = len(self.matched)
         fp = len(self.false_positives)
         fn = len(self.false_negatives)
-
         precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
         recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
         f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
-
         self.metrics = {
             "true_positives": tp, "false_positives": fp, "false_negatives": fn,
             "precision": precision, "recall": recall, "f1": f1,
         }
-
         if self.matched:
             errors = [m.time_error for m in self.matched]
             self.metrics["timing_error_mean_ms"] = float(np.mean(errors)) * 1000
@@ -76,34 +58,16 @@ class ValidationReport:
         self._compute_metrics()
         m = self.metrics
         lines = [
-            "=" * 50,
-            "VALIDATION REPORT",
-            "=" * 50,
+            "=" * 50, "VALIDATION REPORT", "=" * 50,
             f"  TP: {m['true_positives']}  FP: {m['false_positives']}  FN: {m['false_negatives']}",
             f"  Precision: {m['precision']:.3f}",
             f"  Recall:    {m['recall']:.3f}",
             f"  F1:        {m['f1']:.3f}",
         ]
         if "timing_error_mean_ms" in m:
-            lines.append(
-                f"  Timing:    {m['timing_error_mean_ms']:.1f} ± {m['timing_error_std_ms']:.1f} ms"
-            )
+            lines.append(f"  Timing:    {m['timing_error_mean_ms']:.1f} ± {m['timing_error_std_ms']:.1f} ms")
         lines.append("=" * 50)
         return "\n".join(lines)
-
-    def save(self, path: str | Path) -> None:
-        self._compute_metrics()
-        data = {
-            "metrics": self.metrics,
-            "matched": [
-                {"det_time": m.detection.timestamp, "ann_time": m.annotation.timestamp,
-                 "error_ms": m.time_error * 1000}
-                for m in self.matched
-            ],
-            "false_positives": [{"time": e.timestamp, "ch": e.channel_id} for e in self.false_positives],
-            "false_negatives": [{"time": a.timestamp, "type": a.event_type} for a in self.false_negatives],
-        }
-        Path(path).write_text(json.dumps(data, indent=2))
 
 
 def validate(
@@ -112,17 +76,6 @@ def validate(
     time_tolerance: float = 0.5,
     target_type: str = "SW",
 ) -> ValidationReport:
-    """Match detections to annotations via greedy nearest-neighbour.
-
-    Args:
-        detections: Detected events from the pipeline.
-        annotations: Ground truth annotations.
-        time_tolerance: Max time difference for a match (seconds).
-        target_type: Which annotation type counts as true positive.
-
-    Returns:
-        ValidationReport with matched/FP/FN lists and metrics.
-    """
     report = ValidationReport()
 
     if not detections or not annotations:
@@ -141,12 +94,10 @@ def validate(
         for idx in range(len(ann_sorted)):
             if ann_matched[idx]:
                 diffs[idx] = np.inf
-
         best_idx = int(np.argmin(diffs))
         if diffs[best_idx] <= time_tolerance:
             ann = ann_sorted[best_idx]
             ann_matched[best_idx] = True
-
             if ann.event_type == target_type:
                 report.matched.append(MatchedEvent(
                     detection=det, annotation=ann,

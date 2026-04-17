@@ -16,13 +16,12 @@ logger = logging.getLogger(__name__)
 class FileSource(DataSource):
     """Reads continuous data from a saved .npz file.
 
-    Expected keys: 'continuous' (n_channels, n_samples) or (n_samples,), 'sample_rate'.
-    Extracts a single channel based on config.channel_id.
+    Expected keys: 'continuous' (any shape — extracts 1D), 'sample_rate'.
     """
 
     def __init__(self, path: str | Path) -> None:
         self._path = Path(path)
-        self._data: np.ndarray | None = None  # 1D after channel extraction
+        self._data: np.ndarray | None = None
         self._sample_rate: float = 0.0
         self._channel_id: int = 0
         self._read_pos: int = 0
@@ -43,13 +42,14 @@ class FileSource(DataSource):
         self._sample_rate = float(npz["sample_rate"])
         self._channel_id = config.channel_id
 
-        # Extract single channel
+        # Extract single channel → 1D
         if raw.ndim == 2:
-            n_channels = raw.shape[0]
-            ch_idx = min(self._channel_id, n_channels - 1)
+            ch_idx = min(self._channel_id, raw.shape[0] - 1)
             self._data = raw[ch_idx]
-        else:
+        elif raw.ndim == 1:
             self._data = raw
+        else:
+            self._data = raw.ravel()
 
         self._total_samples = self._data.shape[0]
         self._read_pos = 0

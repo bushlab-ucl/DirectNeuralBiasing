@@ -1,4 +1,17 @@
-"""Pipeline orchestrator — single channel."""
+"""Pipeline orchestrator — single channel, single ring buffer.
+
+Key invariant: the pipeline is the ONLY thing that writes to the
+ring buffer. Modules transform chunks but never write to the buffer.
+This eliminates double-write bugs.
+
+Flow per chunk:
+    1. Source produces raw chunk
+    2. Downsampler transforms chunk (if present)
+    3. Pipeline writes (transformed) samples into ring buffer
+    4. Wavelet reads from ring buffer
+    5. Detectors read wavelet output
+    6. Trigger schedules stims
+"""
 
 from __future__ import annotations
 
@@ -34,6 +47,7 @@ class Pipeline:
         self._running = False
         self._chunk_count = 0
         self._total_events = 0
+        self._ds_module_idx: int | None = None  # index of downsampler in module list
 
     @property
     def config(self) -> PipelineConfig:
@@ -55,58 +69,50 @@ class Pipeline:
         if resolved is not None:
             self._config = resolved
 
-        self._buffer = RingBuffer(capacity=self._config.buffer_samples)
+        # Configure all modules, find downsampler
+        from dnb.modules.downsampler import Downsampler
+        analysis_rate = self._config.sample_rate
+        self._ds_module_idx = None
 
-        for module in self._modules:
+        for i, module in enumerate(self._modules):
             module.configure(self._config)
+            if isinstance(module, Downsampler):
+                self._ds_module_idx = i
+                analysis_rate = module.actual_rate
+
+        # Single ring buffer at the analysis rate
+        buf_capacity = int(self._config.buffer_duration * analysis_rate)
+        self._buffer = RingBuffer(capacity=buf_capacity)
 
         self._chunk_count = 0
         self._total_events = 0
         logger.info(
-            "Pipeline: %d modules, buffer=%.1fs, chunk=%.3fs, ch=%d",
+            "Pipeline: %d modules, buffer=%.1fs (%d samples @ %.0f Hz), chunk=%.3fs",
             len(self._modules), self._config.buffer_duration,
-            self._config.chunk_duration, self._config.channel_id,
+            buf_capacity, analysis_rate, self._config.chunk_duration,
         )
 
     def _process_chunk(self, chunk: DataChunk) -> ProcessResult:
-        self._buffer.write(chunk.samples)
         result = ProcessResult(chunk=chunk, ring_buffer=self._buffer)
 
-        for module in self._modules:
+        # Run downsampler first (if present) to transform the chunk
+        if self._ds_module_idx is not None:
+            result = self._modules[self._ds_module_idx].process(result)
+
+        # Write the (possibly decimated) chunk into the ring buffer.
+        # This is the ONLY write point.
+        self._buffer.write(result.chunk.samples)
+
+        # Run remaining modules (wavelet, detectors, trigger)
+        for i, module in enumerate(self._modules):
+            if i == self._ds_module_idx:
+                continue  # already ran
             result = module.process(result)
 
         for event in result.events:
             self._event_bus.publish(event)
 
         self._chunk_count += 1
-        self._total_events += len(result.events)
-        return result
-
-    def _flush(self) -> ProcessResult | None:
-        """Flush wavelet's internal buffer at end-of-stream."""
-        from dnb.modules.wavelet import WaveletConvolution
-
-        wavelet_idx = None
-        for i, module in enumerate(self._modules):
-            if isinstance(module, WaveletConvolution):
-                wavelet_idx = i
-                break
-
-        if wavelet_idx is None:
-            return None
-
-        result = ProcessResult(chunk=None, ring_buffer=self._buffer)
-        result = self._modules[wavelet_idx].flush(result)
-
-        if result.chunk is None:
-            return None
-
-        for module in self._modules[wavelet_idx + 1:]:
-            result = module.process(result)
-
-        for event in result.events:
-            self._event_bus.publish(event)
-
         self._total_events += len(result.events)
         return result
 
@@ -131,7 +137,6 @@ class Pipeline:
                     continue
                 self._process_chunk(chunk)
         finally:
-            self._flush()
             elapsed = time.perf_counter() - t_start
             signal.signal(signal.SIGINT, original_handler)
             self._teardown()
@@ -161,11 +166,6 @@ class Pipeline:
                 if progress_callback is not None:
                     prog = getattr(self._source, "progress", 0.0)
                     progress_callback(prog)
-
-            flush_result = self._flush()
-            if flush_result is not None:
-                all_events.extend(flush_result.events)
-
         finally:
             elapsed = time.perf_counter() - t_start
             self._teardown()

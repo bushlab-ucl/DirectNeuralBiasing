@@ -1,4 +1,9 @@
-"""Thread-safe circular buffer for single-channel continuous data."""
+"""Single-channel ring buffer — the one FIFO the whole pipeline shares.
+
+TWave-style: one buffer at the analysis rate. The downsampler writes
+into it, the wavelet reads the most recent N seconds from it.
+No separate buffers per module.
+"""
 
 from __future__ import annotations
 
@@ -8,9 +13,10 @@ from numpy.typing import NDArray
 
 
 class RingBuffer:
-    """Pre-allocated 1D circular buffer.
+    """1D circular buffer at the analysis rate.
 
-    Single-channel: stores a flat array of samples.
+    Thread-safe for live use (writer thread + reader thread).
+    For offline, the lock is uncontended.
     """
 
     def __init__(self, capacity: int, dtype: type = np.float64) -> None:
@@ -26,11 +32,12 @@ class RingBuffer:
 
     @property
     def available(self) -> int:
+        """How many samples can be read (up to capacity)."""
         with self._lock:
             return min(self._total_written, self._capacity)
 
     def write(self, data: NDArray) -> None:
-        """Write 1D data into the buffer."""
+        """Append 1D data to the buffer."""
         n = data.shape[0]
         with self._lock:
             if n >= self._capacity:
@@ -50,13 +57,13 @@ class RingBuffer:
             self._write_pos = end % self._capacity
             self._total_written += n
 
-    def read(self, n_samples: int) -> NDArray:
-        """Read the most recent n_samples. Returns a copy."""
+    def read_latest(self, n_samples: int) -> NDArray:
+        """Read the most recent n_samples. Returns a contiguous copy."""
         with self._lock:
             avail = min(self._total_written, self._capacity)
             if n_samples > avail:
                 raise ValueError(
-                    f"Requested {n_samples} samples but only {avail} available"
+                    f"Requested {n_samples} but only {avail} available"
                 )
             start = (self._write_pos - n_samples) % self._capacity
             if start + n_samples <= self._capacity:

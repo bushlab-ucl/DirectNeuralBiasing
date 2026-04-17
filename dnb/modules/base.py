@@ -1,23 +1,10 @@
-"""Abstract base class for processing modules.
-
-Modules follow the Rust architecture: they are composable, chainable
-units. Each receives a ProcessResult and returns an updated one.
-
-The pipeline pattern is:
-    WaveletConvolution → [Detectors] → StimTrigger
-
-Detectors set flags/candidates on the ProcessResult.
-The StimTrigger reads those flags to decide whether to fire.
-"""
+"""Abstract base class for processing modules."""
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
-
-import numpy as np
-from numpy.typing import NDArray
 
 from dnb.core.types import DataChunk, Event, PipelineConfig, WaveletResult
 
@@ -29,19 +16,9 @@ if TYPE_CHECKING:
 class ProcessResult:
     """Output of a module's process() call.
 
-    Attributes:
-        chunk: The (possibly resampled) data chunk.
-        wavelet: Wavelet decomposition, if computed.
-        wavelet_settled: True once overlap-save has enough history.
-            Detectors should skip chunks where this is False.
-        events: Events detected so far in this chunk.
-        detections: Named boolean/float flags set by detectors,
-            read by the trigger module. Maps detector_id → per-sample
-            or per-chunk data.
-        ring_buffer: Reference to the pipeline's ring buffer.
-        original_sample_rate: Pre-decimation rate, if downsampled.
+    chunk: single-channel DataChunk (samples is 1D).
     """
-    chunk: DataChunk
+    chunk: DataChunk | None
     wavelet: WaveletResult | None = None
     wavelet_settled: bool = False
     events: list[Event] = field(default_factory=list)
@@ -51,18 +28,10 @@ class ProcessResult:
 
 
 class Module(ABC):
-    """Abstract base for pipeline modules.
-
-    Lifecycle: configure() once at startup, then process() per chunk.
-    """
+    @abstractmethod
+    def configure(self, config: PipelineConfig) -> None: ...
 
     @abstractmethod
-    def configure(self, config: PipelineConfig) -> None:
-        """One-time setup with pipeline configuration."""
+    def process(self, result: ProcessResult) -> ProcessResult: ...
 
-    @abstractmethod
-    def process(self, result: ProcessResult) -> ProcessResult:
-        """Process a chunk. Return the updated ProcessResult."""
-
-    def reset(self) -> None:
-        """Reset internal state between runs. Override if stateful."""
+    def reset(self) -> None: ...

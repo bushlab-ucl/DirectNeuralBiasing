@@ -1,7 +1,11 @@
-"""Target wave detector — single channel, rolling z-score amplitude gating.
+"""Target wave detector — single channel, crossing-based phase detection.
 
-Monitors wavelet phase in a frequency band and flags samples where
-phase matches detection_phase with sufficient amplitude (z-score).
+Detects when the wavelet phase crosses detection_phase within a chunk.
+Uses wrap-artifact rejection (real crossings have small phase_diff on
+both sides; wrap artifacts have ~±π) to distinguish true crossings
+from 2π boundary effects.
+
+Amplitude gating uses a rolling z-score (Welford's algorithm).
 """
 
 from __future__ import annotations
@@ -45,7 +49,7 @@ class TargetWaveDetector(Module):
         id: str = "slow_wave",
         freq_range: tuple[float, float] = (0.5, 2.0),
         detection_phase: float = pi,
-        phase_tolerance: float = 0.05,
+        phase_tolerance: float = 0.5,
         z_score_threshold: float = 1.0,
         amp_min: float | None = None,
         amp_max: float = 10000.0,
@@ -108,8 +112,10 @@ class TargetWaveDetector(Module):
             result.detections[self.id] = {"active": False, "candidates": [], "warming_up": True}
             return result
 
+        # Amplitude gating
         if self._use_z_score:
-            if self._stats.z_score(chunk_amp) < self._z_score_threshold:
+            z = self._stats.z_score(chunk_amp)
+            if z < self._z_score_threshold:
                 result.detections[self.id] = {"active": False, "candidates": []}
                 return result
         else:
@@ -117,19 +123,35 @@ class TargetWaveDetector(Module):
                 result.detections[self.id] = {"active": False, "candidates": []}
                 return result
 
-        phase_diff = np.abs((phase - self._detection_phase) % (2 * pi))
-        phase_diff = np.minimum(phase_diff, 2 * pi - phase_diff)
-        candidate_indices = np.where(phase_diff < self._phase_tolerance)[0]
+        # --- Crossing detection ---
+        # Find where the phase crosses detection_phase within this chunk.
+        # Compute signed distance to target, find sign changes.
+        phase_diff = self._signed_phase_diff_array(phase)
+        signs = np.sign(phase_diff)
+        crossings = np.where(np.diff(signs) != 0)[0]
 
-        candidates = [{
-            "sample_idx": int(si),
-            "timestamp": float(chunk.timestamps[si]),
-            "phase": float(phase[si]),
-            "frequency": best_freq,
-            "amplitude": chunk_amp,
-            "z_score": self._stats.z_score(chunk_amp),
-            "channel_id": chunk.channel_id,
-        } for si in candidate_indices]
+        candidates = []
+        for ci in crossings:
+            # Pick the sample closer to the target phase
+            si = ci if abs(phase_diff[ci]) <= abs(phase_diff[ci + 1]) else ci + 1
+
+            # Reject wrap artifacts: a real crossing has small phase_diff
+            # on both sides. A wrap (e.g. 2π boundary) has ~±π.
+            if abs(phase_diff[ci]) > 1.0 or abs(phase_diff[ci + 1]) > 1.0:
+                continue
+
+            if abs(phase_diff[si]) > self._phase_tolerance:
+                continue
+
+            candidates.append({
+                "sample_idx": int(si),
+                "timestamp": float(chunk.timestamps[si]),
+                "phase": float(phase[si]),
+                "frequency": best_freq,
+                "amplitude": chunk_amp,
+                "z_score": self._stats.z_score(chunk_amp),
+                "channel_id": chunk.channel_id,
+            })
 
         result.detections[self.id] = {
             "active": len(candidates) > 0,
@@ -137,6 +159,11 @@ class TargetWaveDetector(Module):
             "mean_amplitude": chunk_amp,
         }
         return result
+
+    def _signed_phase_diff_array(self, phase: np.ndarray) -> np.ndarray:
+        """Vectorized signed distance from phase array to detection_phase."""
+        d = (phase - self._detection_phase) % (2 * pi)
+        return np.where(d > pi, d - 2 * pi, d)
 
     def reset(self) -> None:
         self._chunks_seen = 0

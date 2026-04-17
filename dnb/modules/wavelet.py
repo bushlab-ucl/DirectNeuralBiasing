@@ -1,15 +1,17 @@
-"""Wavelet convolution — single channel, symmetric overlap-save.
+"""Wavelet convolution — sliding window from the shared ring buffer.
 
-Complex Morlet wavelets with log-spaced centre frequencies and 1/f
-scaling. Single-pass replacement for bandpass filter banks.
+TWave-style architecture: on each chunk, read a window of recent data
+from the shared ring buffer (back context + current chunk), convolve
+with the Morlet kernel bank, and extract results for the current chunk
+from the output. No internal delay, no settling flag, no forward context.
 
-Overlap-save: the wavelet maintains an internal one-chunk delay.
-When chunk N arrives, it outputs results for chunk N-1, using
-data from the ring buffer for symmetric context. This adds
-chunk_duration of latency but eliminates edge artifacts.
+The causal approach means the wavelet only uses past + current data.
+Phase estimates at the trailing edge of the chunk are slightly less
+accurate than symmetric overlap-save, but TWave shows this is
+clinically sufficient and it eliminates the chunk-duration sensitivity.
 
-Auto-rate-detection: kernels are built from the first chunk's
-actual sample rate (post-downsampler if present).
+The wavelet auto-detects the actual sample rate from the first chunk
+(handles upstream downsampler transparently).
 """
 
 from __future__ import annotations
@@ -37,6 +39,7 @@ def _make_morlet_kernel(
     wavelet = np.exp(2j * np.pi * freq * t) * np.exp(-(t ** 2) / (2.0 * sigma ** 2))
     wavelet /= np.sqrt(np.sum(np.abs(wavelet) ** 2))
 
+    # Place in FFT buffer (zero-phase: symmetric around t=0)
     kernel = np.zeros(n_fft, dtype=np.complex128)
     kernel[:half_len + 1] = wavelet[half_len:]
     kernel[n_fft - half_len:] = wavelet[:half_len]
@@ -46,7 +49,8 @@ def _make_morlet_kernel(
 class WaveletConvolution(Module):
     """Single-channel Morlet wavelet decomposition.
 
-    Output analytic signal has shape (n_freqs, n_samples).
+    Reads from the shared ring buffer. No internal delay.
+    Output: WaveletResult with analytic shape (n_freqs, n_samples).
     """
 
     def __init__(
@@ -67,10 +71,7 @@ class WaveletConvolution(Module):
         self._n_fft: int = 0
         self._sample_rate: float = 0.0
         self._max_kernel_half_len: int = 0
-        self._chunk_samples: int = 0
-        self._configured_for_rate: bool = False
-
-        self._prev_chunk: DataChunk | None = None
+        self._built: bool = False
 
     @property
     def frequencies(self) -> NDArray[np.float64]:
@@ -85,13 +86,11 @@ class WaveletConvolution(Module):
     def configure(self, config: PipelineConfig) -> None:
         self._frequencies = np.geomspace(self._freq_min, self._freq_max, self._n_freqs)
         self._n_cycles = self._n_cycles_base * (self._frequencies / self._freq_min)
-        self._prev_chunk = None
-        self._configured_for_rate = False
+        self._built = False
 
-    def _build_kernels(self, sample_rate: float, chunk_samples: int) -> None:
-        """Build FFT kernels for a specific sample rate and chunk size."""
+    def _build_kernels(self, sample_rate: float, window_len: int) -> None:
+        """Build FFT kernels for the convolution window size."""
         self._sample_rate = sample_rate
-        self._chunk_samples = chunk_samples
 
         max_half = 0
         for freq, nc in zip(self._frequencies, self._n_cycles):
@@ -100,136 +99,60 @@ class WaveletConvolution(Module):
             max_half = max(max_half, half_len)
         self._max_kernel_half_len = max_half
 
-        # Need: back_context + chunk + fwd_context
-        fwd = min(max_half, chunk_samples)
-        total_input = max_half + chunk_samples + fwd
-        self._n_fft = next_fast_len(total_input + 2 * max_half)
+        self._n_fft = next_fast_len(window_len + 2 * max_half)
         self._kernels_fft = [
             _make_morlet_kernel(freq, nc, sample_rate, self._n_fft)
             for freq, nc in zip(self._frequencies, self._n_cycles)
         ]
-        self._configured_for_rate = True
+        self._built = True
 
         logger.info(
             "WaveletConvolution: %d freqs (%.1f–%.1f Hz), n_cycles_base=%.1f, "
-            "rate=%.0f Hz, kernel_half=%d samples (%.3fs), chunk=%d samples",
+            "rate=%.0f Hz, kernel_half=%d samples (%.3fs)",
             self._n_freqs, self._freq_min, self._freq_max,
             self._n_cycles_base, sample_rate,
-            max_half, max_half / sample_rate, chunk_samples,
+            max_half, max_half / sample_rate,
         )
 
     def process(self, result: ProcessResult) -> ProcessResult:
         chunk = result.chunk
+        n_samples = chunk.n_samples
+        ring = result.ring_buffer
+
+        # Can't do anything without the ring buffer
+        if ring is None:
+            result.wavelet = None
+            return result
 
         # Lazy build for actual rate
-        if (not self._configured_for_rate
-                or abs(chunk.sample_rate - self._sample_rate) > 0.1
-                or chunk.n_samples != self._chunk_samples):
-            self._build_kernels(chunk.sample_rate, chunk.n_samples)
-            self._prev_chunk = None
+        if not self._built or abs(chunk.sample_rate - self._sample_rate) > 0.1:
+            # Estimate a reasonable window size for kernel building
+            # (back context + chunk)
+            est_window = n_samples * 10  # generous estimate
+            self._build_kernels(chunk.sample_rate, est_window)
 
-        # --- One-chunk delay ---
-        # First chunk: stash it, output nothing
-        if self._prev_chunk is None:
-            self._prev_chunk = chunk
-            result.wavelet = None
-            result.wavelet_settled = False
-            return result
-
-        # We output results for prev_chunk, using current chunk as forward context
-        target_chunk = self._prev_chunk
-        self._prev_chunk = chunk
-        n_samples = target_chunk.n_samples
-
-        # Build the extended data array from the ring buffer
-        # We want: [back_context | target_chunk | fwd_context]
+        # How much back context do we want?
         back_want = self._max_kernel_half_len
-        fwd_want = min(self._max_kernel_half_len, chunk.n_samples)
-        total_want = back_want + n_samples + fwd_want
+        total_want = back_want + n_samples
+        avail = ring.available
 
-        overlap_back = 0
-        overlap_fwd = 0
-
-        if result.ring_buffer is not None:
-            avail = result.ring_buffer.available
-            # The ring buffer contains all data including current chunk.
-            # Most recent = current chunk (fwd context) + target chunk + back context
-            read_want = total_want
-            if avail >= read_want:
-                # Read total_want from the ring buffer. The most recent fwd_want
-                # samples are from the current chunk, the next n_samples are target,
-                # and the rest is back context.
-                extended = result.ring_buffer.read(read_want)
-                overlap_back = back_want
-                overlap_fwd = fwd_want
-                data = extended
-            elif avail > n_samples:
-                # Partial context
-                extended = result.ring_buffer.read(avail)
-                actual_total = extended.shape[0]
-                # Current chunk is the most recent chunk.n_samples in the buffer
-                overlap_fwd = min(fwd_want, max(0, actual_total - n_samples))
-                overlap_back = max(0, actual_total - n_samples - overlap_fwd)
-                data = extended
-            else:
-                data = target_chunk.samples
-        else:
-            data = target_chunk.samples
-
-        # Convolve
-        n_conv = data.shape[0]
-        n_freqs = len(self._frequencies)
-
-        needed_fft = next_fast_len(n_conv + 2 * self._max_kernel_half_len)
-        if needed_fft != self._n_fft:
-            self._n_fft = needed_fft
-            self._kernels_fft = [
-                _make_morlet_kernel(freq, nc, self._sample_rate, self._n_fft)
-                for freq, nc in zip(self._frequencies, self._n_cycles)
-            ]
-
-        data_fft = fft(data, n=self._n_fft)
-
-        analytic = np.zeros((n_freqs, n_samples), dtype=np.complex128)
-        for fi, kernel_fft in enumerate(self._kernels_fft):
-            conv = ifft(data_fft * kernel_fft)
-            analytic[fi, :] = conv[overlap_back:overlap_back + n_samples]
-
-        result.chunk = target_chunk
-        result.wavelet = WaveletResult(
-            analytic=analytic, frequencies=self._frequencies, chunk=target_chunk,
-        )
-        result.wavelet_settled = (
-            overlap_back >= self._max_kernel_half_len
-            and overlap_fwd > 0
-        )
-        return result
-
-    def flush(self, result: ProcessResult) -> ProcessResult:
-        """Process the final stashed chunk at end-of-stream (no forward context)."""
-        if self._prev_chunk is None:
+        if avail < n_samples:
+            # Not even a full chunk in the buffer yet
+            result.wavelet = None
             return result
 
-        target_chunk = self._prev_chunk
-        self._prev_chunk = None
-        n_samples = target_chunk.n_samples
+        # Read what we can from the ring buffer
+        read_len = min(total_want, avail)
+        data = ring.read_latest(read_len)
 
-        data = target_chunk.samples
-        overlap_back = 0
+        # How much back context did we actually get?
+        back_actual = read_len - n_samples
 
-        if result.ring_buffer is not None:
-            back_want = self._max_kernel_half_len
-            total_want = back_want + n_samples
-            avail = result.ring_buffer.available
-            if avail >= total_want:
-                extended = result.ring_buffer.read(total_want)
-                data = extended
-                overlap_back = back_want
+        # The chunk's data is the last n_samples of what we read
+        # Convolve the full window, extract the chunk portion
 
-        n_conv = data.shape[0]
-        n_freqs = len(self._frequencies)
-
-        needed_fft = next_fast_len(n_conv + 2 * self._max_kernel_half_len)
+        # Rebuild FFT if window size changed
+        needed_fft = next_fast_len(read_len + 2 * self._max_kernel_half_len)
         if needed_fft != self._n_fft:
             self._n_fft = needed_fft
             self._kernels_fft = [
@@ -238,17 +161,20 @@ class WaveletConvolution(Module):
             ]
 
         data_fft = fft(data, n=self._n_fft)
+
+        n_freqs = len(self._frequencies)
         analytic = np.zeros((n_freqs, n_samples), dtype=np.complex128)
         for fi, kernel_fft in enumerate(self._kernels_fft):
             conv = ifft(data_fft * kernel_fft)
-            analytic[fi, :] = conv[overlap_back:overlap_back + n_samples]
+            # Extract the last n_samples (corresponding to current chunk)
+            analytic[fi, :] = conv[back_actual:back_actual + n_samples]
 
-        result.chunk = target_chunk
         result.wavelet = WaveletResult(
-            analytic=analytic, frequencies=self._frequencies, chunk=target_chunk,
+            analytic=analytic, frequencies=self._frequencies, chunk=chunk,
         )
-        result.wavelet_settled = False  # no forward context
+        # Settled = we have enough back context for clean convolution
+        result.wavelet_settled = back_actual >= self._max_kernel_half_len
         return result
 
     def reset(self) -> None:
-        self._prev_chunk = None
+        self._built = False

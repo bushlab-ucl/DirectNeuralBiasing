@@ -138,6 +138,7 @@ def build_modules(cfg: dict[str, Any]) -> list:
         inhibition_detector_id=inh_id,
         n_pulses=int(tr.get("n_pulses", 1)),
         stim_phase=_parse_phase(tr.get("stim_phase", 0.0)),
+        detection_phase=_parse_phase(tw.get("detection_phase", pi)),
         backoff_s=float(tr.get("backoff_s", 5.0)),
         inhibition_cooldown_s=float(tr.get("inhibition_cooldown_s", 5.0)),
     ))

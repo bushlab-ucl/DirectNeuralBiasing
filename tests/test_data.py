@@ -1,7 +1,4 @@
-"""Test data generator for offline smoke tests.
-
-All signals are single-channel (1D internally, saved as (1, n_samples) in .npz).
-"""
+"""Test data generator for offline smoke tests."""
 
 from __future__ import annotations
 
