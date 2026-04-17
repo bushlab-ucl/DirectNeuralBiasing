@@ -1,8 +1,7 @@
-"""Downsampler module for efficient low-frequency processing.
+"""Downsampler module — single channel.
 
-Only needed when running at hardware rates (e.g. 30 kHz → 500 Hz).
-Not needed for synthetic data at 1 kHz. Maintains its own ring buffer
-at the downsampled rate so downstream overlap-save works correctly.
+Decimates from hardware rate (e.g. 30 kHz) to analysis rate (e.g. 500 Hz).
+Maintains its own ring buffer at the downsampled rate.
 """
 
 from __future__ import annotations
@@ -20,16 +19,6 @@ logger = logging.getLogger(__name__)
 
 
 class Downsampler(Module):
-    """Decimate the signal to a lower sample rate.
-
-    After processing, result.ring_buffer is swapped to an internal
-    buffer at the downsampled rate.
-
-    Args:
-        target_rate: Desired output sample rate in Hz.
-        buffer_duration: Internal ring buffer duration in seconds.
-    """
-
     def __init__(self, target_rate: float = 500.0, buffer_duration: float = 10.0) -> None:
         self._target_rate = target_rate
         self._buffer_duration = buffer_duration
@@ -49,7 +38,7 @@ class Downsampler(Module):
         self._factor = max(1, int(round(config.sample_rate / self._target_rate)))
         self._actual_rate = config.sample_rate / self._factor
         ds_capacity = int(self._buffer_duration * self._actual_rate)
-        self._ds_ring = RingBuffer(n_channels=config.n_channels, capacity=ds_capacity)
+        self._ds_ring = RingBuffer(capacity=ds_capacity)
         logger.info(
             "Downsampler: %d Hz → %d Hz (factor %d)",
             int(config.sample_rate), int(self._actual_rate), self._factor,
@@ -60,18 +49,17 @@ class Downsampler(Module):
             return result
 
         chunk = result.chunk
-        decimated = np.stack([
-            decimate(chunk.samples[ch], self._factor, ftype="iir", zero_phase=False)
-            for ch in range(chunk.n_channels)
-        ])
-
-        n_out = decimated.shape[1]
+        # 1D decimate
+        decimated = decimate(chunk.samples, self._factor, ftype="iir", zero_phase=False)
+        n_out = decimated.shape[0]
         t0 = chunk.timestamps[0]
         timestamps = t0 + np.arange(n_out) / self._actual_rate
 
         new_chunk = DataChunk(
-            samples=decimated, timestamps=timestamps,
-            channel_ids=chunk.channel_ids, sample_rate=self._actual_rate,
+            samples=decimated,
+            timestamps=timestamps,
+            channel_id=chunk.channel_id,
+            sample_rate=self._actual_rate,
         )
 
         if self._ds_ring is not None:

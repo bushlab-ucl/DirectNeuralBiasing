@@ -1,18 +1,4 @@
-"""Pipeline orchestrator.
-
-Wires together a DataSource, module chain, and EventBus into a
-runnable pipeline. Supports both run_online() and run_offline().
-
-The pipeline is intentionally simple — it writes each chunk to the ring
-buffer and runs it through the module chain. Any delay needed for
-symmetric overlap-save is managed internally by WaveletConvolution,
-which stashes one chunk and outputs results for the previous chunk.
-This keeps the pipeline independent of module implementation details
-and works correctly regardless of whether a Downsampler is present.
-
-At end-of-stream, the pipeline calls flush() on the wavelet to process
-its final stashed chunk, then runs downstream modules on the result.
-"""
+"""Pipeline orchestrator — single channel."""
 
 from __future__ import annotations
 
@@ -34,21 +20,6 @@ logger = logging.getLogger(__name__)
 
 
 class Pipeline:
-    """Central DNB pipeline.
-
-    Usage:
-        pipeline = Pipeline(
-            source=FileSource("data.npz"),
-            modules=[WaveletConvolution(), TargetWaveDetector(), StimTrigger()],
-        )
-        events = pipeline.run_offline()
-
-    Args:
-        source: Data source (live or file).
-        modules: Ordered list of processing modules.
-        config: Pipeline configuration.
-    """
-
     def __init__(
         self,
         source: DataSource,
@@ -84,10 +55,7 @@ class Pipeline:
         if resolved is not None:
             self._config = resolved
 
-        self._buffer = RingBuffer(
-            n_channels=self._config.n_channels,
-            capacity=self._config.buffer_samples,
-        )
+        self._buffer = RingBuffer(capacity=self._config.buffer_samples)
 
         for module in self._modules:
             module.configure(self._config)
@@ -95,8 +63,9 @@ class Pipeline:
         self._chunk_count = 0
         self._total_events = 0
         logger.info(
-            "Pipeline: %d modules, buffer=%.1fs, chunk=%.3fs",
-            len(self._modules), self._config.buffer_duration, self._config.chunk_duration,
+            "Pipeline: %d modules, buffer=%.1fs, chunk=%.3fs, ch=%d",
+            len(self._modules), self._config.buffer_duration,
+            self._config.chunk_duration, self._config.channel_id,
         )
 
     def _process_chunk(self, chunk: DataChunk) -> ProcessResult:
@@ -114,12 +83,7 @@ class Pipeline:
         return result
 
     def _flush(self) -> ProcessResult | None:
-        """Flush any internally-buffered data from modules at end-of-stream.
-
-        Currently only the WaveletConvolution has a flush() method (for its
-        internal one-chunk delay). We call it, then run the remaining
-        downstream modules on the result.
-        """
+        """Flush wavelet's internal buffer at end-of-stream."""
         from dnb.modules.wavelet import WaveletConvolution
 
         wavelet_idx = None
@@ -131,27 +95,22 @@ class Pipeline:
         if wavelet_idx is None:
             return None
 
-        # Create a result with the last ring buffer state
-        # (chunk will be replaced by wavelet.flush)
         result = ProcessResult(chunk=None, ring_buffer=self._buffer)
         result = self._modules[wavelet_idx].flush(result)
 
         if result.chunk is None:
-            return None  # wavelet had nothing stashed
+            return None
 
-        # Run downstream modules (everything after wavelet)
         for module in self._modules[wavelet_idx + 1:]:
             result = module.process(result)
 
         for event in result.events:
             self._event_bus.publish(event)
 
-        self._chunk_count += 1
         self._total_events += len(result.events)
         return result
 
     def run_online(self) -> None:
-        """Run in real-time closed-loop mode until Ctrl+C or stop()."""
         self._setup()
         self._running = True
 
@@ -176,14 +135,14 @@ class Pipeline:
             elapsed = time.perf_counter() - t_start
             signal.signal(signal.SIGINT, original_handler)
             self._teardown()
-            logger.info("Stopped after %.1fs: %d chunks, %d events", elapsed, self._chunk_count, self._total_events)
+            logger.info("Stopped after %.1fs: %d chunks, %d events",
+                        elapsed, self._chunk_count, self._total_events)
 
     def run_offline(
         self,
         output_path: str | Path | None = None,
         progress_callback: Callable[[float], None] | None = None,
     ) -> list[Event]:
-        """Run on a file source in batch mode. Returns all detected events."""
         self._setup()
         self._running = True
         all_events: list[Event] = []
@@ -203,7 +162,6 @@ class Pipeline:
                     prog = getattr(self._source, "progress", 0.0)
                     progress_callback(prog)
 
-            # Flush the wavelet's internal buffer
             flush_result = self._flush()
             if flush_result is not None:
                 all_events.extend(flush_result.events)
@@ -211,7 +169,8 @@ class Pipeline:
         finally:
             elapsed = time.perf_counter() - t_start
             self._teardown()
-            logger.info("Offline complete in %.1fs: %d chunks, %d events", elapsed, self._chunk_count, len(all_events))
+            logger.info("Offline complete in %.1fs: %d chunks, %d events",
+                        elapsed, self._chunk_count, len(all_events))
 
         if output_path is not None:
             self._save_results(Path(output_path), all_events)
@@ -236,6 +195,5 @@ class Pipeline:
             event_types=np.array([e.event_type.name for e in events]),
             timestamps=np.array([e.timestamp for e in events]),
             channel_ids=np.array([e.channel_id for e in events]),
-            durations=np.array([e.duration for e in events]),
         )
         logger.info("Saved %d events to %s", len(events), path)

@@ -6,8 +6,6 @@ from dnb.core.types import DataChunk, PipelineConfig
 
 
 class DataSource(ABC):
-    """Lifecycle: connect() → read_chunk() (repeated) → close()"""
-
     @abstractmethod
     def connect(self, config: PipelineConfig) -> None: ...
 

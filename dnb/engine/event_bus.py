@@ -1,21 +1,12 @@
-"""Lightweight publish/subscribe event bus."""
-
 from __future__ import annotations
-
 import logging
 from collections import defaultdict
 from typing import Callable
-
 from dnb.core.types import Event, EventType
-
 logger = logging.getLogger(__name__)
-
 EventCallback = Callable[[Event], None]
 
-
 class EventBus:
-    """Thread-safe pub/sub bus for neural events."""
-
     def __init__(self) -> None:
         self._subscribers: dict[EventType | None, list[EventCallback]] = defaultdict(list)
 

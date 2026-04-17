@@ -1,4 +1,8 @@
-"""Audio stimulation module — plays a WAV file on STIM events."""
+"""Audio stimulation module — plays a WAV file on STIM events.
+
+For offline playback / testing. In live mode, use StimScheduler
+instead (daemon thread with sub-chunk timing precision).
+"""
 
 from __future__ import annotations
 
@@ -85,7 +89,10 @@ class AudioStimulator(Module):
         def _do_play():
             try:
                 import simpleaudio as sa
-                sa.play_buffer(self._audio_data, self._n_channels, self._sample_width, self._sample_rate)
+                sa.play_buffer(
+                    self._audio_data, self._n_channels,
+                    self._sample_width, self._sample_rate,
+                )
             except Exception:
                 logger.exception("Audio playback failed")
 

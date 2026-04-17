@@ -1,24 +1,20 @@
-"""Thread-safe circular buffer for continuous neural data."""
+"""Thread-safe circular buffer for single-channel continuous data."""
 
 from __future__ import annotations
 
 import threading
-
 import numpy as np
 from numpy.typing import NDArray
 
 
 class RingBuffer:
-    """Pre-allocated numpy circular buffer with thread-safe read/write.
+    """Pre-allocated 1D circular buffer.
 
-    Args:
-        n_channels: Number of channels.
-        capacity: Total samples the buffer can hold.
-        dtype: Numpy dtype for the buffer.
+    Single-channel: stores a flat array of samples.
     """
 
-    def __init__(self, n_channels: int, capacity: int, dtype: type = np.float64) -> None:
-        self._buf: NDArray = np.zeros((n_channels, capacity), dtype=dtype)
+    def __init__(self, capacity: int, dtype: type = np.float64) -> None:
+        self._buf: NDArray = np.zeros(capacity, dtype=dtype)
         self._capacity = capacity
         self._write_pos = 0
         self._total_written = 0
@@ -34,26 +30,28 @@ class RingBuffer:
             return min(self._total_written, self._capacity)
 
     def write(self, data: NDArray) -> None:
-        n_samples = data.shape[1]
+        """Write 1D data into the buffer."""
+        n = data.shape[0]
         with self._lock:
-            if n_samples >= self._capacity:
-                self._buf[:] = data[:, -self._capacity:]
+            if n >= self._capacity:
+                self._buf[:] = data[-self._capacity:]
                 self._write_pos = 0
-                self._total_written += n_samples
+                self._total_written += n
                 return
 
-            end = self._write_pos + n_samples
+            end = self._write_pos + n
             if end <= self._capacity:
-                self._buf[:, self._write_pos:end] = data
+                self._buf[self._write_pos:end] = data
             else:
                 first = self._capacity - self._write_pos
-                self._buf[:, self._write_pos:] = data[:, :first]
-                self._buf[:, :n_samples - first] = data[:, first:]
+                self._buf[self._write_pos:] = data[:first]
+                self._buf[:n - first] = data[first:]
 
             self._write_pos = end % self._capacity
-            self._total_written += n_samples
+            self._total_written += n
 
     def read(self, n_samples: int) -> NDArray:
+        """Read the most recent n_samples. Returns a copy."""
         with self._lock:
             avail = min(self._total_written, self._capacity)
             if n_samples > avail:
@@ -62,11 +60,11 @@ class RingBuffer:
                 )
             start = (self._write_pos - n_samples) % self._capacity
             if start + n_samples <= self._capacity:
-                return self._buf[:, start:start + n_samples].copy()
+                return self._buf[start:start + n_samples].copy()
             else:
                 first = self._capacity - start
                 return np.concatenate(
-                    [self._buf[:, start:], self._buf[:, :n_samples - first]], axis=1,
+                    [self._buf[start:], self._buf[:n_samples - first]]
                 )
 
     def clear(self) -> None:
