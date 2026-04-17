@@ -17,7 +17,7 @@ pipeline:
   chunk_duration: 0.5
 
 # -- Source ------------------------------------------------
-# type: file | nplay | cerebus | auto
+# type: file | nplay | cerebus
 
 source:
   type: nplay                # change to 'cerebus' at hospital
@@ -34,16 +34,14 @@ wavelet:
   freq_max: 4.0
   n_freqs: 10
   n_cycles_base: 1.5         # keep low for real-time latency
-                              # 1.5 cycles at 0.5 Hz ~ 1.9s kernel half-len
-                              # (TWave uses ~1 cycle equivalent via truncation)
 
 target_wave:
   id: slow_wave
   freq_range: [0.5, 4.0]
   detection_phase: pi         # pi = trough
   phase_tolerance: 0.05
-  amp_min: 1000.0
-  amp_max: 10000.0
+  z_score_threshold: 1.0     # adaptive — z-score above rolling baseline
+                              # replaces fixed amp_min/amp_max
   warmup_chunks: 10
 
 amplitude_monitor:
@@ -53,7 +51,6 @@ amplitude_monitor:
   # threshold: 500.0          # uncomment for absolute mode
   adaptive_n_std: 3.0
   warmup_chunks: 20
-  baseline_chunks: 100
 
 trigger:
   activation_detector_id: slow_wave
@@ -61,9 +58,7 @@ trigger:
   n_pulses: 1                # 0=detect-only, 1=single, n>1=n-pulse
   stim_phase: 0.0            # 0 = positive peak
   backoff_s: 5.0
-  inhibition_cooldown_s: 1.0 # brief cooldown -- gate at moment of stim,
-                              # not a multi-second block. Mirrors TWave's
-                              # per-stim HF/LF ratio gate approach.
+  inhibition_cooldown_s: 1.0
 
 audio:
   wav_path: assets/pink_noise_short.wav

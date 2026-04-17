@@ -54,21 +54,18 @@ def _parse_phase(value) -> float:
         s = value.strip().lower().replace(" ", "")
         if s == "pi":
             return pi
-        if s == "3pi/2" or s == "3*pi/2" or s == "1.5pi" or s == "1.5*pi":
+        if s in ("3pi/2", "3*pi/2", "1.5pi", "1.5*pi"):
             return 3 * pi / 2
-        if s == "pi/2" or s == "pi*0.5":
+        if s in ("pi/2", "pi*0.5"):
             return pi / 2
-        if s == "0" or s == "0.0":
+        if s in ("0", "0.0"):
             return 0.0
         return float(s)
     return float(value)
 
 
 def build_modules(cfg: dict[str, Any]) -> list:
-    """Build the module chain from config sections.
-
-    Recognised: downsampler, wavelet, target_wave, amplitude_monitor, trigger, audio
-    """
+    """Build the module chain from config sections."""
     from dnb.modules.amplitude_monitor import AmplitudeMonitor
     from dnb.modules.audio_stim import AudioStimulator
     from dnb.modules.downsampler import Downsampler
@@ -84,7 +81,7 @@ def build_modules(cfg: dict[str, Any]) -> list:
         if d.get("enabled", True):
             modules.append(Downsampler(target_rate=float(d.get("target_rate", 500.0))))
 
-    # Wavelet convolution (always present)
+    # Wavelet convolution
     w = cfg.get("wavelet", {})
     modules.append(WaveletConvolution(
         freq_min=float(w.get("freq_min", 0.5)),
@@ -95,16 +92,24 @@ def build_modules(cfg: dict[str, Any]) -> list:
 
     # Target wave detector (activation)
     tw = cfg.get("target_wave", {})
-    modules.append(TargetWaveDetector(
-        id=tw.get("id", "slow_wave"),
-        freq_range=tuple(tw.get("freq_range", [0.5, 2.0])),
-        detection_phase=_parse_phase(tw.get("detection_phase", 3 * pi / 2)),
-        phase_tolerance=float(tw.get("phase_tolerance", 0.15)),
-        amp_min=float(tw.get("amp_min", 50.0)),
-        amp_max=float(tw.get("amp_max", 10000.0)),
-        warmup_chunks=int(tw.get("warmup_chunks", 10)),
-        # amp_smoothing is deprecated and ignored
-    ))
+    detector_kwargs = {
+        "id": tw.get("id", "slow_wave"),
+        "freq_range": tuple(tw.get("freq_range", [0.5, 2.0])),
+        "detection_phase": _parse_phase(tw.get("detection_phase", pi)),
+        "phase_tolerance": float(tw.get("phase_tolerance", 0.05)),
+        "warmup_chunks": int(tw.get("warmup_chunks", 10)),
+    }
+
+    # Prefer z_score_threshold (adaptive). Fall back to amp_min/amp_max if specified.
+    if "z_score_threshold" in tw:
+        detector_kwargs["z_score_threshold"] = float(tw["z_score_threshold"])
+    elif "amp_min" in tw:
+        detector_kwargs["amp_min"] = float(tw["amp_min"])
+        detector_kwargs["amp_max"] = float(tw.get("amp_max", 10000.0))
+    else:
+        detector_kwargs["z_score_threshold"] = 1.0  # default adaptive
+
+    modules.append(TargetWaveDetector(**detector_kwargs))
 
     # Amplitude monitor (IED inhibition, optional)
     if "amplitude_monitor" in cfg:
@@ -114,7 +119,6 @@ def build_modules(cfg: dict[str, Any]) -> list:
                 "id": am.get("id", "ied_monitor"),
                 "freq_range": tuple(am.get("freq_range", [80.0, 120.0])),
                 "warmup_chunks": int(am.get("warmup_chunks", 20)),
-                "baseline_chunks": int(am.get("baseline_chunks", 100)),
                 "filter_order": int(am.get("filter_order", 4)),
             }
             if "threshold" in am:
@@ -126,7 +130,6 @@ def build_modules(cfg: dict[str, Any]) -> list:
     # Stim trigger
     tr = cfg.get("trigger", {})
     inh_id = tr.get("inhibition_detector_id")
-    # Default to ied_monitor if amplitude_monitor is configured
     if inh_id is None and "amplitude_monitor" in cfg and cfg["amplitude_monitor"].get("enabled", True):
         inh_id = cfg.get("amplitude_monitor", {}).get("id", "ied_monitor")
 
@@ -139,7 +142,7 @@ def build_modules(cfg: dict[str, Any]) -> list:
         inhibition_cooldown_s=float(tr.get("inhibition_cooldown_s", 5.0)),
     ))
 
-    # Audio (optional — only for offline playback, live uses StimScheduler)
+    # Audio (optional)
     if "audio" in cfg:
         a = cfg["audio"]
         wav_path = a.get("wav_path")

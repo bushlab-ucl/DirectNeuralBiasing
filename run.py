@@ -6,6 +6,7 @@ Usage:
     python run.py -c config.yaml --source nplay     # live, force NPlay
     python run.py -c config.yaml --detect-only      # live, no stim
     python run.py -c config.yaml --offline          # offline from file
+    python run.py -c config.yaml --offline --detect-only
 """
 
 from __future__ import annotations
@@ -22,7 +23,7 @@ from pathlib import Path
 import numpy as np
 
 import dnb
-from dnb.config import build_modules, build_pipeline_config, load_config
+from dnb.config import build_modules, build_pipeline_config, build_source, load_config
 from dnb.core.types import Event, EventType, PipelineConfig
 from dnb.engine.pipeline import Pipeline
 
@@ -69,7 +70,8 @@ class EventLogger:
         }
         for key in ("pulse_index", "n_pulses", "frequency", "amplitude",
                      "detection_phase", "stim_phase", "delay_to_stim_ms",
-                     "detection_time", "power", "active", "scheduled"):
+                     "detection_time", "power", "active", "scheduled",
+                     "z_score"):
             if key in event.metadata:
                 record[key] = event.metadata[key]
 
@@ -108,6 +110,23 @@ class EventLogger:
             by_type[e.event_type.name] = by_type.get(e.event_type.name, 0) + 1
         parts = [f"{name}: {count}" for name, count in sorted(by_type.items())]
         return f"{len(self._events)} events ({', '.join(parts)})"
+
+
+# ── Apply CLI overrides to config ────────────────────────────────────────
+
+def apply_overrides(cfg: dict, args: argparse.Namespace) -> None:
+    """Apply CLI overrides to the loaded config dict (in-place)."""
+    if args.detect_only:
+        if "trigger" not in cfg:
+            cfg["trigger"] = {}
+        cfg["trigger"]["n_pulses"] = 0
+        logger.info("--detect-only: n_pulses=0")
+
+    if args.channel is not None:
+        if "pipeline" not in cfg:
+            cfg["pipeline"] = {}
+        cfg["pipeline"]["channel_index"] = args.channel
+        logger.info("--channel: %d", args.channel)
 
 
 # ── Source construction ──────────────────────────────────────────────────
@@ -187,13 +206,6 @@ def run_live(cfg: dict, args: argparse.Namespace):
     event_logger = EventLogger(output_dir, session_name)
     status = StatusPrinter(event_logger)
 
-    # Apply detect-only override
-    if args.detect_only:
-        if "trigger" not in cfg:
-            cfg["trigger"] = {}
-        cfg["trigger"]["n_pulses"] = 0
-        logger.info("--detect-only: n_pulses=0")
-
     source = build_source_live(cfg, args.source)
     modules = build_modules(cfg)
     pipeline_config = build_pipeline_config(cfg)
@@ -239,7 +251,6 @@ def run_live(cfg: dict, args: argparse.Namespace):
         # Set time mapping for scheduler
         t_start = time.perf_counter()
         if scheduler:
-            # First chunk's pipeline time 0 ≈ perf_counter now
             scheduler.set_time_offset(0.0, t_start)
             scheduler.start()
 
@@ -261,8 +272,7 @@ def run_live(cfg: dict, args: argparse.Namespace):
                 if result is not None:
                     status.on_chunk()
         finally:
-            # Flush the last pending chunk
-            pipeline._flush_pending()
+            pipeline._flush()  # was _flush_pending — that method doesn't exist
 
             elapsed = time.perf_counter() - t_start
             signal.signal(signal.SIGINT, original_handler)
@@ -290,12 +300,19 @@ def run_live(cfg: dict, args: argparse.Namespace):
 
 def run_offline(cfg: dict, args: argparse.Namespace):
     """Run the pipeline on a saved file."""
-    from dnb.config import build_pipeline
-
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dir = Path(args.output_dir)
 
-    pipeline = build_pipeline(args.config)
+    # Build pipeline from the (already-modified) cfg dict, not from disk
+    source = build_source(cfg)
+    modules = build_modules(cfg)
+    pipeline_config = build_pipeline_config(cfg)
+
+    pipeline = Pipeline(
+        source=source,
+        modules=modules,
+        config=pipeline_config,
+    )
 
     event_logger = EventLogger(output_dir, f"dnb_offline_{timestamp}")
     pipeline.on_event(None, event_logger.log)
@@ -330,7 +347,7 @@ def main():
         default=None, help="Force source type",
     )
     parser.add_argument("--detect-only", action="store_true", help="n_pulses=0")
-    parser.add_argument("--channel", type=int, default=None, help="Hardware channel")
+    parser.add_argument("--channel", type=int, default=None, help="Hardware channel index")
     parser.add_argument("--output-dir", "-o", default="./output", help="Output directory")
     parser.add_argument("--verbose", "-v", action="store_true", help="Debug logging")
     args = parser.parse_args()
@@ -339,6 +356,15 @@ def main():
     logger.info("DNB v%s", dnb.__version__)
 
     cfg = load_config(args.config)
+
+    # Apply CLI overrides to the config dict BEFORE building anything
+    apply_overrides(cfg, args)
+
+    # Auto-detect offline mode if source is file
+    source_type = cfg.get("source", {}).get("type", "auto").lower()
+    if source_type == "file" and not args.offline:
+        logger.info("source.type is 'file' — switching to offline mode automatically")
+        args.offline = True
 
     if args.offline:
         run_offline(cfg, args)

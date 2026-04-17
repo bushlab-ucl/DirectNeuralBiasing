@@ -6,50 +6,27 @@ the phase hits a **detection** angle with sufficient amplitude.
 
 IMPORTANT DISTINCTION:
     detection_phase  — the phase at which we *detect* the slow wave
-                       (default 3π/2 = rising zero crossing, giving
-                       a quarter-period of lead time to schedule the
-                       stim at the upcoming positive peak)
     stim_phase       — the phase at which we *want to stimulate*
-                       (default 0 = positive peak, set on StimTrigger)
+                       (set on StimTrigger, not here)
 
 Phase map (for sin-convention signals):
     0      = positive peak
     π/2    = falling zero crossing
     π      = trough (negative peak)
-    3π/2   = rising zero crossing  ← default detection point
+    3π/2   = rising zero crossing
     2π/0   = positive peak (stim target)
 
-Detecting at 3π/2 gives quarter-period lead time:
-    At 1 Hz:   250 ms before the peak
-    At 0.5 Hz: 500 ms before the peak
-
-The detector only cares about detection_phase. It emits candidates
-with enough metadata (phase, frequency, timestamp) for the StimTrigger
-to predict when stim_phase will occur.
-
-v2 changes:
-    - Removed amplitude smoothing across chunks. The wavelet's Gaussian
-      envelope already provides temporal smoothing; additional chunk-level
-      smoothing delayed detection of transient slow waves and has no
-      equivalent in the TWave algorithm (Wong et al., Li et al.).
-    - Amplitude gating now uses instantaneous (per-chunk) wavelet
-      amplitude, matching the TWave approach.
+Amplitude gating uses a rolling z-score baseline (matching the Rust
+Statistics struct). This adapts to any recording's amplitude scale
+automatically — no hand-tuned thresholds needed. The wavelet's
+Gaussian envelope already provides temporal smoothing; no additional
+cross-chunk smoothing is applied.
 
 Stores results in result.detections[self.id]:
     {
         "active": bool,
         "candidates": [...],
         "mean_amplitude": float,
-    }
-
-Each candidate dict:
-    {
-        "sample_idx": int,
-        "timestamp": float,
-        "phase": float,           # actual phase at detection
-        "frequency": float,       # instantaneous dominant frequency
-        "amplitude": float,       # instantaneous wavelet amplitude
-        "channel_id": int,
     }
 """
 
@@ -66,66 +43,103 @@ from dnb.modules.base import Module, ProcessResult
 logger = logging.getLogger(__name__)
 
 
+class _RollingStats:
+    """Running mean/std tracker (Welford's online algorithm)."""
+
+    def __init__(self) -> None:
+        self.count: int = 0
+        self.mean: float = 0.0
+        self._m2: float = 0.0
+
+    def update(self, value: float) -> None:
+        self.count += 1
+        delta = value - self.mean
+        self.mean += delta / self.count
+        delta2 = value - self.mean
+        self._m2 += delta * delta2
+
+    @property
+    def std(self) -> float:
+        if self.count < 2:
+            return 0.0
+        return (self._m2 / self.count) ** 0.5
+
+    def z_score(self, value: float) -> float:
+        s = self.std
+        if s == 0.0:
+            return 0.0
+        return (value - self.mean) / s
+
+
 class TargetWaveDetector(Module):
     """Wavelet-based phase detector for a target frequency band.
 
     Monitors instantaneous phase in a specified band and flags samples
     where phase matches the detection_phase within tolerance and
-    amplitude is within bounds.
+    amplitude z-score exceeds threshold.
 
     Args:
         id: Unique identifier for this detector.
         freq_range: (low_hz, high_hz) band to monitor.
         detection_phase: Phase angle to detect at (radians).
-            Default 3π/2 (rising zero crossing) — gives a
-            quarter-period of lead time to predict and schedule
-            the upcoming positive peak for stimulation.
         phase_tolerance: Half-width of phase window (radians).
-        amp_min: Minimum amplitude to accept.
-        amp_max: Maximum amplitude (artifact rejection).
+        z_score_threshold: Minimum amplitude z-score to accept.
+            Uses rolling baseline. Replaces the old fixed amp_min/amp_max.
+        amp_min: DEPRECATED — kept for config compatibility.
+            If z_score_threshold is not set, falls back to fixed thresholds.
+        amp_max: DEPRECATED — maximum amplitude (artifact rejection).
         warmup_chunks: Initial chunks for baseline (no detections).
-        channels: Which channels to monitor. None = all.
-        amp_smoothing: DEPRECATED — ignored. Kept for config
-            compatibility. Amplitude gating uses instantaneous values.
     """
 
     def __init__(
         self,
         id: str = "slow_wave",
         freq_range: tuple[float, float] = (0.5, 2.0),
-        detection_phase: float = 3 * pi / 2,
-        phase_tolerance: float = 0.15,
-        amp_min: float = 50.0,
+        detection_phase: float = pi,
+        phase_tolerance: float = 0.05,
+        z_score_threshold: float = 1.0,
+        amp_min: float | None = None,
         amp_max: float = 10000.0,
         warmup_chunks: int = 10,
         channels: list[int] | None = None,
-        amp_smoothing: int | None = None,  # deprecated, ignored
+        # Deprecated params kept for config compat
+        amp_smoothing: int | None = None,
     ) -> None:
         self.id = id
         self._freq_range = freq_range
         self._detection_phase = detection_phase % (2 * pi)
         self._phase_tolerance = phase_tolerance
-        self._amp_min = amp_min
+        self._z_score_threshold = z_score_threshold
+        self._amp_min = amp_min  # fallback only
         self._amp_max = amp_max
         self._warmup_chunks = warmup_chunks
         self._channels = channels
 
         self._chunks_seen: int = 0
+        self._stats = _RollingStats()
 
-        if amp_smoothing is not None:
+        # Decide gating mode
+        self._use_z_score = amp_min is None
+        if not self._use_z_score:
             logger.info(
-                "TargetWaveDetector '%s': amp_smoothing=%d is deprecated "
-                "and ignored. Using instantaneous amplitude.",
-                id, amp_smoothing,
+                "TargetWaveDetector '%s': using fixed amplitude thresholds "
+                "(amp_min=%.0f, amp_max=%.0f). Consider switching to "
+                "z_score_threshold for adaptive gating.",
+                id, amp_min, amp_max,
             )
 
     def configure(self, config: PipelineConfig) -> None:
+        mode = (
+            f"z_score > {self._z_score_threshold}"
+            if self._use_z_score
+            else f"amp in [{self._amp_min}, {self._amp_max}]"
+        )
         logger.info(
             "TargetWaveDetector '%s': freq=(%.1f, %.1f) Hz, "
-            "detection_phase=%.2f rad (%.0f°), amp=(%.0f, %.0f)",
+            "detection_phase=%.2f rad (%.0f°), gating=%s",
             self.id, self._freq_range[0], self._freq_range[1],
             self._detection_phase, self._detection_phase * 180 / pi,
-            self._amp_min, self._amp_max,
+            mode,
         )
 
     def process(self, result: ProcessResult) -> ProcessResult:
@@ -135,6 +149,17 @@ class TargetWaveDetector(Module):
 
         self._chunks_seen += 1
         if self._chunks_seen <= self._warmup_chunks:
+            # Still update stats during warmup
+            wavelet = result.wavelet
+            so_mask = (
+                (wavelet.frequencies >= self._freq_range[0])
+                & (wavelet.frequencies <= self._freq_range[1])
+            )
+            if np.any(so_mask):
+                so_amplitude = np.mean(wavelet.amplitude[:, so_mask, :], axis=1)
+                chunk_amp = float(np.mean(so_amplitude))
+                self._stats.update(chunk_amp)
+
             result.detections[self.id] = {"active": False, "candidates": [], "warming_up": True}
             return result
 
@@ -157,18 +182,8 @@ class TargetWaveDetector(Module):
 
         # Channel selection
         n_wavelet_ch = wavelet.analytic.shape[0]
-        if n_wavelet_ch == chunk.n_channels and self._channels is not None:
-            ch_mask = np.isin(chunk.channel_ids, self._channels)
-            so_amplitude = so_amplitude[ch_mask]
-            so_amp_per_freq = so_amp_per_freq[ch_mask]
-            ch_ids = chunk.channel_ids[ch_mask]
-            analytic_so = wavelet.analytic[np.ix_(ch_mask, so_mask)]
-        elif self._channels is not None:
-            ch_ids = chunk.channel_ids[:n_wavelet_ch]
-            analytic_so = wavelet.analytic[:, so_mask, :]
-        else:
-            ch_ids = chunk.channel_ids if n_wavelet_ch == chunk.n_channels else np.arange(n_wavelet_ch, dtype=np.int32)
-            analytic_so = wavelet.analytic[:, so_mask, :]
+        ch_ids = chunk.channel_ids if n_wavelet_ch == chunk.n_channels else np.arange(n_wavelet_ch, dtype=np.int32)
+        analytic_so = wavelet.analytic[:, so_mask, :]
 
         candidates = []
 
@@ -182,15 +197,23 @@ class TargetWaveDetector(Module):
             # Phase at dominant frequency
             phase = np.angle(analytic_so[ci, best_freq_idx, :]) % (2 * pi)
 
-            # Instantaneous amplitude — use the chunk mean at dominant freq.
-            # This is the wavelet envelope amplitude, already temporally
-            # smoothed by the Morlet Gaussian window. No additional
-            # cross-chunk smoothing needed.
+            # Instantaneous amplitude — chunk mean at dominant freq
             chunk_amp = float(np.mean(so_amplitude[ci]))
 
-            # Amplitude gating (instantaneous, no smoothing)
-            if chunk_amp < self._amp_min or chunk_amp > self._amp_max:
-                continue
+            # Update rolling stats and check amplitude
+            self._stats.update(chunk_amp)
+
+            if self._use_z_score:
+                # Z-score based gating (adaptive, like Rust detector)
+                z = self._stats.z_score(chunk_amp)
+                if z < self._z_score_threshold:
+                    continue
+                # No upper bound in z-score mode — artifact rejection is
+                # handled by the AmplitudeMonitor (IED inhibition)
+            else:
+                # Fixed threshold fallback
+                if chunk_amp < self._amp_min or chunk_amp > self._amp_max:
+                    continue
 
             # Phase matching against detection_phase
             phase_diff = np.abs((phase - self._detection_phase) % (2 * pi))
@@ -205,6 +228,7 @@ class TargetWaveDetector(Module):
                     "phase": float(phase[si]),
                     "frequency": best_freq,
                     "amplitude": chunk_amp,
+                    "z_score": self._stats.z_score(chunk_amp),
                     "channel_id": ch_id,
                 })
 
@@ -217,3 +241,4 @@ class TargetWaveDetector(Module):
 
     def reset(self) -> None:
         self._chunks_seen = 0
+        self._stats = _RollingStats()
