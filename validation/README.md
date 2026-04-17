@@ -39,6 +39,8 @@ Creates a `.npz` next to the original. Reads the sample rate, channel
 labels, and scale factors from the ns6 header — you don't need to specify
 anything.
 
+Note: it doesn't matter what the source format is. I can easliy whip up another script to convert any format to the .npz format that my code reads.
+
 &nbsp;
 
 ---
