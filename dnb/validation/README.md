@@ -1,19 +1,11 @@
-# Offline Validation — Quick Start
+# Running the offline detector on your recordings
 
-This folder contains everything needed to run the slow-wave detector
-on existing recordings and produce detection logs for visual validation.
+Hey Dan — this walks you through running the slow-wave detector on
+real `.ns6` recordings and getting detection logs you can validate by eye.
 
-&nbsp;
-
----
-
-&nbsp;
-
-## What you need
-
-- Python 3.11+ (already on the lab machine)
-- The `DirectNeuralBiasing` repo (already cloned)
-- One or more `.ns6` or `.npz` recordings
+The whole thing is one Jupyter notebook. You edit two lines at the top
+(your file paths and which channel), then run all cells. It spits out
+a CSV per file with sample indices you can look up in the raw recording.
 
 &nbsp;
 
@@ -21,17 +13,13 @@ on existing recordings and produce detection logs for visual validation.
 
 &nbsp;
 
-## Setup (one time only)
+## First time setup
 
-Open a terminal in the `DirectNeuralBiasing` directory:
+You only need to do this once. In the `DirectNeuralBiasing` directory:
 
 ```bash
-python -m venv .venv
-.venv\Scripts\activate
-pip install -e ".[dev]"
+pip install -e .
 ```
-
-This installs the library and Jupyter. Takes about 30 seconds.
 
 &nbsp;
 
@@ -39,23 +27,26 @@ This installs the library and Jupyter. Takes about 30 seconds.
 
 &nbsp;
 
-## Step 1 — Convert .ns6 to .npz
-
-If your recordings are `.ns6` files (Blackrock native format), convert
-them first. If you already have `.npz` files, skip this step.
+## 1. Convert your .ns6 files
 
 ```bash
 python validation/ns6_to_npz.py  D:\recordings\20190122-065346-004.ns6
 ```
 
-This creates `20190122-065346-004.npz` in the same directory.
-The sample rate, channel labels, and scale factors are read from
-the `.ns6` header automatically.
+Creates a `.npz` next to the original. Reads the sample rate, channel
+labels, and scale factors from the ns6 header — you don't need to specify
+anything.
 
-To convert to µV directly (larger files, but no scale factor to worry about):
+&nbsp;
+
+---
+
+&nbsp;
+
+## 2. Open the notebook
 
 ```bash
-python validation/ns6_to_npz.py  D:\recordings\20190122-065346-004.ns6  --uv
+jupyter notebook validation/batch-processing.ipynb
 ```
 
 &nbsp;
@@ -64,43 +55,45 @@ python validation/ns6_to_npz.py  D:\recordings\20190122-065346-004.ns6  --uv
 
 &nbsp;
 
-## Step 2 — Edit the notebook
+## 3. Edit the config cell
 
-```bash
-jupyter notebook validation/batch-processing.ipynb
-```
-
-In the **config cell**, edit two things:
-
-### 1. File list
-
-Point `FILES` at your `.npz` files. Use full paths:
+Two things to change:
 
 ```python
 FILES = [
     Path('D:/recordings/20190122-065346-004.npz'),
     Path('D:/recordings/20190123-071200-001.npz'),
 ]
+
+CHANNEL_ID = 0    # which channel to analyse
 ```
 
-### 2. Channel
-
-Set `CHANNEL_ID` to the channel you want to analyse:
-
-```python
-CHANNEL_ID = 0
-```
-
-Channel numbering starts at 0. To check what channels are available:
+That's it. Everything else has defaults that should work. If you want to
+check what channels are in a file:
 
 ```python
 import numpy as np
-data = np.load('D:/recordings/20190122-065346-004.npz', allow_pickle=True)
-print(f"Channels: {data['data'].shape[1]}")
-print(f"Labels: {data['labels']}")
+d = np.load('D:/recordings/20190122-065346-004.npz', allow_pickle=True)
+print(d['labels'])
 ```
 
-Everything else has sensible defaults. You can leave it alone.
+&nbsp;
+
+---
+
+&nbsp;
+
+## 4. Run All
+
+Shift+Enter through the cells, or Cell → Run All. For each file you'll see:
+
+- A print line like `14 detections, 12 stims (with inhibition)`
+- A 3-panel figure (saved as `_report.png`)
+- A detection log (saved as `_detections.csv`)
+
+The last optional cell plots every single detection with its surrounding
+context — useful for eyeballing but set `MAX_EVENTS = 20` or so if there
+are hundreds.
 
 &nbsp;
 
@@ -108,42 +101,16 @@ Everything else has sensible defaults. You can leave it alone.
 
 &nbsp;
 
-## Step 3 — Run all cells
-
-Click **Cell → Run All** (or Shift+Enter through each cell).
-
-For each file the notebook will:
-
-1. Print detection and stim counts
-2. Save a `_detections.csv` to the output directory
-3. Show a 3-panel report figure and save it as `_report.png`
-
-At the end, a summary table shows all files.
-
-The last cell plots every individual detection with context.
-Set `MAX_EVENTS = 20` or similar if you don't want hundreds of plots.
-
-&nbsp;
-
----
-
-&nbsp;
-
-## Step 4 — Validate detections
-
-The key output is the `_detections.csv` file. It looks like this:
+## What's in the CSV
 
 ```
-event_type,  timestamp_s,  sample_index,  frequency_hz,  amplitude,  ...
-SLOW_WAVE,   12.3400,      370200,        0.850,         1543.2,     ...
-STIM,        12.9290,      387870,        0.850,         ,           ...
-SLOW_WAVE,   17.8600,      535800,        1.120,         2105.7,     ...
-...
+event_type,  timestamp_s,  sample_index,  frequency_hz,  amplitude, ...
+SLOW_WAVE,   12.3400,      370200,        0.850,         1543.2,    ...
+STIM,        12.9290,      387870,        0.850,         ,          ...
 ```
 
-The `sample_index` column is at the **original hardware rate** (e.g. 30 kHz).
-Use it to jump directly to that sample in your recording viewer and check
-whether the detection looks like a real slow wave.
+**`sample_index` is at the original 30 kHz rate.** Open your recording,
+jump to that sample, and check if it's a real slow wave.
 
 &nbsp;
 
@@ -151,25 +118,16 @@ whether the detection looks like a real slow wave.
 
 &nbsp;
 
-## The report figure
+## What's in the figure
 
-Each file gets a 3-panel figure:
+**(a)** Every detected slow wave aligned at the predicted stim time.
+Individual trials in colour, mean in black. The signal is filtered to
+the SO band (0.5–4 Hz). If things are working, the mean peaks at t=0.
 
-**(a) Stim-triggered average** — every detected slow wave aligned at the
-predicted stim time (t=0). Individual trials in colour, mean in black.
-If the pipeline is working, the mean should peak at t=0 (we're stimulating
-at the predicted positive peak). The signal is bandpass filtered to the
-slow oscillation band (0.5–4 Hz).
+**(b)** Polar plot of where each stim lands in the slow-wave cycle.
+Green = target (peak). Red = actual. Bars should cluster at the top.
 
-**(b) Phase polar plot** — where in the slow-wave cycle each stim actually
-lands. Green line = target (0° = peak). Red line = actual mean.
-If phase accuracy is good, the red bars cluster around 0° and the error
-is small.
-
-**(c) Fired vs blocked** — how many stims fired vs how many were blocked
-by IED inhibition. The pipeline runs twice per file: once with the
-`AmplitudeMonitor` (IED rejection) and once without. The difference is
-the blocked count.
+**(c)** How many stims fired vs how many got blocked by the IED inhibitor.
 
 &nbsp;
 
@@ -177,44 +135,20 @@ the blocked count.
 
 &nbsp;
 
-## Tuning parameters
+## If the results look wrong
 
-If too many or too few detections, these are the knobs to turn:
+**0 detections** — lower `Z_SCORE_THRESHOLD` (try 0.5), or check that
+`CHANNEL_ID` has actual neural data on it.
 
-| Parameter            | Default | Effect                                             |
-| -------------------- | ------- | -------------------------------------------------- |
-| `Z_SCORE_THRESHOLD`  | 1.0     | Higher = fewer detections (only large SWs)         |
-| `BACKOFF_S`          | 2.5     | Minimum gap between detections (seconds)           |
-| `IED_ADAPTIVE_N_STD` | 5.0     | Higher = less aggressive IED blocking              |
-| `PHASE_TOLERANCE`    | 0.05    | How close to π the phase must be to trigger        |
-| `N_CYCLES_BASE`      | 1.0     | Higher = better frequency resolution, more latency |
+**Way too many detections** — raise `Z_SCORE_THRESHOLD` (try 2.0) or
+increase `BACKOFF_S` (minimum gap between detections, default 2.5s).
 
-&nbsp;
+**Everything blocked by IED inhibitor** — raise `IED_ADAPTIVE_N_STD`
+(default 5.0, try 8.0) to make it less aggressive.
 
----
-
-&nbsp;
-
-## Troubleshooting
-
-**"No sample rate key"** — the `.npz` file wasn't produced by `ns6_to_npz.py`.
-Re-convert from `.ns6`, or check what keys are in the file:
-
-```python
-import numpy as np
-data = np.load('file.npz', allow_pickle=True)
-print(list(data.keys()))
-```
-
-**0 detections** — try lowering `Z_SCORE_THRESHOLD` to 0.5, or check that
-`CHANNEL_ID` points to a channel with actual neural data.
-
-**Too many detections** — raise `Z_SCORE_THRESHOLD` to 1.5 or 2.0,
-or increase `BACKOFF_S`.
-
-**MemoryError on large files** — long recordings (hours) at 30 kHz use a lot
-of RAM. Consider splitting the `.ns6` file, or converting with `--uv` and
-using a machine with more memory.
+**Phase is off** — this might just be the frequency resolution at
+`N_CYCLES_BASE=1.0`. Try 1.5 for tighter frequency estimates
+(adds a bit of latency that doesn't matter offline).
 
 &nbsp;
 
@@ -222,10 +156,10 @@ using a machine with more memory.
 
 &nbsp;
 
-## Files in this directory
+## Files here
 
-| File                     | What it does             |
-| ------------------------ | ------------------------ |
-| `batch-processing.ipynb` | Main notebook — run this |
-| `ns6_to_npz.py`          | Convert .ns6 → .npz      |
-| `README.md`              | This file                |
+| File                     | What                    |
+| ------------------------ | ----------------------- |
+| `batch-processing.ipynb` | The notebook — run this |
+| `ns6_to_npz.py`          | Converts .ns6 → .npz    |
+| `README.md`              | You're reading it       |
