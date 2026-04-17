@@ -78,29 +78,54 @@ def inject_ied(
     time_s: float,
     sample_rate: float,
     amplitude: float = 2000.0,
-    duration_ms: float = 70.0,
+    duration_ms: float = 500.0,
+    seed: int | None = None,
 ) -> Event:
-    """Plant a synthetic IED (sharp spike + slow wave complex)."""
+    """Plant a synthetic IED as a broadband transient.
+
+    Superposes Gabor atoms at 5–70 Hz, each with an envelope width
+    matched to its frequency.  Low-freq atoms give the event its
+    ~400 ms temporal footprint; high-freq atoms sharpen the peak.
+    """
+    rng = np.random.default_rng(seed)
     dur_s = duration_ms / 1000.0
-    start_idx = max(0, int((time_s - dur_s * 0.2) * sample_rate))
-    end_idx = min(signal.shape[1], int((time_s + dur_s * 0.8) * sample_rate))
+
+    start_idx = max(0, int((time_s - dur_s * 0.3) * sample_rate))
+    end_idx = min(signal.shape[1], int((time_s + dur_s * 0.7) * sample_rate))
     n = end_idx - start_idx
 
     if n > 0:
         t = np.arange(n) / sample_rate
-        spike_sigma = 0.005
-        spike = amplitude * np.exp(-((t - dur_s * 0.2) ** 2) / (2 * spike_sigma ** 2))
-        sw_centre = dur_s * 0.5
-        sw_sigma = 0.03
-        slow = -amplitude * 0.4 * np.exp(-((t - sw_centre) ** 2) / (2 * sw_sigma ** 2))
-        signal[channel, start_idx:end_idx] += spike + slow
+        t_peak = dur_s * 0.3
+
+        #              freq    sigma    weight
+        atoms = [
+            (  5.0,   0.080,   0.35),
+            ( 14.0,   0.035,   0.50),
+            ( 30.0,   0.016,   0.55),
+            ( 50.0,   0.009,   0.25),
+            ( 70.0,   0.005,   0.10),
+        ]
+
+        ied = np.zeros(n)
+        for f, s, w in atoms:
+            f_j = f * (1.0 + (rng.random() - 0.5) * 0.25)
+            s_j = s * (1.0 + (rng.random() - 0.5) * 0.20)
+            ph  = rng.uniform(-0.3, 0.3)
+            env = np.exp(-((t - t_peak) ** 2) / (2 * s_j ** 2))
+            ied += w * env * np.cos(2 * pi * f_j * (t - t_peak) + ph)
+
+        # Scale to peak-to-peak amplitude
+        ptp = np.max(ied) - np.min(ied)
+        if ptp > 0:
+            ied *= amplitude / ptp
+        signal[channel, start_idx:end_idx] += ied
 
     return Event(
         event_type=EventType.IED, timestamp=time_s,
         channel_id=channel, duration=dur_s,
         metadata={"synthetic": True, "type": "IED", "amplitude": amplitude},
     )
-
 
 def generate_synthetic_recording(
     n_channels: int = 1,
@@ -111,7 +136,7 @@ def generate_synthetic_recording(
     snr: float = 5.0,
     sw_amplitude: float = 500.0,
     sw_frequency: float = 1.0,
-    ied_amplitude: float = 2000.0,
+    ied_amplitude: float = 5000.0,
     seed: int = 42,
 ) -> tuple[NDArray[np.float64], list[Event], float]:
     """Generate a full synthetic recording with planted events.
