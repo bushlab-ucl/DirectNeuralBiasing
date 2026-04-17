@@ -23,35 +23,6 @@ pip install -e .
 
 Installs numpy, scipy, pyyaml and makes `import dnb` work.
 
-For development (adds matplotlib + jupyter):
-
-```bash
-pip install -e ".[dev]"
-```
-
-For live hardware (adds pycbsdk):
-
-```bash
-pip install -e ".[live]"
-```
-
-&nbsp;
-
-### Hospital machine setup
-
-```bash
-python -m venv .venv
-.venv\Scripts\activate          # Windows
-pip install -e ".[dev,live]"
-```
-
-No build tools needed beyond pip.
-Everything is declared in `pyproject.toml`.
-
-&nbsp;
-
----
-
 &nbsp;
 
 ## Architecture
