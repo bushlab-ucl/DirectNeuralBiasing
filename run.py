@@ -68,10 +68,10 @@ class EventLogger:
             "timestamp": event.timestamp,
             "channel_id": event.channel_id,
         }
+        # TWave metadata keys
         for key in ("pulse_index", "n_pulses", "frequency", "amplitude",
-                     "detection_phase", "stim_phase", "delay_to_stim_ms",
-                     "detection_time", "power", "active", "scheduled",
-                     "z_score"):
+                     "phase_now", "dt_to_stim_ms",
+                     "detection_time", "power", "active"):
             if key in event.metadata:
                 record[key] = event.metadata[key]
 
@@ -272,8 +272,6 @@ def run_live(cfg: dict, args: argparse.Namespace):
                 if result is not None:
                     status.on_chunk()
         finally:
-            pipeline._flush()  # was _flush_pending — that method doesn't exist
-
             elapsed = time.perf_counter() - t_start
             signal.signal(signal.SIGINT, original_handler)
             if scheduler:
@@ -333,7 +331,7 @@ def run_offline(cfg: dict, args: argparse.Namespace):
                 det_t = s.metadata.get("detection_time", s.timestamp)
                 delays.append((s.timestamp - det_t) * 1000)
         if delays:
-            print(f"Detection→Stim delay: {np.mean(delays):.0f} ± {np.std(delays):.0f} ms")
+            print(f"Detection\u2192Stim delay: {np.mean(delays):.0f} \u00b1 {np.std(delays):.0f} ms")
 
 
 # ── CLI ──────────────────────────────────────────────────────────────────
@@ -363,7 +361,7 @@ def main():
     # Auto-detect offline mode if source is file
     source_type = cfg.get("source", {}).get("type", "auto").lower()
     if source_type == "file" and not args.offline:
-        logger.info("source.type is 'file' — switching to offline mode automatically")
+        logger.info("source.type is 'file' \u2014 switching to offline mode automatically")
         args.offline = True
 
     if args.offline:
